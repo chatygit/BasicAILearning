@@ -1,0 +1,610 @@
+{
+  "purpose": "Deterministic fast-path routing matrix for ECM/DCM. Any ask matching an entry here MUST skip entity_search and fuzzy_resolve entirely and go directly to query_context -> validate_sql -> query_executor. Match patterns case-insensitively as substrings/phrases.",
+  "policy": "Check this matrix BEFORE deciding to call entity_search. If ANY pattern matches the user ask and no NAMED entity (company/investor/deal name) is present, follow the fast_path route.",
+  "fast_path_intents": [
+    {
+      "id": "broker_bd",
+      "label": "Citi B&D (Bill and Deliver)",
+      "patterns": [
+        "citi b&d",
+        "b&d deals",
+        "b&d tranches",
+        "bill and deliver",
+        "bill & deliver",
+        "citi bill and deliver",
+        "citi billed",
+        "billed by citi",
+        "billed by broker code",
+        "broker code billed"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "Filter BROKER_CODE/SYNDICATE_MEMBER_NAME for Citi match AND BND_BROKER in TRUE set",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "BROKER_CODE",
+        "BND_BROKER",
+        "SYNDICATE_MEMBER_NAME"
+      ]
+    },
+    {
+      "id": "broker_non_bd",
+      "label": "Citi Non-B&D",
+      "patterns": [
+        "non-b&d",
+        "non b&d",
+        "not b&d",
+        "non-bill and deliver",
+        "non bill and deliver",
+        "not bill and deliver",
+        "citi non-b&d",
+        "citi non b&d",
+        "citi not b&d",
+        "non-citi billed",
+        "not billed by citi",
+        "non billed by broker code"
+      ],
+      "skip_entity_search": true,
+      "negation_rule": "non- / non / not before B&D is a SQL filter modifier. NEVER trigger entity_search. Citi here is the broker, not an issuer.",
+      "sql_strategy": "Citi in syndicate AND BND_BROKER NOT in TRUE set at Citi index",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "BROKER_CODE",
+        "BND_BROKER",
+        "SYNDICATE_MEMBER_NAME"
+      ]
+    },
+    {
+      "id": "broker_solo",
+      "label": "Citi Solo",
+      "patterns": [
+        "citi solo",
+        "solo deals",
+        "sole bookrunner citi",
+        "citi sole bookrunner",
+        "solo bookrunner"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "REGEXP_COUNT(BROKER_CODE,'\\|') = 0 AND Citi token match. ECM only.",
+      "applicable_products": [
+        "ECM"
+      ],
+      "key_columns": [
+        "BROKER_CODE"
+      ]
+    },
+    {
+      "id": "broker_role",
+      "label": "Syndicate roles (lead/joint/passive/co-manager/selling group)",
+      "patterns": [
+        "lead bookrunner",
+        "lead broker",
+        "lead manager",
+        "joint bookrunner",
+        "joint book",
+        "passive bookrunner",
+        "co-manager",
+        "co manager",
+        "selling group"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "REGEXP_LIKE(SYNDICATE_ROLE, role-pattern, 'i'). ECM only.",
+      "applicable_products": [
+        "ECM"
+      ],
+      "key_columns": [
+        "SYNDICATE_ROLE"
+      ]
+    },
+    {
+      "id": "top_investors_taxonomy",
+      "label": "Top investors by sector/product/region (no named investor)",
+      "patterns": [
+        "top * investors",
+        "top investors in",
+        "top investors of",
+        "long-only investors",
+        "investors in healthcare",
+        "investors in energy",
+        "investors in ipo",
+        "investors who participated in more than",
+        "highest allocation investor",
+        "highest demand investor"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "Rank by SUM(ALLOCATION) ECM or SUM(AMT) DCM, GROUP BY GPNUM/INVESTOR_NAME, filter by taxonomy",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "GPNUM",
+        "INVESTOR_NAME",
+        "ALLOCATION",
+        "AMT",
+        "SECTOR",
+        "INVESTOR_CATEGORY",
+        "OFFERING_TYPE"
+      ],
+      "metric_clarification": "Bare 'top investors': rank SUM(ALLOCATION) ECM / SUM(AMT) DCM, no question. 'order size': ECM=ALLOCATION, DCM=AMT. 'demand'/'indication in shares': DEMAND_QTY."
+    },
+    {
+      "id": "deals_by_currency",
+      "label": "Deals/tranches by currency or denomination",
+      "patterns": [
+        "usd-denominated",
+        "usd denominated",
+        "eur-denominated",
+        "by currency",
+        "currency breakdown",
+        "deals in usd",
+        "issue size greater than",
+        "deal size greater than",
+        "total deal size",
+        "total tranche size",
+        "total issue size"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE CURRENCY = code or GROUP BY CURRENCY; size metrics use TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) with dedupe",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "CURRENCY",
+        "TRANCHE_SIZE"
+      ]
+    },
+    {
+      "id": "multi_currency_deals",
+      "label": "Multi-currency deals",
+      "patterns": [
+        "multi-currency deals",
+        "multi currency deals",
+        "multiple currencies"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "Subquery COUNT(DISTINCT CURRENCY) > 1 per DEAL_ID. Note: no demand-currency field, CURRENCY is pricing currency.",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "DEAL_ID",
+        "CURRENCY"
+      ]
+    },
+    {
+      "id": "deals_by_region",
+      "label": "Deals/tranches by region",
+      "patterns": [
+        "in the nam region",
+        "in nam region",
+        "nam deals",
+        "emea deals",
+        "apac deals",
+        "by region",
+        "regional breakdown",
+        "grouped by region",
+        "in nam",
+        "in emea",
+        "in apac"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "TRANCHE_REGION for tranche-level (ECM+DCM); DEAL_REGION for ECM deal-level. Default to TRANCHE_REGION.",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "TRANCHE_REGION",
+        "DEAL_REGION"
+      ],
+      "note": "The old REGION column has been removed. TRANCHE_REGION works for ECM and DCM; DEAL_REGION is ECM deal-level only."
+    },
+    {
+      "id": "deals_by_sector",
+      "label": "Deals/tranches by sector",
+      "patterns": [
+        "healthcare sector",
+        "energy sector",
+        "technology sector",
+        "defence sector",
+        "defense sector",
+        "aero/defense",
+        "banking sector",
+        "pharma sector",
+        "sector breakdown"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE SECTOR = normalized_value",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "SECTOR"
+      ],
+      "sector_normalizations": {
+        "defence": "Aero/Defense",
+        "defense": "Aero/Defense",
+        "pharma": "Pharmaceuticals",
+        "banking": "Banks",
+        "financial": "Financial Services",
+        "telecom": "Telecommunications",
+        "auto": "Autos",
+        "it": "Information Technology",
+        "tech": "Technology"
+      }
+    },
+    {
+      "id": "seniority_filter",
+      "label": "Seniority / bond structure (DCM)",
+      "patterns": [
+        "senior secured",
+        "senior unsecured",
+        "subordinated",
+        "first lien",
+        "second lien",
+        "1st lien",
+        "2nd lien",
+        "junior subordinated",
+        "seniority"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "DCM: WHERE SENIORITY LIKE '%<value>%'. ECM convertibles: EQUITY_TYPE IN ('Convertible Bonds','Convertible Preferred').",
+      "applicable_products": [
+        "DCM"
+      ],
+      "key_columns": [
+        "SENIORITY",
+        "EQUITY_TYPE"
+      ],
+      "note": "'investment grade'/'high yield' are PRODUCT_CLASS values -> product_class_filter, not SENIORITY."
+    },
+    {
+      "id": "offering_type_filter",
+      "label": "IPO / Follow-on / Rights Issue (ECM)",
+      "patterns": [
+        "ipo",
+        "ipos",
+        "initial public offering",
+        "follow-on",
+        "follow on",
+        "rights issue",
+        "fo deals"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE OFFERING_TYPE IN ('IPO','FO','Rights Issue'). ECM only.",
+      "applicable_products": [
+        "ECM"
+      ],
+      "key_columns": [
+        "OFFERING_TYPE"
+      ]
+    },
+    {
+      "id": "esg_filter",
+      "label": "ESG / Green / Social / Sustainability (DCM)",
+      "patterns": [
+        "esg",
+        "green bond",
+        "social bond",
+        "sustainability bond",
+        "esg bond",
+        "green deals"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE ESG_BOND IN ('GREEN','SOCIAL','SUSTAINABILITY'). DCM only.",
+      "applicable_products": [
+        "DCM"
+      ],
+      "key_columns": [
+        "ESG_BOND"
+      ]
+    },
+    {
+      "id": "product_class_filter",
+      "label": "Product class / bond type (DCM)",
+      "patterns": [
+        "investment grade bonds",
+        "high yield bonds",
+        "emerging market",
+        "covered bond",
+        "clo",
+        "levfin",
+        "abs",
+        "rmbs",
+        "cmbs",
+        "ssa",
+        "asset backed",
+        "municipals"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE PRODUCT_CLASS = value. DCM only.",
+      "applicable_products": [
+        "DCM"
+      ],
+      "key_columns": [
+        "PRODUCT_CLASS"
+      ]
+    },
+    {
+      "id": "reg_category_filter",
+      "label": "Regulatory category (144A / Reg S / etc.)",
+      "patterns": [
+        "144a",
+        "reg s",
+        "regulation s",
+        "private placement",
+        "eurobond",
+        "domestic",
+        "accredited investors",
+        "3(a)(2)"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE REG_CATEGORY LIKE '%value%'. DCM only.",
+      "applicable_products": [
+        "DCM"
+      ],
+      "key_columns": [
+        "REG_CATEGORY"
+      ]
+    },
+    {
+      "id": "investor_category_filter",
+      "label": "Investor category classification",
+      "patterns": [
+        "long only",
+        "long-only",
+        "hedge fund",
+        "outright",
+        "asset manager",
+        "central bank",
+        "private bank",
+        "insurance pension",
+        "investor category",
+        "investor classification"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE INVESTOR_CATEGORY = value (case-insensitive).",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "INVESTOR_CATEGORY",
+        "INVESTOR_CATEGORY_KEY"
+      ],
+      "unsupported_sub_categories": [
+        "strategic",
+        "family office",
+        "retail",
+        "swf",
+        "dsp",
+        "index",
+        "quant"
+      ],
+      "unsupported_note": "These investor sub-categories are NOT valid INVESTOR_CATEGORY values. Tell user the supported values from the schema."
+    },
+    {
+      "id": "meeting_type_filter",
+      "label": "Meeting type (1x1 / conference / group) \u2014 ECM only",
+      "patterns": [
+        "1x1",
+        "1-on-1",
+        "one-to-one",
+        "one on one",
+        "meeting type",
+        "conference call",
+        "small group",
+        "group meeting",
+        "no meeting",
+        "meeting type other than 1x1"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE MEETING_TYPE_KEY = 'ONE_TO_ONE' or != 'ONE_TO_ONE'. ECM only.",
+      "applicable_products": [
+        "ECM"
+      ],
+      "key_columns": [
+        "MEETING_TYPE",
+        "MEETING_TYPE_KEY"
+      ],
+      "meeting_type_map": {
+        "1x1": "ONE_TO_ONE",
+        "1-on-1": "ONE_TO_ONE",
+        "one to one": "ONE_TO_ONE",
+        "conference call": "CONFERENCE_CALL",
+        "small group": "SMALL_GROUP",
+        "group meeting": "GROUP_MEETING",
+        "no meeting": "NO_MEETING"
+      }
+    },
+    {
+      "id": "deal_status_filter",
+      "label": "Deal status filter",
+      "patterns": [
+        "priced deals",
+        "settled deals",
+        "cancelled deals",
+        "live deals",
+        "open deals",
+        "closed deals",
+        "deal status",
+        "mandated deals",
+        "postponed deals"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE DEAL_STATUS = value (case-insensitive).",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "DEAL_STATUS"
+      ]
+    },
+    {
+      "id": "security_identifiers",
+      "label": "Security identifiers in output",
+      "patterns": [
+        "security identifiers",
+        "with identifiers",
+        "cusip",
+        "isin",
+        "figi",
+        "ric",
+        "ticker",
+        "valoren",
+        "smcp id"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "Include IDENTIFIER_TYPE, IDENTIFIER_VALUE, TICKER in SELECT projection.",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "IDENTIFIER_TYPE",
+        "IDENTIFIER_VALUE",
+        "TICKER"
+      ]
+    },
+    {
+      "id": "dealer_participation",
+      "label": "Dealers/banks in sector deals",
+      "patterns": [
+        "dealers who participated",
+        "banks that participated",
+        "syndicate banks in",
+        "dealers in energy",
+        "dealers in healthcare",
+        "show all dealers"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "Aggregate SYNDICATE_MEMBER_NAME/BROKER_CODE with SECTOR filter.",
+      "applicable_products": [
+        "ECM",
+        "DCM"
+      ],
+      "key_columns": [
+        "SYNDICATE_MEMBER_NAME",
+        "BROKER_CODE",
+        "SECTOR"
+      ]
+    },
+    {
+      "id": "maturity_tenor_filter",
+      "label": "Maturity / tenor filter (DCM)",
+      "patterns": [
+        "maturity",
+        "matures in",
+        "maturing",
+        "tenor",
+        "5-year",
+        "10-year",
+        "securities maturity"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "SECURITIES_MATURITY is TEXT: LIKE on year ('%2030%'), no date math. TENORS LIKE '%10Y%'; tenor RANGE asks: expand labels (REGEXP_LIKE(TENORS,'8Y|9Y|10Y|12Y|15Y|20Y|30Y')), never numeric parse. DCM only.",
+      "applicable_products": [
+        "DCM"
+      ],
+      "key_columns": [
+        "SECURITIES_MATURITY",
+        "TENORS"
+      ]
+    },
+    {
+      "id": "coupon_type_filter",
+      "label": "Coupon type (Fixed / FRN / Zero Coupon)",
+      "patterns": [
+        "fixed rate",
+        "floating rate",
+        "frn",
+        "zero coupon",
+        "fixed to frn",
+        "step coupon",
+        "coupon type",
+        "coupon frequency"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE COUPON_TYPE = value or COUPON_FREQ = value. DCM only.",
+      "applicable_products": [
+        "DCM"
+      ],
+      "key_columns": [
+        "COUPON_TYPE",
+        "COUPON_FREQ"
+      ]
+    },
+    {
+      "id": "use_of_proceeds_filter",
+      "label": "Use of proceeds (DCM)",
+      "patterns": [
+        "general corporate purposes",
+        "repay borrowings",
+        "use of proceeds",
+        "proceeds for"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE USE_OF_PROCEEDS LIKE value. DCM only.",
+      "applicable_products": [
+        "DCM"
+      ],
+      "key_columns": [
+        "USE_OF_PROCEEDS"
+      ]
+    },
+    {
+      "id": "issuer_ratings_filter",
+      "label": "Issuer credit ratings (DCM)",
+      "patterns": [
+        "credit rating",
+        "moody",
+        "s&p rating",
+        "fitch rating",
+        "issuer rating",
+        "rated"
+      ],
+      "skip_entity_search": true,
+      "sql_strategy": "WHERE ISSUER_RATINGS LIKE value. DCM only.",
+      "applicable_products": [
+        "DCM"
+      ],
+      "key_columns": [
+        "ISSUER_RATINGS"
+      ]
+    }
+  ],
+  "metric_clarification_rules": [
+    {
+      "user_phrase": "order size",
+      "ecm_column": "ALLOCATION",
+      "dcm_column": "AMT",
+      "clarification": "For ECM, order size maps to ALLOCATION (final allocation). For DCM, order size maps to AMT (indication amount). Ask once if product is unclear."
+    },
+    {
+      "user_phrase": "demand",
+      "clarification": "Demand = DEMAND_QTY (ECM+DCM) \u2014 the dedicated demand/indication-in-shares metric. Do NOT map demand to ALLOCATION or AMT.",
+      "column": "DEMAND_QTY"
+    },
+    {
+      "user_phrase": "book size",
+      "column": "TRANCHE_SIZE",
+      "clarification": "Book size = TRANCHE_SIZE (deal/tranche total size, not order level)."
+    },
+    {
+      "user_phrase": "highest share",
+      "ecm_column": "ALLOCATION",
+      "dcm_column": "AMT",
+      "clarification": "Highest share = investor with highest ALLOCATION (ECM) or AMT (DCM). Confirm with user before executing. (Demand asks use DEMAND_QTY.)"
+    }
+  ]
+}
