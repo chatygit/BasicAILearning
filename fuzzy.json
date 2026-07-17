@@ -1,0 +1,163 @@
+{
+  "description": "Concrete turn-by-turn examples for fuzzy match carry-forward behavior in ECM/DCM. The agent must follow these patterns to avoid the fuzzy-hint loop anti-pattern.",
+
+  "scenarios": [
+    {
+      "id": "deal_name_no_exact_then_followup",
+      "description": "User asks about a deal by name that does not exist exactly; fuzzy match resolves it; follow-up reuses resolved deal.",
+      "turns": [
+        {
+          "turn": 1,
+          "user": "What about the 'Jerde, Franecki and Wolf 1783028182842' deal?",
+          "agent_tool_calls": [
+            "text2sql_entity_search(domain='ecm', entity_name='Jerde, Franecki and Wolf 1783028182842')"
+          ],
+          "tool_result": {
+            "status": "no_results",
+            "fuzzy_hint": {
+              "resolved_name": "Jerde-Abbott 1749569723722",
+              "resolved_id": "DEAL_ID_XYZ"
+            }
+          },
+          "correct_agent_action": "Proceed to query using DEAL_ID_XYZ. Answer the user's question about that deal. Populate fuzzy_resolved_entity slot.",
+          "correct_response_shape": "I could not find 'Jerde, Franecki and Wolf 1783028182842' exactly, but the closest match is 'Jerde-Abbott 1749569723722' [DEAL_ID: DEAL_ID_XYZ]. Here is what I found for that deal: [answer]. If this is not the deal you meant, let me know.",
+          "wrong_response": "I could not find 'Jerde, Franecki and Wolf 1783028182842'. I found a similar deal: 'Jerde-Abbott 1749569723722'. Would you like to know more?",
+          "why_wrong": "Stops after reporting the fuzzy match. Does not answer the user's question. Causes the loop on the next turn.",
+          "memory_slot_state_after": {
+            "fuzzy_original_query": "Jerde, Franecki and Wolf 1783028182842",
+            "fuzzy_resolved_name": "Jerde-Abbott 1749569723722",
+            "fuzzy_resolved_id": "DEAL_ID_XYZ",
+            "fuzzy_entity_type": "deal",
+            "fuzzy_match_status": "active"
+          }
+        },
+        {
+          "turn": 2,
+          "user": "What is the settlement date for deal 'Jerde, Franecki and Wolf 1783028182842'?",
+          "memory_slot_state": {
+            "fuzzy_match_status": "active",
+            "fuzzy_resolved_id": "DEAL_ID_XYZ",
+            "fuzzy_resolved_name": "Jerde-Abbott 1749569723722"
+          },
+          "correct_agent_action": "Recognize same entity. Use DEAL_ID_XYZ directly in SQL. Do NOT call entity_search again.",
+          "correct_tool_calls": [
+            "text2sql_query_context / text2sql_query_executor using WHERE DEAL_ID = 'DEAL_ID_XYZ'"
+          ],
+          "wrong_tool_calls": [
+            "text2sql_entity_search(entity_name='Jerde, Franecki and Wolf 1783028182842')"
+          ],
+          "why_wrong": "Re-running entity_search with the same name triggers the same no_result + fuzzy hint loop.",
+          "correct_response_shape": "Using 'Jerde-Abbott 1749569723722' [DEAL_ID: DEAL_ID_XYZ] as the matched deal — the settlement date is [value / not available]. If you meant a different deal, let me know."
+        }
+      ]
+    },
+
+    {
+      "id": "investor_name_no_exact_then_followup",
+      "description": "User asks about an investor by name that fuzzy-resolves; follow-up asks about same investor.",
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Show allocations for investor 'Fideliity Managment'",
+          "agent_tool_calls": [
+            "text2sql_entity_search(domain='ecm', entity_name='Fideliity Managment')"
+          ],
+          "tool_result": {
+            "status": "no_results",
+            "fuzzy_hint": {
+              "resolved_name": "Fidelity Management & Research",
+              "resolved_id": "GPNUM_12345"
+            }
+          },
+          "correct_agent_action": "Use GPNUM_12345, run allocation query, answer immediately. Populate fuzzy slot.",
+          "correct_response_shape": "I matched 'Fideliity Managment' to 'Fidelity Management & Research' [GPNUM: 12345]. Here are their allocations: [table]. If this is not the right investor, say 'try a different investor'.",
+          "memory_slot_state_after": {
+            "fuzzy_original_query": "Fideliity Managment",
+            "fuzzy_resolved_name": "Fidelity Management & Research",
+            "fuzzy_resolved_id": "GPNUM_12345",
+            "fuzzy_entity_type": "investor",
+            "fuzzy_match_status": "active"
+          }
+        },
+        {
+          "turn": 2,
+          "user": "How many deals did they participate in this year?",
+          "memory_slot_state": {
+            "fuzzy_match_status": "active",
+            "fuzzy_resolved_id": "GPNUM_12345",
+            "fuzzy_entity_type": "investor"
+          },
+          "correct_agent_action": "Bind 'they' to GPNUM_12345. Use WHERE GPNUM = 'GPNUM_12345' directly. Skip entity_search.",
+          "correct_response_shape": "Fidelity Management & Research [GPNUM: 12345] participated in [N] deals this year: [detail]."
+        }
+      ]
+    },
+
+    {
+      "id": "explicit_rejection_triggers_new_search",
+      "description": "User explicitly rejects the fuzzy match; agent clears slot and runs fresh entity_search.",
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Show me the 'Jerde Wolf' deal",
+          "tool_result": {
+            "status": "no_results",
+            "fuzzy_hint": {"resolved_name": "Jerde-Abbott 1749569723722", "resolved_id": "DEAL_ID_XYZ"}
+          },
+          "correct_agent_action": "Use fuzzy match, answer, populate slot.",
+          "memory_slot_state_after": {"fuzzy_match_status": "active", "fuzzy_resolved_id": "DEAL_ID_XYZ"}
+        },
+        {
+          "turn": 2,
+          "user": "That's not the right deal. Try searching for 'Jerde Consulting 2025'.",
+          "rejection_signal_detected": true,
+          "correct_agent_action": "Clear fuzzy_resolved_entity slot. Run entity_search with 'Jerde Consulting 2025'.",
+          "memory_slot_state_after": {"fuzzy_match_status": "rejected"}
+        }
+      ]
+    },
+
+    {
+      "id": "pronoun_reference_with_active_fuzzy",
+      "description": "User uses pronoun 'it' in follow-up; agent binds to active fuzzy-resolved entity.",
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Tell me about 'Jerde Franecki Wolf' deal",
+          "tool_result": {
+            "status": "no_results",
+            "fuzzy_hint": {"resolved_name": "Jerde-Abbott 1749569723722", "resolved_id": "DEAL_ID_XYZ"}
+          },
+          "correct_agent_action": "Use fuzzy match to answer. Populate slot.",
+          "memory_slot_state_after": {"fuzzy_match_status": "active", "fuzzy_resolved_id": "DEAL_ID_XYZ"}
+        },
+        {
+          "turn": 2,
+          "user": "Who were the top investors in it?",
+          "pronoun_binding": "'it' -> fuzzy_resolved_id = DEAL_ID_XYZ",
+          "correct_agent_action": "Bind 'it' to DEAL_ID_XYZ. Run investor query with WHERE DEAL_ID = 'DEAL_ID_XYZ'. Skip entity_search.",
+          "correct_response_shape": "For 'Jerde-Abbott 1749569723722' [DEAL_ID: DEAL_ID_XYZ], the top investors were: [list]."
+        }
+      ]
+    }
+  ],
+
+  "rejection_signal_phrases": [
+    "that's not the right deal",
+    "that's not the right investor",
+    "that's not the right issuer",
+    "not this one",
+    "try a different deal",
+    "search for a different deal",
+    "try again",
+    "I meant [different name]",
+    "search for X instead",
+    "no, the deal I meant is"
+  ],
+
+  "implicit_acceptance_signals": [
+    "user asks another question about the same entity without rejection",
+    "user uses pronoun 'it', 'this deal', 'that deal', 'the deal', 'this investor', 'they', 'them'",
+    "user repeats the original (misspelled or non-matching) entity name in a follow-up question"
+  ]
+}

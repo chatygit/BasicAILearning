@@ -1,0 +1,16 @@
+{
+  "description": "Fuzzy carry-forward contract for ECM/DCM (full behavior lives in the agent's skill). On a fuzzy-only match: USE it immediately, answer the question, state the substitution ('I used <resolved name> [<ID>]'), and keep the resolved id across turns. ANTI-PATTERN (never do): entity_search -> fuzzy suggestion -> stop without answering -> repeat next turn. Follow the entity_search response's next_action to call fuzzy_resolve when suggested. Explicit labeled ids (DEAL_ID/GPNUM/GFCID) are NEVER fuzzy-substituted — zero rows means 'No data found for <ID>'.",
+  "rejection_signals": [
+    "that's not the right deal/investor/issuer",
+    "not this one",
+    "try a different deal / try again",
+    "I meant <different name> / search for <X> instead"
+  ],
+  "on_rejection": "Clear the fuzzy slot and run a fresh entity_search with the new name.",
+  "implicit_acceptance_signals": [
+    "another question about the same entity without rejection",
+    "pronouns: it / this deal / that deal / this investor / they / them",
+    "the original (misspelled) name repeated in a follow-up"
+  ],
+  "on_acceptance": "Reuse the resolved id directly in SQL. Do NOT call entity_search again for the same entity."
+}

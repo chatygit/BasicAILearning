@@ -1,0 +1,65 @@
+{
+  "examples": [
+    {
+      "turn_1": "Show top ECM deals in 2025 by tranche size",
+      "turn_2": "same for DCM",
+      "resolution": {
+        "reuse": ["time_window", "metric_intent", "sort_and_limit"],
+        "change": {"product_scope": "DCM"},
+        "needs_entity_search": false
+      }
+    },
+    {
+      "turn_1": "List Apple issuer deals in 2024",
+      "turn_2": "break that by currency",
+      "resolution": {
+        "reuse": ["gfcid", "time_window", "product_scope"],
+        "change": {"business_grain": "deal-level", "metric_intent": "breakdown"},
+        "needs_entity_search": false
+      }
+    },
+    {
+      "turn_1": "Top investors by allocation for this issuer last year",
+      "turn_2": "only APAC",
+      "resolution": {
+        "reuse": ["gfcid", "gpnum_set_if_present", "time_window"],
+        "change": {"region_filter": "APAC"},
+        "needs_entity_search": false
+      }
+    },
+    {
+      "turn_1": "Show Fidelity allocations in ECM",
+      "turn_2": "do the same in DCM",
+      "resolution": {
+        "reuse": ["gpnum", "metric_intent", "time_window_if_present"],
+        "change": {"product_scope": "DCM"},
+        "needs_entity_search": false,
+        "clarification_if_needed": "Only if multiple unresolved GPNUM values remain"
+      }
+    },
+    {
+      "turn_1": "Show Citi B&D deals in 2024",
+      "turn_2": "and non-B&D",
+      "resolution": {
+        "reuse": ["broker_intent_entity", "time_window", "product_scope"],
+        "change": {"bnd_state": "non_true_tokens"},
+        "needs_entity_search": false
+      }
+    },
+    {
+      "turn_1": "List IPO deals in 2025",
+      "turn_2": "top sectors",
+      "resolution": {
+        "reuse": ["time_window", "product_scope", "offering_type"],
+        "change": {"metric_intent": "aggregate", "group_by": ["SECTOR"]},
+        "needs_entity_search": false
+      }
+    }
+  ],
+  "interpretation_rules": [
+    "same, same period, same scope => inherit previous filters by default",
+    "that issuer, this investor, those deals => bind to most recent confirmed entity",
+    "break by X => keep population constant, change grouping dimension",
+    "top N => preserve current scope and entity filters; adjust ordering and row limit"
+  ]
+}

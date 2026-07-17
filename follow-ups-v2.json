@@ -1,0 +1,48 @@
+{
+  "examples": [
+    {
+      "turn_1": "Show top ECM deals in 2025 by tranche size",
+      "turn_2": "same for DCM",
+      "resolution": {
+        "reuse": ["time_window", "sort_and_limit"],
+        "change": {"product_scope": "DCM"},
+        "re_derive": "product-dependent metrics/filters: order size ECM=ALLOCATION -> DCM=AMT; ECM-only filters (IPO, SYNDICATE_ROLE, MEETING_TYPE) -> do NOT run a knowably-empty query, explain and offer the DCM equivalent; single-DEAL_ID context -> pivot to the issuer's other deals via GFCID",
+        "needs_entity_search": false
+      }
+    },
+    {
+      "turn_1": "List Apple issuer deals in 2024",
+      "turn_2": "break that by currency",
+      "resolution": {
+        "reuse": ["gfcid", "time_window", "product_scope"],
+        "change": {"metric_intent": "breakdown", "group_by": ["CURRENCY"]},
+        "needs_entity_search": false
+      }
+    },
+    {
+      "turn_1": "Top investors by allocation for this issuer last year",
+      "turn_2": "only APAC",
+      "resolution": {
+        "reuse": ["gfcid", "time_window", "metric_intent"],
+        "change": {"region_filter": "TRANCHE_REGION = 'APAC'"},
+        "needs_entity_search": false
+      }
+    },
+    {
+      "turn_1": "Show Citi B&D deals in 2024",
+      "turn_2": "and non-B&D",
+      "resolution": {
+        "reuse": ["time_window", "product_scope"],
+        "change": {"bnd_state": "negate B&D condition (filter modifier, not an entity)"},
+        "needs_entity_search": false
+      }
+    }
+  ],
+  "interpretation_rules": [
+    "same / same period / same scope => inherit previous filters by default; follow-ups never re-run entity_search for an already-resolved entity",
+    "that issuer / this investor / it / them => bind to most recent confirmed entity + time window",
+    "break by X => keep population constant, change grouping dimension",
+    "top N => preserve scope and entity filters; adjust ordering and row limit",
+    "product flip => re-derive product-dependent column mappings and short-circuit product-exclusive filters (see re_derive example)"
+  ]
+}
