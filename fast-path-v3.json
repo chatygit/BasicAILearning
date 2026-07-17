@@ -1,0 +1,9 @@
+{
+  "purpose": "Fast-path routing for ECM/DCM lives in the agent's text2sql-ecm-dcm skill (routing table, broker recipes, metric defaults). This file intentionally carries only the core policy to avoid duplicating ~4k tokens per query.",
+  "policy": [
+    "If the ask contains NO named investor/issuer/deal (broker/B&D/role, taxonomy, top-N, rating, status, region, currency, date asks): skip entity_search and fuzzy_resolve entirely — query_context -> SQL -> validate -> executor.",
+    "Broker/syndicate/B&D/role intents NEVER trigger entity_search for the bank; 'non-/not-B&D' is a SQL filter modifier, not an entity name.",
+    "Bare 'top investors' ranks SUM(ALLOCATION) ECM / SUM(AMT) DCM without asking. demand = DEMAND_QTY (ECM+DCM).",
+    "Max 2 validate attempts; stop after the first non-empty executor result."
+  ]
+}

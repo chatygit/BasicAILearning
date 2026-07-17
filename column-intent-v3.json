@@ -1,0 +1,10 @@
+{
+  "purpose": "Column routing for ECM/DCM lives in the agent's text2sql-ecm-dcm skill (always in context): column dictionary with per-column filter/aggregation guidance, metric decoder (demand=DEMAND_QTY), sector/region normalizations, exact value literals, and the pre-tool routing table. This file intentionally carries only the principles below to avoid duplicating ~5k tokens per query.",
+  "principles": [
+    "Map user criteria to the skill's column dictionary; exact match for coded fields, LIKE/REGEXP only for free text.",
+    "Taxonomy-only asks (sector/currency/region/date/status/category/rating) with NO named entity: skip entity_search entirely.",
+    "Named investor/issuer/deal: resolve once via entity_search with the matching entity_type, then filter by GPNUM/GFCID/DEAL_ID.",
+    "Always apply explicit PRODUCT and sargable PRICING_TS predicates; dedupe at business grain before aggregating.",
+    "Unsupported intents: see unsupported_intents.json — respond with its user_message, still answering any supported part."
+  ]
+}
