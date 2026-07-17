@@ -1,0 +1,89 @@
+# - mcp: MCP toolset (auto-created from config)
+#
+
+tools:
+  # Example: MCP tool
+  # - name: my_mcp_tool
+  #   description: "MCP toolset for backend services"
+  #   tool_type: mcp
+  #   mcp_server_url: "${MCP_SERVER_URL}"
+  #   mcp_tool_names: []  # empty = discover all tools
+
+  - name: emp_mcp
+    description: >
+      This MCP server provides employee search, lookup, and identity resolution
+      tools. Tools accept any employee identifier (SOEID, name, or email)
+      and return verified employee records as formatted markdown tables.
+    tool_type: mcp
+    mcp_server_url: "https://emp-mcp-server-plexus-ai-core-dev-174902.apps.namicggtd102d.ecs.dyn.nsroot.net/mcp"
+    mcp_tool_names: []  # empty = discover all tools from server
+    tags: ["mcp","employee","search"]
+
+  - name: zen_mcp
+    description: >
+      You are a helpful Zen CRM AI tool assistant.
+      DISPLAY RULES — follow these for every tool response:
+      1. Display tool output EXACTLY as returned — do not paraphrase, summarize, reformat, or add any text before or after it.
+      2. Always render output as formatted markdown.
+      3. Do NOT fetch or display the user's current location.
+      4. Do NOT modify tables, headings, or bullet points in any way.
+      5. Do NOT add any introductionor closing txt around tool output
+      Provides CRM information for bankers.
+
+      Contains the followin Tools
+      1. tool_get_coverage_companies
+      2. tool_client_search
+      3. tool_get_coverage_team
+    tool_type: mcp
+    mcp_server_url: "https://zen-mcp-server-plexus-ai-core-dev-174902.apps.namicggtd102d.ecs.dyn.nsroot.net/mcp"
+    mcp_tool_names: []  # empty = discover all tools from server
+    tags: ["mcp","employee coverage","client coverage", "client search"]
+
+  - name: lseg_mcp
+    description: >
+      Provides access to LSEG market data and analytics via the LSEG MCP server.
+      Use this agent when the user asks about market data, financial analytics,
+      FX rates, equity prices, fixed income data, or any LSEG data services.
+
+      **CAPABILITIES:**
+      - Access LSEG market data and analytics tools
+      - Retrieve FX rates, equity prices, fixed income data
+      - Provide financial analytics and market insights
+
+      **RULES:**
+      - Use the LSEG MCP tools to retrieve real market data
+      - Never fabricate financial data
+      - Present data in clear, formatted tables when appropriate
+      - If a tool call fails, inform the user and suggest alternatives
+    tool_type: mcp
+    mcp_server_url: "https://lseg-mcp-server-proxy-plexus-ai-core-dev-174902.apps.namicggtd102d.ecs.dyn.nsroot.net/mcp"
+    mcp_tool_names: []  # empty = discover all tools from server
+    tags: ["mcp","financial data","market data", "financial new", "financial headline"]
+
+  - name: text2sql_mcp
+    description: >
+      Generic Text-to-SQL MCP server with only the registered data-layer tools:
+      text2sql_entity_search, text2sql_query_context, text2sql_validate_sql,
+      text2sql_query_executor, text2sql_data_context, text2sql_fuzzy_resolve.
+      All tools accept a 'domain' parameter to load the correct configuration.
+    tool_type: mcp
+    mcp_server_url: "http://localhost:8096/mcp"
+    mcp_tool_names:
+      - "text2sql_entity_search"
+      - "text2sql_query_context"
+      - "text2sql_validate_sql"
+      - "text2sql_query_executor"
+      - "text2sql_data_context"
+      - "text2sql_fuzzy_resolve"
+    tags: ["mcp", "text2sql", "credit-facilities", "revenue-returns", "wallet", "ecm-dcm"]
+
+  - name: conversation_mcp
+    description: >
+      Conversation history MCP server providing tools for retrieving,
+      viewing, and managing user conversation history from MongoDB.
+      Tools: tool_get_conversation_summary, tool_get_conversation_details,
+      tool_save_conversation.
+    tool_type: mcp
+    mcp_server_url: "http://localhost:8096/mcp"
+    mcp_tool_names: []
+    tags: ["mcp", "conversations", "history", "mongodb"]

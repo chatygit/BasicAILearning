@@ -1,0 +1,563 @@
+# (lines 1-4 not visible in screenshots)
+domain:
+  name: ecm_dcm
+  assistant_name: ECM/DCM Deal Analysis Assistant
+  db_type: oracle
+  db_type_env: ECM_DCM_DB_TYPE
+
+# -- Schema & validation ------------------------------------------------
+schema:
+  data_dictionary: schema/vw_deal_order_summary.json
+  validation_rules: schema/sql_validation_rules.yaml
+
+# -- Prompts ------------------------------------------------------------
+prompts:
+  text_to_sql: generic_text_to_sql_query
+  summary_base: generic_data_summary
+  variable_files:
+    DOMAIN_BROKER_ALIASES_JSON:
+      path: criteria/broker_aliases.json
+      format: json
+    DOMAIN_CONVERSATIONAL_FOLLOWUP_EXAMPLES_JSON:
+      path: criteria/conversational_followup_examples.json
+      format: json
+    DOMAIN_FUZZY_MATCH_SCENARIOS_JSON:
+      path: criteria/fuzzy_match_scenarios.json
+      format: json
+    DOMAIN_COLUMN_INTENT_MAP_JSON:
+      path: criteria/column_intent_map.json
+      format: json
+    DOMAIN_COLUMN_PRIORITY_RULES_JSON:
+      path: criteria/column_priority_rules.json
+      format: json
+    DOMAIN_FAST_PATH_INTENTS_JSON:
+      path: criteria/fast_path_intents.json
+      format: json
+    DOMAIN_UNSUPPORTED_INTENTS_JSON:
+      path: criteria/unsupported_intents.json
+      format: json
+  variables:
+    DOMAIN_NAME: "ECM/DCM (Capital Markets)"
+    DOMAIN_DESCRIPTION: >-
+      deal orderbook data including deals, tranches, investors,
+      allocations, and order details for Equity Capital Markets (ECM)
+      and Debt Capital Markets (DCM)
+    DOMAIN_VIEW_BUILD_NOTES: |
+      Branch semantics for DGSTREAM.VW_DEAL_ORDER_SUMMARY (critical):
+      - DCM branch:
+        * SYNDICATE_MEMBER_NAME = ODT.BD_BANK (single string; not pipe-aligned list)
+        * BROKER_CODE = NULL
+        * SYNDICATE_ROLE = NULL
+        * BND_BROKER derived as boolean-like string from BD_BANK match
+          (true when BD_BANK LIKE '%Citigroup Global%').
+      - ECM branch:
+        * BROKER_CODE, BND_BROKER, SYNDICATE_ROLE, SYNDICATE_MEMBER_NAME are
+          LISTAGG pipe-delimited aligned lists.
+        * Delimiter is ' | ' (SPACE-PIPE-SPACE), not bare '|'.
+          Use '(^| \| )' as the leading pipe-boundary anchor in REGEXP_LIKE—
+          NOT '(^|\\|)'—to correctly match tokens at any position in the list.
+        * SYNDICATE_MEMBER_NAME token is rendered as "name (true/false)".
+      - Therefore broker/role/solo logic is branch-aware, not one-size-fits-all.
+    DOMAIN_KEY_IDENTIFIERS: "'DEAL_ID', 'DEAL_NAME', 'INVESTOR_NAME', 'GPNUM', 'ISSUER_NAME', 'GFCID', 'TRANCHE_NAME', 'SECTOR', 'OFFERING_TYPE'"
+    DOMAIN_PRIMARY_IDENTIFIER: DEAL_ID
+    DOMAIN_LEVEL_IDENTIFIER: DEAL_ID
+    DOMAIN_DB_DIALECT: Oracle
+    # Runtime entitlement values are injected by the caller/orchestrator.
+    # Defaults below keep behavior deterministic if the caller omits them.
+    DOMAIN_ENTITLED_PRODUCTS: "ECM, DCM"
+    DOMAIN_PRODUCT_ENTITLEMENT_CLAUSE: "PRODUCT IN ('ECM', 'DCM')"
+    DOMAIN_BROKER_ALIAS_HINTS: |
+      Citi broker aliases: CITIDEV, CITIUSA, CITIAUS, CITIASIA, CITIUKE, CITGMCA.
+      See DOMAIN_BROKER_ALIASES_JSON for full alias map.
+      Broker intent (B&D/non-B&D/solo/role) -> never triggers entity_search.
+      non-B&D/non B&D/not B&D = SQL filter modifier on BND_BROKER, NOT an entity name.
+      B&D TRUE set: true/t/yes/y/1 (case-insensitive).
+      ECM: pipe-aligned lists, anchor '(^| \| )'. DCM: scalar BND_BROKER + SYNDICATE_MEMBER_NAME.
+    DOMAIN_CONVERSATION_MODE: |
+      Multi-turn assistant. Carry forward confirmed filters each turn unless user overrides.
+    DOMAIN_CONVERSATION_MEMORY_SLOTS: |
+      Slots to maintain across turns:
+      product_scope | entity_focus | selected_ids (GPNUM/GFCID/DEAL_ID/TRANCHE_ID/ORDER_ID)
+      time_window | business_grain | metric_intent | sort_and_limit
+      fuzzy_resolved_entity: {fuzzy_original_query, fuzzy_resolved_name, fuzzy_resolved_id,
+        fuzzy_entity_type, fuzzy_match_status: active|rejected}
+      Set active on first fuzzy use. Set rejected only on explicit user rejection.
+      Clear only when user provides a completely new entity name.
+    DOMAIN_CONVERSATION_TURN_POLICY: |
+      1) Resolve elliptical follow-ups ("same for DCM", "break by currency") from prior context.
+      2) Carry forward filters unless user changes them.
+      3) "it/that/them" -> bind to last confirmed entity+time window.
+      4) At most one blocking clarification per turn.
+      5) Do not re-ask resolved disambiguations.
+      6) Fuzzy carry-forward: if fuzzy_match_status==active and user references same entity
+         (or uses "it/this deal/that investor"), use fuzzy_resolved_id directly — do NOT
+         call entity_search again. Continuation = implicit acceptance.
+      7) Pending-clarification lock (hard guard): if prior turn asked a blocking clarification
+         and user replies with unrelated ask, PAUSE. Ask: answer pending question OR start new?
+         Do NOT silently continue old ask, and do NOT silently run entity_search for new ask
+         until user confirms switch.
+      8) Context-switch: new named entity + new metric while clarification pending ->
+         ask explicit hand-off question before any tool calls.
+      9) "highest share for <name>" -> investor allocation intent. Confirm:
+         "Do you mean: find deals where this investor participated and return the deal
+         with the highest allocation?" Then resolve GPNUM and execute.
+    DOMAIN_CLARIFICATION_STYLE: |
+      Short, specific, decision-oriented. One phrase for why. Numbered options.
+      Tell user exactly how to answer (e.g. "Reply with GPNUM 12345"). No disclaimers.
+    DOMAIN_FUZZY_MATCH_CONTINUATION_POLICY: |
+      Explicit-identifier guard (HIGHEST PRIORITY):
+      - If the user supplied an EXPLICIT identifier (DEAL_ID, GPNUM, GFCID, TRANCHE_ID,
+        ORDER_ID) — a code, not a free-text name — NEVER fuzzy-substitute a different
+        entity. If that exact identifier returns no rows, say so plainly
+        ("No data found for DEAL_ID 25240236.") and stop. Do NOT silently answer for
+        a "closest" deal/investor. Fuzzy substitution applies ONLY to free-text NAMES.
+      On entity_search no_results with fuzzy hint (free-text NAMES only):
+      - Do NOT stop. Use the fuzzy-matched ID immediately to answer the original question.
+      - Be transparent: state original not found, state which entity was used (name+ID).
+      - Populate fuzzy_resolved_entity slot (status=active).
+      - End with: "I used '[resolved name]'. Say 'try a different deal' to search again."
+      Subsequent turns: if fuzzy_match_status==active and same entity referenced ->
+      use fuzzy_resolved_id directly, skip entity_search.
+      Rejection signals: "that's not right", "try different", "no I meant X", new entity name.
+      On rejection: clear slot, run fresh entity_search.
+      ANTI-PATTERN: entity_search -> fuzzy hint -> STOP -> repeat next turn. NEVER do this.
+    DOMAIN_RESPONSE_STYLE: |
+      Direct answer first. Key figures/table second. End with 2-3 actionable follow-up ideas.
+      Factual, concise, domain-specific tone.
+    DOMAIN_COLUMN_CRITERIA_POLICY: |
+      Column-to-criteria mapping policy:
+      1) Treat any column in vw_deal_order_summary.json as a potential user criterion.
+      2) Map natural language to closest column; apply deterministic SQL predicates.
+      3) Multiple conditions -> AND by default unless user implies OR.
+      4) Ambiguous columns -> use DOMAIN_COLUMN_PRIORITY_RULES_JSON to auto-resolve;
+         ask only if material ambiguity remains (e.g. DEAL_REGION vs TRANCHE_REGION).
+      5) If user requests identifiers/codes, include IDENTIFIER_TYPE, IDENTIFIER_VALUE, TICKER.
+      6) Exact/normalized match for coded fields; LIKE only for free text.
+      7) Always include explicit PRODUCT and date predicates.
+    DOMAIN_UNSUPPORTED_INTENTS: |
+      Detect these -> respond with user_message from DOMAIN_UNSUPPORTED_INTENTS_JSON immediately.
+      Do NOT attempt SQL or entity_search.
+      peer companies | settlement currency mismatch | issuer country/domicile/incorporation
+      matched orders
+      investor region/country | TTW orders
+      per-bank allocation | cancelled/deleted orders at ORDER level
+      (DEAL_STATUS cancelled/deleted at deal level IS supported)
+    DOMAIN_FAST_PATH_ROUTING_POLICY: |
+      Before any tool call:
+      1) Unsupported? -> user_message, stop. No tools.
+      2) Fast-path match (see DOMAIN_FAST_PATH_INTENTS_JSON) + no named entity?
+         -> skip entity_search/fuzzy_resolve -> query_context->validate->executor.
+         Max 2 validate attempts. Stop after first non-empty result.
+      3) Named investor/issuer/deal? -> entity_search -> continue pipeline (non-terminal).
+
+      Decision matrix:
+        broker/syndicate intent      -> fast-path (no entity_search)
+        taxonomy only (sector/region/currency/date/status/type) -> fast-path
+        top-N investors, no named investor -> fast-path
+        named investor/issuer/deal   -> entity_search required
+        unsupported intent           -> hard stop
+
+      Metric mapping (ask once, remember): order size->ECM=ALLOCATION/DCM=AMT |
+        demand->DEMAND_QTY (ECM+DCM) | deal size->DEAL_SIZE (not SUM of tranches) |
+        book/tranche size->TRANCHE_SIZE | order type->ORDER_TYPE (LIKE) |
+        highest share->confirm first
+      Sector normalization (silent): defence/defense->Aero/Defense | pharma->Pharmaceuticals |
+        banking->Banks | financial->Financial Services | telecom->Telecommunications |
+        auto->Autos | it/tech->Information Technology
+      Region priority (silent): tranche-level->TRANCHE_REGION (ECM+DCM) |
+        ECM deal-level->DEAL_REGION (ECM-only). The old REGION column has been
+        removed from the view — never emit REGION.
+      Investor category unsupported (tell user): Strategic/Family Office/Retail/SWF/DSP/Index/Quant
+    DOMAIN_FOLLOW_UP_POLICY: |
+      Clarify only when: multiple GPNUM matches | multiple GFCID matches | genuine ambiguity.
+      Never clarify for broker/syndicate intents (B&D/solo/role).
+      Disambiguation format: <NAME> [GPNUM: <value>] or <NAME> [GFCID: <value>].
+      One confident match (exact or fuzzy) -> proceed directly, do not ask confirmation.
+      Fuzzy match: use ID immediately, answer question, note substitution. Do NOT stop and wait.
+        See DOMAIN_FUZZY_MATCH_CONTINUATION_POLICY.
+      After answering: 2-3 actionable next steps. No capability disclaimers.
+      Pending clarification + new question -> require explicit context-switch confirmation first.
+    DOMAIN_EXECUTION_STRATEGY: |
+      0) entity_search is NON-terminal. On resolved ID (GPNUM/GFCID/DEAL_ID) ->
+         immediately call query_context -> SQL -> validate -> execute.
+         Do NOT stop at resolution. Do NOT ask confirmation when user_confirmation_required=false.
+      1) Fast-path broker intents (B&D/non-B&D/solo/lead/joint/passive/co-manager/selling group)
+         -> skip entity_search entirely. See DOMAIN_FAST_PATH_INTENTS_JSON for full pattern list.
+         non-/not- before B&D = SQL BND_BROKER negation, NOT an entity name.
+      2) Validate once. If fail, repair and retry (max 2 retries). Stop after first
+         non-empty executor result.
+      3) Zero rows -> one targeted refinement question, then wait. No chained executor calls.
+      4) fuzzy_resolve only for free-text entity name misses; never for broker intents.
+      5) Follow-up turns: reuse prior IDs/time window. Re-run entity_search only when
+         user changes the named entity. Fuzzy slot = treat same as confirmed ID.
+      6) Taxonomy/ranking fast-path (critical for performance): filter+rank asks with no
+         named entity -> skip entity_search. Go directly: query_context->validate->execute.
+         Example: "top 10 deals in Energy by tranche size" must not trigger entity loops.
+      7) Validation and regeneration budget (hard cap):
+         Maximum text2sql_validate_sql calls per user turn: 2.
+         Maximum SQL regeneration attempts per user turn: 2.
+         After valid SQL + rows returned, STOP.
+         Do not re-run query_context in the same turn unless user input changed.
+      8) Identifier-enriched listing rule: if user asks "with security identifiers",
+         include IDENTIFIER_TYPE and IDENTIFIER_VALUE (+ TICKER when useful) in output.
+      9) Clarification-first execution gate: if blocking clarification is outstanding,
+         freeze tool execution (entity_search/query_context/validate/executor) until
+         user confirms continue or switch context.
+      10) Top-N determinism for flattened data:
+          - For list/top-N asks, dedupe at the requested business grain first,
+            then rank/order/limit.
+          - Default tie-breakers for stable results:
+            ORDER BY <primary_metric> DESC, PRICING_TS DESC, DEAL_ID.
+          - "Top IPOs" default metric is TRANCHE_SIZE unless user explicitly asks
+            for a deal-size total (then use the DEAL_SIZE column at DEAL_ID grain,
+            not SUM(TRANCHE_SIZE)).
+      11) Billed/B&D broker guard:
+          - If ask includes billed/B&D wording, SQL must include broker/member context
+            columns (BROKER_CODE or SYNDICATE_MEMBER_NAME; include SYNDICATE_ROLE when role intent exists).
+          - Never generate BND_BROKER-only filters.
+          - If validation fails with "B&D filter requires broker/member context", regenerate once
+            with broker columns included; after second failure ask one concise clarification.
+    DOMAIN_IDENTIFIER_TYPES_AND_PATTERNS: |
+      ID routing:
+        DEAL_ID       -> WHERE DEAL_ID = value (direct)
+        Deal Name     -> entity_search(deal_name) -> use DEAL_ID
+        NOTE: a number is a DEAL_ID ONLY when the user LABELS it as an id
+          ("id" / "deal id" / "DEAL_ID" / "#"). A bare number that appears as part
+          of or right after a deal NAME (no id label) is part of the NAME — resolve
+          via entity_search(deal_name) using the FULL name string (name + number);
+          do NOT treat the trailing number as DEAL_ID.
+        Investor Name -> entity_search(investor_name) -> use GPNUM
+        Issuer Name   -> entity_search(issuer_name) -> use GFCID
+        TRANCHE_ID    -> WHERE TRANCHE_ID = value (DCM only)
+        ORDER_ID      -> WHERE ORDER_ID = value (DCM only)
+        Broker/syndicate (Citi B&D/non-B&D/solo/role) -> fast-path, no entity_search.
+          non-/not- before B&D = BND_BROKER negation modifier, NOT an entity name.
+          ECM: pipe-aligned '(^| \| )' anchor. DCM: scalar BND_BROKER.
+
+      Intent routing:
+        investor-side (allocation/demand/IOI/top investors/investor category) -> GPNUM
+        "highest share", "largest share", "investor history" -> investor-side -> GPNUM
+        issuer-side (issued by/company raised/deals by company) -> GFCID
+        both present -> use both GPNUM and GFCID filters
+        Once GPNUM chosen -> drop INVESTOR_NAME LIKE from SQL
+
+      Disambiguation:
+        Multiple GPNUM -> stop, list options [INVESTOR_NAME GPNUM: value]
+        Multiple GFCID -> stop, list options [ISSUER_NAME GFCID: value]
+        "issuer" explicit -> prioritize GFCID first
+        No exact match -> fuzzy/phonetic before asking user to rephrase
+
+      Temporal interpretation: years <= current year = historical retrieval, not forecasting.
+        Future years only -> explain and offer historical alternatives.
+
+      CRITICAL: GPNUM identifies the INVESTOR; GFCID identifies the ISSUER.
+      Never substitute one for the other.
+    DOMAIN_MANDATORY_FILTERS: |
+      A. Product: entitlement-scoped. Do NOT widen beyond entitled products.
+      A2. De-duplication (REQUIRED): VW_DEAL_ORDER_SUMMARY is flattened.
+        Deal-level -> dedupe by DEAL_ID before COUNT/SUM/AVG.
+        Tranche-level -> dedupe by DEAL_ID+TRANCHE_ID.
+        Order-level -> ORDER_ID is lowest grain (no dedupe needed).
+      A3. Top-N/list on flattened rows (REQUIRED):
+        - Apply dedupe first (DISTINCT/CTE at business grain), then ORDER BY/FETCH FIRST.
+        - Do not rank directly on raw flattened rows.
+      B. Deal: WHERE DEAL_ID=value or DEAL_NAME LIKE '%name%'
+      C. Investor: resolve -> WHERE GPNUM=value (not GFCID)
+      D. Issuer: resolve -> WHERE GFCID=value (not GPNUM)
+      E. Time: PRICING_TS range predicates. Last 12 months: ADD_MONTHS(SYSDATE,-12).
+      F. Region: TRANCHE_REGION (tranche-level, ECM+DCM) or DEAL_REGION
+        (deal-level, ECM-only). The old REGION column has been removed.
+      F2. Historical Year Filters: sargable ranges only.
+        Use: PRICING_TS >= DATE 'YYYY-01-01' AND PRICING_TS < DATE 'YYYY+1-01-01'
+        Avoid TO_CHAR/EXTRACT/TRUNC on PRICING_TS in WHERE predicates.
+      F3. Week Filters (closed window):
+        - "this week": PRICING_TS >= TRUNC(<ref_date>, 'IW')
+                       AND PRICING_TS < TRUNC(<ref_date>, 'IW') + 7
+        - Never use only lower-bound week predicates; always include the upper bound.
+      G. Broker/syndicate: use BROKER_CODE/SYNDICATE_MEMBER_NAME/BND_BROKER/SYNDICATE_ROLE.
+        B&D TRUE: true/t/yes/y/1. non-B&D: negate BND_BROKER TRUE set.
+        ECM anchor: '(^| \| )CITI'. DCM: scalar SYNDICATE_MEMBER_NAME LIKE + BND_BROKER.
+        Solo (ECM only): REGEXP_COUNT(BROKER_CODE,'\|')=0 + Citi match.
+        Roles (ECM only): REGEXP_LIKE(SYNDICATE_ROLE, role-pattern, 'i').
+        For billed-by-broker asks, include BROKER_CODE or SYNDICATE_MEMBER_NAME in
+        projection/filter context; do not use BND_BROKER alone.
+        See DOMAIN_BROKER_ALIASES_JSON for full SQL patterns.
+      H. Named issuer/investor -> entity_search first. Broker intent -> skip entity_search.
+      H2. SQL efficiency: sargable PRICING_TS predicates | FETCH FIRST row limit |
+        minimal SELECT columns | push PRODUCT+date+entity filters first | no SELECT *.
+    DOMAIN_SPECIFIC_AGGREGATION_RULES: |
+      Deal size: use the DEAL_SIZE column directly (deal-level; dedupe by DEAL_ID).
+        Do NOT SUM(TRANCHE_SIZE). Book/tranche size still uses TRANCHE_SIZE.
+      Demand: use DEMAND_QTY (ECM+DCM) whenever the user asks about 'demand'.
+      Investor: ECM->SUM(ALLOCATION), DCM->SUM(AMT). GROUP BY GPNUM/INVESTOR_NAME.
+      Region: GROUP BY TRANCHE_REGION (tranche-level) or DEAL_REGION (ECM deal-level).
+      ECM dims: INVESTOR_CATEGORY, OFFERING_TYPE, SECTOR, EQUITY_TYPE, PRODUCT_TYPE,
+        EXCHANGE, DEAL_REGION.
+      DCM dims: SENIORITY, ESG_BOND, REG_CATEGORY.
+      Date: PRICING_TS range predicates, not TO_CHAR/EXTRACT.
+      Result sets: ORDER BY PRICING_TS DESC + FETCH FIRST. Include IDs (DEAL_ID,TRANCHE_ID,GPNUM,GFCID).
+      Broker agg: aggregate at deal/tranche grain after dedupe. No CONNECT BY LEVEL on broad windows.
+      Planning order: (1) PRODUCT+date+entity filter -> (2) dedupe at grain -> (3) agg/order/limit.
+
+      IPO ranking default:
+      - "top N IPOs" (without "total deal size" wording) -> rank by TRANCHE_SIZE DESC.
+      - "top N IPOs by deal size" -> rank by DEAL_SIZE (dedupe by DEAL_ID).
+        "top N by book size" -> rank by SUM(TRANCHE_SIZE) at DEAL_ID grain.
+
+      Canonical "top 5 IPOs this week" shape:
+      - Use closed week window (>= TRUNC(ref_date,'IW') and < +7).
+      - Dedupe by DEAL_ID before final ranking.
+      - Stable order: primary metric DESC, PRICING_TS DESC, DEAL_ID.
+
+# -- Entity search ------------------------------------------------------
+entity_search:
+  mode: sql
+
+  # Keep this for backward compatibility fallback
+  query_template: >-
+    SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID
+    FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+    WHERE PRODUCT IN ('ECM', 'DCM')
+      AND (
+        UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
+        OR UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
+        OR UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
+        OR SOUNDEX(UPPER(DEAL_NAME)) = SOUNDEX(UPPER(:entity_name))
+        OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX(UPPER(:entity_name))
+        OR SOUNDEX(UPPER(ISSUER_NAME)) = SOUNDEX(UPPER(:entity_name))
+      )
+    FETCH FIRST 200 ROWS ONLY
+
+  # New opt-in dynamic routing
+  strategy: intent_sql
+  query_templates:
+    default: >-
+      SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID
+      FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+      WHERE PRODUCT IN ('ECM', 'DCM')
+        AND (
+          UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
+          OR UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
+          OR UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
+          OR SOUNDEX(UPPER(DEAL_NAME)) = SOUNDEX(UPPER(:entity_name))
+          OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX(UPPER(:entity_name))
+          OR SOUNDEX(UPPER(ISSUER_NAME)) = SOUNDEX(UPPER(:entity_name))
+        )
+      FETCH FIRST 200 ROWS ONLY
+
+    investor_name: >-
+      SELECT DISTINCT
+        NULL AS DEAL_ID,
+        NULL AS DEAL_NAME,
+        INVESTOR_NAME,
+        GPNUM,
+        NULL AS ISSUER_NAME,
+        NULL AS GFCID
+      FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+      WHERE PRODUCT IN ('ECM', 'DCM')
+        AND (
+          UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
+          OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX(UPPER(:entity_name))
+        )
+      FETCH FIRST 200 ROWS ONLY
+
+    issuer_name: >-
+      SELECT DISTINCT
+        NULL AS DEAL_ID,
+        NULL AS DEAL_NAME,
+        NULL AS INVESTOR_NAME,
+        NULL AS GPNUM,
+        ISSUER_NAME,
+        GFCID
+      FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+      WHERE PRODUCT IN ('ECM', 'DCM')
+        AND (
+          UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
+          OR SOUNDEX(UPPER(ISSUER_NAME)) = SOUNDEX(UPPER(:entity_name))
+        )
+      FETCH FIRST 200 ROWS ONLY
+
+    deal_name: >-
+      SELECT DISTINCT
+        DEAL_ID,
+        DEAL_NAME,
+        NULL AS INVESTOR_NAME,
+        NULL AS GPNUM,
+        NULL AS ISSUER_NAME,
+        NULL AS GFCID
+      FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+      WHERE PRODUCT IN ('ECM', 'DCM')
+        AND (
+          UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
+          OR SOUNDEX(UPPER(DEAL_NAME)) = SOUNDEX(UPPER(:entity_name))
+        )
+      FETCH FIRST 200 ROWS ONLY
+
+    by_identifier:
+      gfcid: >-
+        SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID
+        FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+        WHERE PRODUCT IN ('ECM', 'DCM') AND GFCID = :gfcid
+        ORDER BY GPNUM, DEAL_ID
+        FETCH FIRST 200 ROWS ONLY
+      gpnum: >-
+        SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID
+        FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+        WHERE PRODUCT IN ('ECM', 'DCM') AND GPNUM = :gpnum
+        ORDER BY DEAL_ID
+        FETCH FIRST 200 ROWS ONLY
+      deal_id: >-
+        SELECT DISTINCT
+          DEAL_ID,
+          DEAL_NAME,
+          NULL AS INVESTOR_NAME,
+          NULL AS GPNUM,
+          NULL AS ISSUER_NAME,
+          NULL AS GFCID
+        FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+        WHERE PRODUCT IN ('ECM', 'DCM') AND DEAL_ID = :deal_id
+        FETCH FIRST 200 ROWS ONLY
+
+  by_gfcid_template: >-
+    SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID
+    FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+    WHERE PRODUCT IN ('ECM', 'DCM') AND GFCID = :gfcid
+    ORDER BY GPNUM, DEAL_ID
+    FETCH FIRST 200 ROWS ONLY
+
+  # Keep mapping simple and robust
+  field_mapping:
+    - target: deal_id
+      sources: [DEAL_ID]
+      index: 0
+    - target: deal_name
+      sources: [DEAL_NAME]
+      index: 0
+    - target: investor_name
+      sources: [INVESTOR_NAME]
+      index: 0
+    - target: gpnum
+      sources: [GPNUM]
+      index: 0
+    - target: issuer_name
+      sources: [ISSUER_NAME]
+      index: 0
+    - target: gfcid
+      sources: [GFCID]
+      index: 0
+
+  context_mapping:
+    deal_id: [deal_id, DEAL_ID]
+    deal_name: [deal_name, DEAL_NAME]
+    gfcid: [gfcid, GFCID]
+    issuer_name: [issuer_name, ISSUER_NAME]
+    gpnum: [gpnum, GPNUM]
+    investor_name: [investor_name, INVESTOR_NAME]
+
+# -- Entitlement --------------------------------------------------------
+entitlement:
+  enabled_env: ECM_DCM_ENTITLEMENT_FEATURE_FLAG
+
+query_context:
+  preflight_hook: src.app.text2sql.domains.ecm_dcm.components.query_context_hook:ecm_dcm_query_context_preflight
+
+# -- Presentation -------------------------------------------------------
+presentation:
+  large_dataset_threshold:
+    desktop: 20
+    mobile: 10
+  identifier_patterns:
+    - ID
+    - DEAL_ID
+    - TRANCHE_ID
+    - ORDER_ID
+    - GPNUM
+    - GFCID
+
+# -- Event messages -----------------------------------------------------
+event_messages:
+  entity_search: Searching for deals and investors matching your query
+  entitlement_check: Verifying your access entitlements
+  data_connection: Establishing secure connection to deal data
+  data_fetch: Fetching relevant deal and order data
+  analysis: Synthesizing the analysis into a comprehensive summary
+  prepare_results: Preparing results for display
+  request_analysis: Understanding your question and preparing ECM/DCM insights
+
+# -- Tool descriptions --------------------------------------------------
+tool_descriptions:
+  entity_search: >-
+    Search for a deal, issuer, or investor by DEAL_ID, deal name,
+    ISSUER_NAME, or INVESTOR_NAME. Pass an explicit deal id as the deal_id
+    parameter (NEVER as gfcid); a GFCID as gfcid; a GPNUM as gpnum. When the
+    ask includes both an explicit deal id and a name, resolve by deal_id only.
+    Deal Names can look confusingly like DEAL_IDs (e.g. "Quigley-Stamm 1783443214704") — treat a trailing number as part of the name unless the user explicitly labels it as a ID.
+    Returns both investor identifier
+    (GPNUM) and issuer identifier (GFCID). If multiple distinct GPNUMs
+    are returned for an investor name, ask the user to disambiguate.
+    If issuer intent is explicit, prioritize issuer disambiguation by
+    ISSUER_NAME/GFCID first. If no exact match, retry fuzzy/phonetic
+    matching before asking the user to rephrase. On success, treat the
+    returned resolved identifier as final hand-off context and immediately
+    continue with text2sql_query_context (do not stop at resolution output).
+  query_generator: >-
+    Generates and validates SQL for ECM/DCM deals, tranches, investors,
+    allocations, and orders against DGSTREAM.VW_DEAL_ORDER_SUMMARY.
+
+    PRE-EXECUTION ROUTING (mandatory, in order):
+    1) Check DOMAIN_UNSUPPORTED_INTENTS_JSON first. If the ask matches an
+       unsupported pattern (peer companies, investor country, settlement currency,
+       matched/TTW orders, per-bank allocation), respond
+       with the user_message immediately — do NOT generate SQL.
+       Compound asks: scan the WHOLE ask and detect ALL matching unsupported
+       intents, not just the first. If several match (e.g. "matched orders for USA
+       based investors" = matched_orders + investor_region_country), acknowledge
+       EVERY unsupported aspect in one combined reply and note any supported
+       filter present (e.g. NAM = TRANCHE_REGION; order type/away/scaled = ORDER_TYPE)
+       so the user can rephrase.
+    2) Check DOMAIN_FAST_PATH_INTENTS_JSON. If a fast-path pattern matches AND
+       no named entity is in the ask, skip entity_search and go directly to
+       query_context -> validate_sql -> query_executor.
+    3) Only call entity_search when a named investor/issuer/deal is present AND
+       no fast-path pattern covers it.
+
+    SQL generation rules:
+    Retry discipline (COST CONTROL, mandatory): generate SQL once, carefully;
+    validate once; execute once. If validate_sql fails, fix and retry AT MOST 2
+    times total. Do NOT loop validate<->execute repeatedly. After 2 failed
+    attempts, STOP and return the best available result or a concise
+    "I couldn't build a valid query for this" message. Never re-run
+    text2sql_query_context for the same ask (its context does not change).
+    Use GPNUM for investor-side filters and GFCID for issuer-side filters.
+    For named entities, always run entity_search first and force disambiguation
+    if multiple GPNUM values are returned. The view is flattened — dedupe by
+    business grain (DEAL_ID, or DEAL_ID+TRANCHE_ID) before deal/tranche-level
+    counts, sums, averages, and listings.
+    Parse criteria holistically using DOMAIN_COLUMN_INTENT_MAP_JSON and apply
+    DOMAIN_COLUMN_PRIORITY_RULES_JSON to resolve competing column choices
+    (for example DEAL_REGION vs TRANCHE_REGION, PRICING_TS vs SETTLEMENT_TS)
+    before asking a clarification question.
+    Apply DOMAIN_FAST_PATH_ROUTING_POLICY for sector normalizations, region
+    column priority, and metric disambiguation (order size/demand/deal size/book size/order type).
+    For broker/syndicate intents (Citi B&D, non-B&D, solo, lead bookrunner,
+    joint bookrunner etc.) do not call entity_search — query broker columns
+    directly using branch-aware pipe patterns. For billed/broker-code asks,
+    always include broker/member context (BROKER_CODE or SYNDICATE_MEMBER_NAME)
+    so B&D validation does not fail on BND_BROKER-only SQL.
+    For taxonomy/ranking asks without named entities (sector + top-N, currency
+    breakdown, IPO count, etc.) skip entity_search entirely.
+    Treat requests for years up to current year as historical retrieval.
+    Use date-range predicates on PRICING_TS (sargable, no function wrapping).
+    Max 2 validate attempts and 2 SQL regeneration attempts per turn.
+    Stop after first successful non-empty executor result.
+    If a prior blocking clarification is pending and user asks a different
+    question, do not execute tools yet — ask user to confirm context switch first.
+  data_presenter: >-
+    Analyzes query results from the deal orderbook database and generates
+    summaries with deal details, investor breakdowns, allocation metrics,
+    and tranche analysis. Follow-up prompts should be concise and data-grounded:
+    ask clarifications only when disambiguation is mandatory; otherwise provide
+    2-3 actionable next-step questions tied to returned entities/time windows.
+    For multi-turn continuity, refer to the active entity/timeframe naturally
+    (for example "for this issuer", "in the same period") without restating
+    long boilerplate.

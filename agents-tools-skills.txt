@@ -1,0 +1,108 @@
+============================================================================
+SKILLS  (domain-specific reusable prompt/config bundles)
+============================================================================
+ID                                    NAME                              STATUS   UPDATED       OWNER
+----------------------------------------------------------------------------------------------------
+ccb-leadership-analysis               CCB Leadership Analysis           ACTIVE   28 days ago   vp25509
+cite-rag-answer                       Cite RAG Answer With Sources      ACTIVE   27 days ago   cc41505
+document-ingestion-checklist          Document Ingestion Checklist      ACTIVE   1 month ago   az38841
+policy-json-formatter                 Policy JSON Formatter             ACTIVE   5 days ago    tk70481
+summarize-as-meeting-notes-and-todos  Meeting Notes & Todos Summarizer  ACTIVE   1 month ago   mw08017
+text2sql-credit-facilities            Credit Facilities Text-to-SQL     ACTIVE   10 days ago   kv69856
+text2sql-domain-config                Text-to-SQL Domain Configuration  ACTIVE   1 month ago   vp25509
+text2sql-ecm-dcm                      ECM/DCM Text-to-SQL               ACTIVE   6 days ago    bk42867
+text2sql-revenue-returns              Revenue Returns Text-to-SQL       ACTIVE   6 days ago    rg94826
+text2sql-wallet                       Wallet Analysis Text-to-SQL       ACTIVE   3 days ago    at84895
+Notes:
+* text2sql-ecm-dcm       - queries deal orderbook data (VW_DEAL_ORDER_SUMMARY)
+* text2sql-domain-config - shared routing config consumed by ALL domain orchestrators
+
+============================================================================
+TOOLS  (MCP toolsets / action endpoints)
+============================================================================
+ID                                   TYPE   STATUS   UPDATED       OWNER
+--------------------------------------------------------------------------
+cbdo_lseg_mcp                        MCP    ACTIVE   5 days ago    ea10394
+cbdo_zen_mcp                         MCP    ACTIVE   5 days ago    ea10394
+ccb_leadership_text2sql_mcp          MCP    ACTIVE   6 days ago    mj33906
+citi_entitlement_policy_fetcher_tool MCP    ACTIVE   14 days ago   tk70481
+citi_mcp                             MCP    ACTIVE   28 days ago   ar56135
+docu_rag_mcp                         MCP    ACTIVE   1 month ago   az38841
+docu_rag_retrieval_mcp               MCP    ACTIVE   13 days ago   ks56077
+emp_mcp                              MCP    ACTIVE   1 month ago   mw08017
+engagement_letters_retrieval_mcp     MCP    ACTIVE   4 hours ago   az38841
+market_data_mcp                      MCP    ACTIVE   12 days ago   mw08017
+mcp_core                             MCP    ACTIVE   24 days ago   ks56077
+nl2sql_export_mcp                    MCP    ACTIVE   5 days ago    kv69856
+pmt_report_mcp                       MCP    ACTIVE   12 days ago   pk67698
+text2sql_mcp  <-- PRIMARY NL2SQL     MCP    ACTIVE   2 days ago    at84895
+zen_mcp                              MCP    ACTIVE   1 month ago   ar56135
+text2sql_mcp exposed tools:
+  - text2sql_entity_search     resolve investor / issuer / deal names to identifiers
+  - text2sql_query_context     build query context (domain, gpnum, gfcid, filters)
+  - text2sql_validate_sql      validate generated SQL against domain rules
+  - text2sql_query_executor    execute validated SQL against domain DB
+  - text2sql_data_context      fetch schema / column context for SQL generation
+  - text2sql_fuzzy_resolve     fuzzy match entity names
+  - text2sql_capabilities      introspect server API version and supported params
+MCP Server URL (dev):
+
+============================================================================
+AGENTS
+============================================================================
+ID                                  TYPE                 STATUS   UPDATED       OWNER
+---------------------------------------------------------------------------------------
+action_recommendation               Simple Agent         ACTIVE   17 days ago   gw46288
+ask_banking_root_agent  [ROOT *]    Root Agent           ACTIVE   2 days ago    at84895
+business_card_extractor             Simple Agent         ACTIVE   3 days ago    ks56077
+credit_facilities_text2sql_agent    Simple Agent         ACTIVE   2 days ago    ks56077
+docu_rag_ingestion_agent            Simple Agent         ACTIVE   3 days ago    ks56077
+docu_rag_retrieval_agent            Simple Agent         ACTIVE   2 days ago    ks56077
+ecm_dcm_text2sql_agent  [ECM *]     Simple Agent         ACTIVE   2 days ago    ks56077
+engagement_letters_retrieval_agent  Simple Agent         ACTIVE   4 hours ago   az38841
+entitlment_check                    Simple Agent         ACTIVE   4 days ago    mc71075
+impact_mapping                      Simple Agent         ACTIVE   17 days ago   gw46288
+leadership_insights_agent           Simple Agent         ACTIVE   3 days ago    ks56077
+market_data_agent                   Simple Agent         ACTIVE   3 days ago    ks56077
+opportunity_insight                 Sequential Workflow  ACTIVE   17 days ago   gw46288
+pmt_banker_report_agent             Simple Agent         ACTIVE   2 days ago    ks56077
+policy_description_formatter        Simple Agent         ACTIVE   3 days ago    ks56077
+report_exporter_agent               Simple Agent         ACTIVE   2 days ago    ks56077
+revenue_returns_text2sql_agent      Simple Agent         ACTIVE   2 days ago    ks56077
+shareholding_discrepancy_agent      A2A Sub Agent        ACTIVE   2 days ago    ks56077
+structure_handwritten_notes         Simple Agent         ACTIVE   3 days ago    ks56077
+text_summarizer                     Simple Agent         ACTIVE   2 days ago    ks56077
+text2sql_data_presenter_agent       Simple Agent         ACTIVE   2 days ago    ks56077
+text2sql_entity_search_agent        Simple Agent         ACTIVE   2 days ago    ks56077
+text2sql_query_executor_agent       Simple Agent         ACTIVE   2 days ago    ks56077
+text2sql_query_generator_agent [*]  Simple Agent         ACTIVE   2 days ago    ks56077
+trigger_analysis                    Simple Agent         ACTIVE   2 days ago    ks56077
+wallet_text2sql_agent               Simple Agent         ACTIVE   2 days ago    at84895
+zen_mcp_test_agent                  Simple Agent         ACTIVE   3 days ago    at84895
+Key agent roles:
+* ask_banking_root_agent          ROOT orchestrator - routes user queries to domain agents.
+* ecm_dcm_text2sql_agent          ECM/DCM domain orchestrator. Uses text2sql_mcp + text2sql-ecm-dcm skill.
+* text2sql_query_generator_agent  Generic SQL generation sub-agent. Called by all domain agents.
+                                  NOTE: must be registered in agent.tools - LLM will not find it otherwise.
+* text2sql_entity_search_agent    Resolves investor/issuer/deal names to GPNUM/GFCID/DEAL_ID.
+* text2sql_query_executor_agent   Executes validated SQL against domain-specific databases.
+* text2sql_data_presenter_agent   Formats raw query results into readable summaries/tables.
+
+============================================================================
+ECM/DCM CALL FLOW (for reference)
+============================================================================
+User query
+   └─> ask_banking_root_agent
+          └─> ecm_dcm_text2sql_agent
+                 ├─> text2sql_entity_search_agent   -> MCP: text2sql_entity_search
+                 |      resolves: investor_name / issuer_name / deal_name
+                 |      returns:  GPNUM / GFCID / DEAL_ID + entity_snapshot
+                 |
+                 ├─> text2sql_query_generator_agent -> MCP: text2sql_query_context
+                 |                                         text2sql_validate_sql
+                 |                                         text2sql_data_context
+                 |
+                 ├─> text2sql_query_executor_agent  -> MCP: text2sql_query_executor
+                 |
+                 └─> text2sql_data_presenter_agent  -> formats & returns result to user
+============================================================================

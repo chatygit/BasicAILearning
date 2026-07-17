@@ -1,0 +1,33 @@
+============================================================================
+TRACE — Events view
+============================================================================
+#1   [User]   List all orders with billed by broker code for deal
+              Hamill, Fisher and Beahan 1783016219400 [deal_id: 25239441]
+
+#2   [Agent]  ⚡ transfer_to_agent("ecm_dcm_text2sql_agent…
+              {} State: user_information, user:user_inform…
+
+#3   [Agent]  ✓ transfer_to_agent   {} State: active_agent
+              ⇄ ask_banking_root_agent → ecm_dcm_text2sql…
+
+#4   [Agent]  ⚡ text2sql_query_context        (call)
+#5   [Agent]  ✓ text2sql_query_context        (result)
+#6   [Agent]  ⚡ text2sql_validate_sql         (call)
+#7   [Agent]  ✓ text2sql_validate_sql         (result)
+#8   [Agent]  ⚡ text2sql_query_executor       (call)
+#9   [Agent]  ✓ text2sql_query_executor       (result)
+#10  [Agent]  ⚡ text2sql_data_context         (call)
+#11  [Agent]  ✓ text2sql_data_context         (result)
+
+#12  [Agent → User]
+     "For the Hamill, Fisher and Beahan deal, I found the following
+      investors and their associated broker codes. In this ECM
+      transaction, the broker codes represent the syndicate of brokers
+      that handled the orders for each investor."
+
+      INVESTOR NAME                BROKER_CODE
+      COATUE MANAGEMENT LLC        CITIUSA
+      BLACKROCK                    CITIUSA
+      WELLINGTON MANAGEMENT TRUST  CITIUSA
+      (list continues below fold)
+============================================================================

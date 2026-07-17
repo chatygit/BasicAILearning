@@ -1,0 +1,117 @@
+{
+  "broker_aliases": [
+    {
+      "user_phrase": "citi",
+      "canonical_broker_codes": [
+        "CITIDEV",
+        "CITIUSA",
+        "CITIAUS",
+        "CITIASIA",
+        "CITIUKE",
+        "CITGMCA"
+      ],
+      "member_name_contains": [
+        "CITI",
+        "CITIGROUP"
+      ]
+    },
+    {
+      "user_phrase": "jpmorgan",
+      "canonical_broker_codes": [
+        "JPMSEC",
+        "JPMORSEC"
+      ],
+      "member_name_contains": [
+        "JPMORGAN",
+        "JP MORGAN",
+        "JPM"
+      ]
+    },
+    {
+      "user_phrase": "goldman sachs",
+      "canonical_broker_codes": [
+        "GSCO",
+        "SGAMER"
+      ],
+      "member_name_contains": [
+        "GOLDMAN",
+        "GOLDMAN SACHS",
+        "GS"
+      ]
+    },
+    {
+      "user_phrase": "morgan stanley",
+      "canonical_broker_codes": [
+        "MSCO"
+      ],
+      "member_name_contains": [
+        "MORGAN STANLEY",
+        "MS"
+      ]
+    },
+    {
+      "user_phrase": "barclays",
+      "canonical_broker_codes": [
+        "BARCAP"
+      ],
+      "member_name_contains": [
+        "BARCLAYS",
+        "BARCAP"
+      ]
+    },
+    {
+      "user_phrase": "bank of america",
+      "canonical_broker_codes": [
+        "BAMLS"
+      ],
+      "member_name_contains": [
+        "BANK OF AMERICA",
+        "BOFA",
+        "BAML",
+        "MERRILL"
+      ]
+    },
+    {
+      "user_phrase": "jefferies",
+      "canonical_broker_codes": [
+        "JEFFLLC"
+      ],
+      "member_name_contains": [
+        "JEFFERIES"
+      ]
+    },
+    {
+      "user_phrase": "abn amro",
+      "canonical_broker_codes": [
+        "ABNAMBK",
+        "ABNAFS"
+      ],
+      "member_name_contains": [
+        "ABN AMRO",
+        "ABN"
+      ]
+    },
+    {
+      "user_phrase": "credit suisse",
+      "canonical_broker_codes": [
+        "CSFBHK"
+      ],
+      "member_name_contains": [
+        "CREDIT SUISSE",
+        "CS"
+      ]
+    }
+  ],
+  "bnd_true_tokens": ["true", "t", "yes", "y", "1"],
+  "role_phrase_mappings": {
+    "lead broker": ["Lead", "Bookrunner"],
+    "lead": ["Lead", "Bookrunner"],
+    "bookrunner": ["Bookrunner"],
+    "joint bookrunner": ["Joint Bookrunner"],
+    "passive bookrunner": ["Passive Bookrunner"],
+    "co-manager": ["Co-Manager"],
+    "selling group": ["Selling Group"],
+    "bill and deliver": ["Bill and Deliver"],
+    "b&d": ["Bill and Deliver"]
+  }
+}

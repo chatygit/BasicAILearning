@@ -1,0 +1,210 @@
+# RECONSTRUCTED FROM SCREENSHOTS — regex values in this file are transcription-
+# sensitive; diff every `value:` line against the original before deploying.
+rules:
+  - name: "Only SELECT queries are allowed"
+    type: "regex"
+    value: '^\s*(with\s+.+\s+)?select\s+'
+    match_should_fail: false
+    error_message: "System was not able to process your request. Please try again."
+    description: "Ensures only read-only SELECT queries are executed. Supports Common Table Expressions (CTEs)."
+
+  - name: "Prohibited data modification keywords"
+    type: "regex"
+    value: '\b(insert|update|delete|merge)\s+(into|from|table|set)'
+    match_should_fail: true
+    error_message: "System was not able to process your request. Please try again."
+    description: "Blocks DML operations. Context-aware to avoid false positives on column aliases."
+
+  - name: "Prohibited schema modification keywords"
+    type: "regex"
+    value: '\b(drop|alter|create|truncate|rename)\s+(table|database|schema|view|index|column|constraint|trigger|procedure|function|user|role|sequence)'
+    match_should_fail: true
+    error_message: "System was not able to process your request. Please try again."
+    description: "Blocks DDL operations. Context-aware to avoid false positives on column aliases."
+
+  - name: "No multiple queries in a single statement"
+    type: "regex"
+    value: ';\s*(?!\s*$).+'
+    match_should_fail: true
+    error_message: "System was not able to process your request. Please try again."
+    description: "Prevents query chaining attacks. Allows single trailing semicolon."
+
+  - name: "Prevent access to sensitive system tables"
+    type: "regex"
+    value: '(from|join)\s+([\w\[\]]+\.)?\b(pg_\w+|information_schema|all_\w+|user_\w+|dba_\w+|v\$\w+|gv\$\w+|sys\.)\w*'
+    match_should_fail: true
+    error_message: "System was not able to process your request. Please try again."
+    description: "Blocks access to system tables."
+
+  - name: "No wildcard (*) in SELECT statements"
+    type: "regex"
+    value: 'select\s+\*\s+(from|,)|select\s+[\w.]+\.\*\s+'
+    match_should_fail: true
+    error_message: "I used a wildcard selector which isn't allowed. Let me specify the exact columns needed to answer your question."
+    description: "Enforces explicit column selection. Allows aggregate functions like COUNT(*), SUM(*)."
+
+  - name: "Prohibited dangerous functions"
+    type: "regex"
+    value: '\b(exec|execute|xp_cmdshell|sp_executesql|dbms_scheduler|dbms_job|dbms_xmlquery|utl_file|utl_http|utl_tcp|utl_smtp|utl_inaddr)\s*\('
+    match_should_fail: true
+    error_message: "I attempted to use system functions that aren't permitted. Let me reformulate this using standard SQL functions."
+    description: "Blocks functions that can execute OS commands or access files/network."
+
+  - name: "Prevent SQL injection patterns"
+    type: "regex"
+    value: '(--;|;\s*--|/\*.*?\*/;|\bunion\s+(all\s+)?select|''\s*or\s*''1''\s*=\s*''1|''\s*or\s*1\s*=\s*1|''\s*or\s*''\w+''\s*=\s*''\w+'')'
+    match_should_fail: true
+    error_message: "I generated a query with unsafe patterns. Let me reconstruct this query using secure SQL syntax."
+    description: "Detects common SQL injection techniques."
+
+  - name: "Prevent malicious comments"
+    type: "regex"
+    value: '(?:--[^\n]*;)|(?:/\*.*?\*/\s*;)'
+    match_should_fail: true
+    error_message: "I generated a query with problematic comment syntax. Let me rewrite this with proper formatting."
+    description: "Detects comments followed by semicolons, which could hide additional statements."
+
+  - name: "Avoid TO_CHAR year filtering on PRICING_TS"
+    type: "regex"
+    value: '(?i)to_char\s*\(\s*pricing_ts\s*,\s*''YYYY''\s*\)\s*=\s*''\d{4}'''
+    match_should_fail: true
+    error_message: "Use date range predicates on PRICING_TS instead of TO_CHAR(PRICING_TS,'YYYY') for better performance and correctness (for example PRICING_TS >= DATE '2025-01-01' AND PRICING_TS < DATE '2026-01-01')."
+    description: "Blocks non-sargable year filtering on PRICING_TS."
+
+  - name: "Avoid EXTRACT(YEAR FROM PRICING_TS) filtering"
+    type: "regex"
+    value: '(?i)extract\s*\(\s*year\s+from\s+pricing_ts\s*\)\s*=\s*(?:''\d{4}''|\d{4})'
+    match_should_fail: true
+    error_message: "Use PRICING_TS date-range predicates instead of EXTRACT(YEAR FROM PRICING_TS) for better performance (for example PRICING_TS >= DATE '2025-01-01' AND PRICING_TS < DATE '2026-01-01')."
+    description: "Blocks non-sargable year extraction filters on PRICING_TS."
+
+  - name: "Avoid TRUNC(PRICING_TS ...) filtering"
+    type: "regex"
+    value: '(?i)trunc\s*\(\s*pricing_ts\s*(?:,\s*''(?:yyyy|yy|year|mm|month|dd|day)''\s*)?\)\s*(?:=|between|>=|<=|>|<)'
+    match_should_fail: true
+    error_message: "Avoid TRUNC(PRICING_TS, ...) predicates; use direct PRICING_TS range filters to preserve performance and index use."
+    description: "Blocks function-wrapped PRICING_TS predicates that degrade query performance."
+
+  - name: "Prevent deal-level aggregate on flattened rows without dedupe"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bsum\s*\(\s*tranche_size\s*\)|\bcount\s*\(\s*\*\s*\))(?=.*\b(select|group\s+by)\b[^;]*\b(deal_name|issuer_name)\b)(?!.*\bselect\s+distinct\b[^;]*\bdeal_id\b)(?!.*\bgroup\s+by\b[^;]*\bdeal_id\b).+'
+    match_should_fail: true
+    error_message: "This query appears to aggregate deal-level metrics directly from flattened rows. Deduplicate by DEAL_ID first (CTE/subquery), then compute COUNT/SUM/AVG."
+    description: "Catches common duplicate-inflation patterns for deal-level IPO summaries."
+
+  - name: "Prevent duplicate-prone IPO listing without deal dedupe"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\boffering_type\s*=\s*''ipo'')(?=.*\bselect\b[^;]*\b(deal_name|issuer_name|tranche_size|pricing_ts)\b)(?!.*\bselect\s+distinct\b)(?!.*\bgroup\s+by\b[^;]*\bdeal_id\b).+'
+    match_should_fail: true
+    error_message: "This IPO listing query can return duplicate rows from the flattened view. Deduplicate by DEAL_ID first (CTE/subquery or DISTINCT on business grain) before final listing."
+    description: "Blocks non-deduped IPO list queries that are likely to inflate row output."
+
+  - name: "Prevent duplicate-prone ECM/DCM deal listing without dedupe"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bselect\b[^;]*\b(deal_name|issuer_name)\b)(?=.*\bselect\b[^;]*\b(tranche_size|pricing_ts)\b)(?=.*\bproduct\s*=\s*''(?:ecm|dcm)'')(?!.*\bselect\s+distinct\b)(?!.*\bgroup\s+by\b[^;]*\bdeal_id\b).+'
+    match_should_fail: true
+    error_message: "This deal listing query can return duplicate rows from the flattened view. Deduplicate at the intended business grain first (DEAL_ID for deal-level, DEAL_ID+TRANCHE_ID for tranche-level) before final listing."
+    description: "Blocks non-deduped ECM/DCM deal list queries that read flattened rows directly."
+
+  - name: "Prevent investor-name filter with GFCID and no GPNUM"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\binvestor_name\b\s*\)?\s*(?:like|=|in\s*\())(?=.*\bgfcid\b\s*\)?\s*(?:=|in\s*\())(?!.*\bgpnum\b\s*\)?\s*(?:=|in\s*\()).+'
+    match_should_fail: true
+    error_message: "Query filters by INVESTOR_NAME and GFCID but does not use GPNUM. Investor filters must use GPNUM. Use entity search to resolve investor name, disambiguate GPNUM(s), then filter with WHERE GPNUM IN (...)."
+    description: "Blocks explicit investor/issuer identifier mix-up where investor intent is filtered by GFCID."
+
+  - name: "Prevent investor-side aggregate with GFCID and no GPNUM"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\b(?:sum|count|avg|min|max)\s*\(\s*(?:\w+\.)?(?:allocation|amt|order_id)\s*\))(?=.*\bgfcid\b\s*\)?\s*(?:=|in\s*\())(?!.*\bgpnum\b\s*\)?\s*(?:=|in\s*\()).+'
+    match_should_fail: true
+    error_message: "Query aggregates investor-side metrics (for example SUM(ALLOCATION), SUM(AMT), COUNT(ORDER_ID)) while filtering by GFCID and no GPNUM. Use GPNUM for investor-side entity filtering."
+    description: "Blocks implicit investor/issuer identifier mix-up for investor-scoped aggregates."
+
+  - name: "B&D filter requires broker/member context"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bbnd_broker\b)(?!.*\b(?:broker_code|syndicate_member_name|syndicate_role)\b).+'
+    match_should_fail: true
+    error_message: "I could not build a valid broker query. B&D filtering must include broker/member context (BROKER_CODE or SYNDICATE_MEMBER_NAME, and role when relevant)."
+    description: "Prevents B&D-only SQL that ignores broker/member columns and returns noisy results."
+
+  - name: "Prevent naive whole-field BND_BROKER equality"
+    type: "regex"
+    value: '(?is)\bbnd_broker\s*=\s*''(?:true|t|yes|y|1|false|f|no|n|0)'''
+    match_should_fail: true
+    error_message: "BND_BROKER is a pipe-delimited aligned list; do not compare the whole field with '='. Use token-aware matching (for example REGEXP_LIKE with pipe boundaries) aligned with broker/member indexes."
+    description: "Blocks incorrect whole-string comparisons on BND_BROKER for broker/B&D intents."
+
+  - name: "Broker/member query should not rely only on issuer/investor IDs"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\b(?:broker|syndicate)\b)(?=.*\b(?:gfcid|gpnum)\b)(?!.*\b(?:broker_code|syndicate_member_name|syndicate_role|bnd_broker)\b).+'
+    match_should_fail: true
+    error_message: "This looks like a broker/syndicate request but the SQL only filters issuer/investor identifiers. Include broker/syndicate columns (BROKER_CODE, SYNDICATE_MEMBER_NAME, SYNDICATE_ROLE, BND_BROKER)."
+    description: "Catches broker-oriented SQL plans that accidentally use issuer/investor filters only."
+
+  - name: "Prevent brittle exact SYNDICATE_MEMBER_NAME equals Citi"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bsyndicate_member_name\s*=\s*''citi'').+'
+    match_should_fail: true
+    error_message: "Use token-aware pipe matching for Citi broker intent (for example REGEXP_LIKE on BROKER_CODE/SYNDICATE_MEMBER_NAME with pipe boundaries) instead of exact SYNDICATE_MEMBER_NAME = 'Citi'."
+    description: "Blocks exact-equality matching that misses valid Citi variants in pipe-delimited syndicate fields."
+
+  - name: "Prevent legacy solo logic using distinct syndicate-member count"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bhaving\s+count\s*\(\s*distinct\s+syndicate_member_name\s*\)\s*=\s*1\b)(?=.*\b(?:max\s*\(\s*syndicate_member_name\s*\)\s*=\s*''citi''|syndicate_member_name\s*=\s*''citi'')).+'
+    match_should_fail: true
+    error_message: "For Citi solo intent, do not infer solo via DISTINCT SYNDICATE_MEMBER_NAME count. Use broker-token solo logic (for example Citi token match on BROKER_CODE and REGEXP_COUNT(BROKER_CODE, '\\|') = 0) with PRICING_TS range filters."
+    description: "Blocks legacy solo-detection SQL that is brittle for pipe-delimited syndicate member values and misses broker-code semantics."
+
+  - name: "Prevent DCM solo inference using BROKER_CODE token count"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bproduct\s*=\s*''dcm'')(?=.*\bregexp_count\s*\(\s*nvl\s*\(\s*broker_code\s*,\s*''''\s*\)\s*,\s*''\\|''\s*\)\s*=\s*0\b).+'
+    match_should_fail: true
+    error_message: "DCM rows do not carry BROKER_CODE tokens in this view, so solo cannot be inferred from REGEXP_COUNT(BROKER_CODE,'|'). Use ECM-only solo logic, or ask for DCM B&D/non-B&D using SYNDICATE_MEMBER_NAME + BND_BROKER."
+    description: "Blocks invalid DCM solo inference using BROKER_CODE token-count predicates."
+
+  - name: "Prevent non-ECM scope for BROKER_CODE solo inference"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\b(?:product\s*in\s*\(\s*''ecm''\s*,\s*''dcm''\s*\)|product\s*in\s*\(\s*''dcm''\s*,\s*''ecm''\s*\)))(?=.*\bregexp_count\s*\(\s*nvl\s*\(\s*broker_code\s*,\s*''''\s*\)\s*,\s*''\\|''\s*\)\s*=\s*0\b).+'
+    match_should_fail: true
+    error_message: "BROKER_CODE token-count solo logic is ECM-only. If you use REGEXP_COUNT(BROKER_CODE,'|') = 0 for solo intent, scope PRODUCT = 'ECM' (not PRODUCT IN ('ECM','DCM'))."
+    description: "Enforces ECM-only scope for solo inference patterns that rely on BROKER_CODE token count."
+
+  - name: "Prevent narrow pipe-boundary anchor on ECM broker columns"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bregexp_like\s*\(\s*nvl\s*\(\s*(?:broker_code|syndicate_member_name|syndicate_role|bnd_broker)\s*,[^)]*\)\s*,\s*''[(][\^][|][|][^ ]).+'
+    match_should_fail: true
+    error_message: "ECM pipe delimiter is ' | ' (space-pipe-space). The pattern '(^|\\|)' only matches the first token and silently misses Citi at position 2+. Use '(^| \\| )' as the leading anchor instead."
+    description: "Blocks the old narrow '(^|\\|)' pipe-boundary anchor in REGEXP_LIKE on ECM broker/syndicate columns; the correct ECM anchor is '(^| \\| )'."
+
+  - name: "Prevent timeout-prone CONNECT BY token expansion on broker columns"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bconnect\s+by\s+level\b)(?=.*\bregexp_substr\s*\(\s*(?:broker_code|bnd_broker|syndicate_role|syndicate_member_name)\b).+'
+    match_should_fail: true
+    error_message: "This query pattern can timeout on large windows. Avoid CONNECT BY LEVEL expansion for broker tokenization; use REGEXP_LIKE pipe-boundary matching on BROKER_CODE/SYNDICATE_MEMBER_NAME/BND_BROKER/SYNDICATE_ROLE instead."
+    description: "Blocks row-exploding CONNECT BY token expansion for broker/syndicate filters on VW_DEAL_ORDER_SUMMARY."
+
+  - name: "Require row cap for broad ordered deal/tranche listings"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\border\s+by\s+pricing_ts\s+desc\b)(?=.*\bselect\b[^;]*\b(deal_id|deal_name|tranche_id|tranche_name)\b)(?!.*\b(fetch\s+first\s+\d+\s+rows\s+only|rownum\s*(?:<=|<)\s*\d+)\b)(?!.*\b(sum|count|avg|min|max)\b).+'
+    match_should_fail: true
+    error_message: "For broad ordered deal/tranche listings, include a row cap (for example FETCH FIRST 500 ROWS ONLY or ROWNUM <= 500) to avoid slow queries and timeouts."
+    description: "Prevents uncapped broad listing queries that can scan/sort large ranges and timeout."
+
+  # -- PRODUCT-filter defense-in-depth ----------------------------------
+  # Primary access control is the upstream entitlement gate that
+  # short-circuits requests for users with no entitled products.
+  # Per-query PRODUCT scoping is the LLM's responsibility via the
+  # runtime "Access Scope" instruction injected into the system prompt.
+  #
+  # This rule is a secondary safety net (defense-in-depth) that catches
+  # the edge case where the LLM omits the PRODUCT clause despite prompt
+  # instructions. The error_message is deliberately generic to avoid
+  # leaking internal table names or schema details to end users.
+  # It handles both single-product (= 'ECM') and dual-product
+  # (IN ('ECM', 'DCM')) scoping patterns.
+  - name: "Product scope required for VW_DEAL_ORDER_SUMMARY"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b).*\bproduct\s*(?:=\s*''(?:ECM|DCM)''|in\s*\(\s*''(?:ECM|DCM)'')'
+    match_should_fail: false
+    error_message: "I was unable to generate a properly scoped query. Please rephrase your question and try again."
+    description: "Defense-in-depth safety net: every query against VW_DEAL_ORDER_SUMMARY must include an explicit PRODUCT filter (PRODUCT = 'ECM'/'DCM' or PRODUCT IN ('ECM','DCM')). Primary access control is the upstream entitlement gate; this rule is the secondary check."

@@ -1,0 +1,297 @@
+{
+  "purpose": "Column-aware natural language routing hints for ECM/DCM. Use this map to translate user criteria into deterministic SQL filters/groupings/orderings. Check fast_path_intents.json first — if a fast-path matches, skip entity_search. Check unsupported_intents.json for hard stops.",
+  "principles": [
+    "Any listed column can be used as criteria when user intent maps to it.",
+    "Prefer exact code matching for coded fields; use LIKE/REGEXP only for free text.",
+    "When both deal-level and tranche-level fields are present, align business grain before aggregation.",
+    "Always apply PRODUCT and date predicates explicitly.",
+    "Fast-path: if ask contains ONLY taxonomy filters (sector/currency/region/product/date/status/category) and NO named entity, skip entity_search entirely.",
+    "Unsupported-path: if ask maps to peer companies, investor country, settlement currency, matched orders, TTW orders, or per-bank allocation — respond immediately with the unsupported message from unsupported_intents.json. NOTE: order type / away / OTT / scaled IS supported via ORDER_TYPE."
+  ],
+  "criteria_hints": [
+    {
+      "column": "PRODUCT",
+      "user_phrases": ["equity", "debt", "ECM", "DCM", "equity deals", "debt deals"],
+      "sql_hint": "WHERE PRODUCT = 'ECM' or PRODUCT = 'DCM'",
+      "fast_path": true
+    },
+    {
+      "column": "DEAL_NAME",
+      "user_phrases": ["deal", "transaction name", "deal named", "the deal"],
+      "sql_hint": "Resolve by entity_search for name-based asks; use DEAL_ID when resolved. NEVER use DEAL_NAME LIKE in final SQL once DEAL_ID is known.",
+      "fast_path": false,
+      "requires_entity_search": true
+    },
+    {
+      "column": "TRANCHE_SIZE",
+      "user_phrases": ["issue size", "tranche size", "book size", "largest tranche", "total tranche size", "highest tranche", "issue size greater than", "size greater than"],
+      "sql_hint": "Tranche-level size. Use numeric comparisons and ranking (ORDER BY DESC). Dedupe by DEAL_ID/TRANCHE_ID before SUM/MAX. For 'book size' use TRANCHE_SIZE. For DEAL-level size use DEAL_SIZE (do NOT SUM tranche sizes).",
+      "fast_path": true
+    },
+    {
+      "column": "DEAL_SIZE",
+      "user_phrases": ["deal size", "size of the deal", "maximum deal size", "largest deal", "biggest deal", "total deal size", "deal value"],
+      "sql_hint": "Deal-level size (ECM+DCM). Use DEAL_SIZE directly — do NOT compute SUM(TRANCHE_SIZE). Dedupe by DEAL_ID before ranking/aggregating (the value repeats across flattened rows).",
+      "fast_path": true
+    },
+    {
+      "column": "CURRENCY",
+      "user_phrases": ["USD-denominated", "EUR deals", "currency", "denominated in", "deals in USD", "by currency", "multi-currency", "currency breakdown"],
+      "sql_hint": "WHERE CURRENCY = 'USD' (or IN list). For multi-currency: COUNT(DISTINCT CURRENCY) > 1 per DEAL_ID. No settlement-currency or demand-currency column exists.",
+      "fast_path": true,
+      "unsupported_note": "No SETTLEMENT_CURRENCY or DEMAND_CURRENCY column. CURRENCY is pricing currency only."
+    },
+    {
+      "column": "SECTOR",
+      "user_phrases": ["Energy sector", "Technology deals", "Healthcare", "Defence", "Defense", "Pharma", "Banking", "Financial sector", "issuer sector", "Aero/Defense", "sector breakdown"],
+      "sql_hint": "WHERE SECTOR = '<normalized_value>'. Apply normalizations: defence->Aero/Defense, pharma->Pharmaceuticals, banking->Banks, it->Information Technology, telecom->Telecommunications, auto->Autos.",
+      "fast_path": true,
+      "sector_normalizations": {
+        "defence": "Aero/Defense",
+        "defense": "Aero/Defense",
+        "pharma": "Pharmaceuticals",
+        "banking": "Banks",
+        "financial": "Financial Services",
+        "telecom": "Telecommunications",
+        "auto": "Autos",
+        "it": "Information Technology",
+        "tech": "Technology"
+      }
+    },
+    {
+      "column": "PRICING_TS",
+      "user_phrases": ["in 2024", "last 6 months", "Q1 2026", "last 12 months", "last 5 years", "last 10 years", "first quarter", "this year", "priced in"],
+      "sql_hint": "Use sargable date ranges; avoid TO_CHAR/EXTRACT/TRUNC predicates on PRICING_TS. Use ADD_MONTHS(SYSDATE,-12) for last 12 months. Q1=Jan-Mar, Q2=Apr-Jun, Q3=Jul-Sep, Q4=Oct-Dec.",
+      "fast_path": true
+    },
+    {
+      "column": "SETTLEMENT_TS",
+      "user_phrases": ["settlement date", "settled in", "settlement timestamp"],
+      "sql_hint": "Use SETTLEMENT_TS for settlement-specific time filters. NOTE: there is no SETTLEMENT_CURRENCY column — do not confuse settlement date with settlement currency.",
+      "fast_path": true,
+      "unsupported_note": "No SETTLEMENT_CURRENCY column. Cannot filter by settlement currency vs deal currency."
+    },
+    {
+      "column": "TRANCHE_REGION",
+      "user_phrases": ["NAM", "EMEA", "APAC", "regional", "in the NAM region", "grouped by region", "tranches in NAM", "tranche region"],
+      "sql_hint": "Tranche-level region; works for both ECM and DCM. Default to TRANCHE_REGION for generic 'region' asks unless the user explicitly says deal-level region (then DEAL_REGION, ECM-only).",
+      "fast_path": true,
+      "note": "The old REGION column has been REMOVED from the view. Region is now TRANCHE_REGION (tranche-level, ECM+DCM) or DEAL_REGION (deal-level, ECM-only). Do NOT use TRANCHE_REGION/DEAL_REGION for INVESTOR region/geography asks (e.g. 'USA orders', 'US investors') — those are unsupported."
+    },
+    {
+      "column": "DEAL_REGION",
+      "user_phrases": ["deal region", "deal-level region", "region of the deal", "overall deal region"],
+      "sql_hint": "Deal-level region. ECM-only (NULL for DCM). Use for explicit deal-level region asks; otherwise default to TRANCHE_REGION.",
+      "fast_path": true,
+      "applies_to": ["ECM"],
+      "note": "Replaces the removed REGION column. DEAL_REGION is populated for ECM only."
+    },
+    {
+      "column": "ALLOCATION",
+      "user_phrases": ["highest share", "highest allocation", "who got most", "top investors by allocation", "investor with maximum allocation", "allocation given", "final allocation", "indication shares"],
+      "sql_hint": "Investor-side metric (ECM+DCM): resolve investor to GPNUM and aggregate/filter ALLOCATION. Dedupe by GPNUM before SUM. For explicit 'demand' asks use DEMAND_QTY, not ALLOCATION.",
+      "fast_path": true,
+      "note": "ALLOCATION is final confirmed allocation. 'indication shares' = SUM(ALLOCATION). 'demand' now maps to DEMAND_QTY."
+    },
+    {
+      "column": "AMT",
+      "user_phrases": ["order amount", "indication amount", "largest order", "order size", "order indication", "top investors by order size"],
+      "sql_hint": "DCM investor-side amount metric; filter investor by GPNUM. For ECM 'order size' asks, use ALLOCATION instead — AMT is DCM-only. For explicit 'demand' asks use DEMAND_QTY.",
+      "fast_path": true,
+      "applies_to": ["DCM"],
+      "note": "No ECM order-size column — use ALLOCATION for ECM investor ranking. 'demand' maps to DEMAND_QTY."
+    },
+    {
+      "column": "DEMAND_QTY",
+      "user_phrases": ["demand", "demand quantity", "demand qty", "indication in shares", "indicated shares", "investor demand", "how much demand", "total demand", "demand for the deal", "demand on the deal"],
+      "sql_hint": "Dedicated demand metric = Indication in shares (ECM+DCM). Use DEMAND_QTY whenever the user says 'demand' (or 'indication in shares'). Investor-side: filter investor by GPNUM; dedupe by GPNUM before SUM.",
+      "fast_path": true
+    },
+    {
+      "column": "ORDER_TYPE",
+      "user_phrases": ["order type", "type of order", "OTT orders", "OTT", "regular orders", "scaled orders", "scaled", "limit orders", "limit", "market orders", "market", "away orders", "away", "orders placed by other syndicate banks", "orders from other banks"],
+      "sql_hint": "Order-handling type (ECM+DCM). WHERE UPPER(ORDER_TYPE) LIKE UPPER('%<value>%'). Sample values 'OTT','REGULAR','SCALED','LIMIT','MARKET','AWAY' — the list is INCOMPLETE, so use LIKE and do not reject other values. 'away orders' / 'orders placed by other banks' map here.",
+      "fast_path": true
+    },
+    {
+      "column": "OFFERING_TYPE",
+      "user_phrases": ["IPO", "follow-on", "rights issue", "FO", "secondary offering", "initial public offering"],
+      "sql_hint": "WHERE OFFERING_TYPE IN ('IPO','FO','Rights Issue'). ECM-only column.",
+      "fast_path": true,
+      "applies_to": ["ECM"]
+    },
+    {
+      "column": "EQUITY_TYPE",
+      "user_phrases": ["convertible", "convertible bonds", "convertible preferred", "common stock", "warrants", "exchangeable notes"],
+      "sql_hint": "WHERE EQUITY_TYPE IN ('Convertible Bonds','Convertible Preferred','Common Stock','Warrants','Exchangable Notes'). ECM-only. Note: 'senior secured' for ECM should use EQUITY_TYPE for convertibles, not SENIORITY.",
+      "fast_path": true,
+      "applies_to": ["ECM"]
+    },
+    {
+      "column": "PRODUCT_TYPE",
+      "user_phrases": ["security type", "product type", "ADR", "ADS", "GDR", "GDS", "common shares", "class A", "rights offering", "mandatory convertible", "depositary receipt", "depositary share"],
+      "sql_hint": "Finer-grained ECM security type (more specific than EQUITY_TYPE). ECM-only. WHERE UPPER(PRODUCT_TYPE) LIKE UPPER('%<value>%') or exact match. Examples: 'Common Stock', 'ADR', 'ADS', 'GDR', 'Rights', 'Mandatory Convertible Preferred Stock'. Use EQUITY_TYPE for coarse-grained asks.",
+      "fast_path": true,
+      "applies_to": ["ECM"],
+      "note": "Free-text column; prefer LIKE for partial matches (e.g. 'ADR', 'depositary'). Distinct from EQUITY_TYPE."
+    },
+    {
+      "column": "EXCHANGE",
+      "user_phrases": ["exchange", "listed on", "listing exchange", "NASDAQ", "NYSE", "New York Stock Exchange", "London Stock Exchange", "listed where", "which exchange"],
+      "sql_hint": "ECM listing exchange. ECM-only. WHERE UPPER(EXCHANGE) LIKE UPPER('%<value>%'). Examples: 'NASDAQ', 'New York Stock Exchange', 'London Stock Exchange'. Note NYSE appears as both 'New York Stock Exchange' and 'NYSE (New York Stock Exchange)' — use LIKE.",
+      "fast_path": true,
+      "applies_to": ["ECM"]
+    },
+    {
+      "column": "SENIORITY",
+      "user_phrases": ["senior secured", "senior unsecured", "subordinated", "lien", "junior subordinated", "preferred", "FRCS", "seniority"],
+      "sql_hint": "DCM-only: WHERE SENIORITY LIKE '%<value>%'. For ECM convertibles, use EQUITY_TYPE not SENIORITY.",
+      "fast_path": true,
+      "applies_to": ["DCM"],
+      "note": "SENIORITY is DCM-only. For ECM 'convertibles', use EQUITY_TYPE. 'Senior secured' applies to DCM only."
+    },
+    {
+      "column": "PRODUCT_CLASS",
+      "user_phrases": ["investment grade", "high yield", "emerging market", "covered bond", "CLO", "LevFin", "ABS", "RMBS", "CMBS", "SSA", "asset backed", "municipals", "bond type", "bond class"],
+      "sql_hint": "WHERE PRODUCT_CLASS = '<value>'. DCM-only column.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "REG_CATEGORY",
+      "user_phrases": ["Reg S", "144A", "public", "private placement", "eurobond", "domestic", "accredited investors", "3(a)(2)", "registration category"],
+      "sql_hint": "WHERE REG_CATEGORY LIKE '%<value>%' or exact match. DCM-only.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "DELIVERY_TYPE",
+      "user_phrases": ["RegS delivery", "144A delivery", "3(a)(2)", "delivery type"],
+      "sql_hint": "DCM-specific legal delivery filter. WHERE DELIVERY_TYPE = '144A' etc.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "ESG_BOND",
+      "user_phrases": ["ESG", "green bond", "social bond", "sustainability bond", "green deals", "sustainable"],
+      "sql_hint": "WHERE ESG_BOND IN ('GREEN','SOCIAL','SUSTAINABILITY'). DCM-only.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "INVESTOR_CATEGORY",
+      "user_phrases": ["long only", "long-only", "hedge fund", "outright", "asset manager", "central bank", "private bank", "insurance", "pension", "investor category", "investor classification", "investor type"],
+      "sql_hint": "WHERE INVESTOR_CATEGORY = '<value>'. Valid ECM values: Long Only, Hedge Fund, Outright, Long/Hedge, Outright/Hedge. Valid DCM values: Central Bank, Official Institution, Insurance/Pension, Asset Manager, Corporate Treasury, Bank Treasury, Private Bank, and others.",
+      "fast_path": true,
+      "unsupported_sub_categories": ["strategic", "family office", "retail", "swf", "dsp", "index", "quant"]
+    },
+    {
+      "column": "MEETING_TYPE / MEETING_TYPE_KEY",
+      "user_phrases": ["1x1", "one-to-one", "conference call", "small group", "group meeting", "no meeting", "meeting type", "1-on-1", "meeting type other than 1x1"],
+      "sql_hint": "ECM-only. Use MEETING_TYPE_KEY: ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING, NO_MEETING. For '1x1': MEETING_TYPE_KEY = 'ONE_TO_ONE'. For 'other than 1x1': MEETING_TYPE_KEY != 'ONE_TO_ONE'.",
+      "fast_path": true,
+      "applies_to": ["ECM"],
+      "meeting_type_map": {
+        "1x1": "ONE_TO_ONE",
+        "1-on-1": "ONE_TO_ONE",
+        "one to one": "ONE_TO_ONE",
+        "conference call": "CONFERENCE_CALL",
+        "small group": "SMALL_GROUP",
+        "group meeting": "GROUP_MEETING",
+        "no meeting": "NO_MEETING"
+      }
+    },
+    {
+      "column": "DEAL_STATUS",
+      "user_phrases": ["priced deals", "settled deals", "cancelled deals", "live deals", "open deals", "closed deals", "deal status", "mandated", "postponed", "archived"],
+      "sql_hint": "WHERE DEAL_STATUS = '<value>' (case-insensitive). For cancelled/deleted ORDER-level asks: NOT SUPPORTED — DEAL_STATUS is deal-level only.",
+      "fast_path": true,
+      "note": "DEAL_STATUS is deal-level. No order-level cancellation/deletion status exists."
+    },
+    {
+      "column": "EXECUTION_STATUS",
+      "user_phrases": ["execution status", "deal execution"],
+      "sql_hint": "ECM-only deal execution status category.",
+      "fast_path": true,
+      "applies_to": ["ECM"]
+    },
+    {
+      "column": "COUPON_TYPE",
+      "user_phrases": ["fixed rate", "floating rate", "FRN", "zero coupon", "fixed to FRN", "step coupon", "coupon type"],
+      "sql_hint": "WHERE COUPON_TYPE = '<value>'. DCM-only.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "COUPON_FREQ",
+      "user_phrases": ["annual coupon", "semi-annual", "quarterly coupon", "coupon frequency", "monthly coupon"],
+      "sql_hint": "WHERE COUPON_FREQ = '<value>'. DCM-only.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "SECURITIES_MATURITY",
+      "user_phrases": ["maturity", "matures in", "maturing", "securities maturity", "maturity date"],
+      "sql_hint": "WHERE SECURITIES_MATURITY <= DATE '<date>'. DCM-only.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "TENORS",
+      "user_phrases": ["tenor", "5-year", "10-year", "3-year tenor", "tenor of"],
+      "sql_hint": "WHERE TENORS LIKE '%<value>%'. DCM-only. Pipe-delimited if multiple.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "USE_OF_PROCEEDS",
+      "user_phrases": ["use of proceeds", "general corporate purposes", "repay borrowings", "proceeds for"],
+      "sql_hint": "WHERE USE_OF_PROCEEDS LIKE '%<value>%'. DCM-only.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "ISSUER_RATINGS",
+      "user_phrases": ["credit rating", "Moody's rating", "S&P rating", "Fitch rating", "issuer rating", "rated", "investment grade rating", "Aa2", "AA-"],
+      "sql_hint": "WHERE ISSUER_RATINGS LIKE '%<value>%'. DCM-only. Pipe-delimited multi-agency ratings.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "ISSUER_NAME / GFCID",
+      "user_phrases": ["issuer", "company raised", "issued by", "deals by company", "issuer's deals", "for issuer"],
+      "sql_hint": "Resolve by entity_search (issuer_name type), then WHERE GFCID = '<resolved>'. Never use ISSUER_NAME LIKE in final SQL once GFCID is known.",
+      "fast_path": false,
+      "requires_entity_search": true,
+      "note": "GFCID = issuer identifier. Never use GFCID for investor filters."
+    },
+    {
+      "column": "INVESTOR_NAME / GPNUM",
+      "user_phrases": ["investor", "who got allocation", "subscribed", "participated", "investor history", "investor named", "allocation for"],
+      "sql_hint": "Resolve by entity_search (investor_name type), then WHERE GPNUM = '<resolved>'. Never use INVESTOR_NAME LIKE in final SQL once GPNUM is known.",
+      "fast_path": false,
+      "requires_entity_search": true,
+      "note": "GPNUM = investor identifier. Never use GPNUM for issuer filters."
+    },
+    {
+      "column": "ORDER_ID",
+      "user_phrases": ["order", "order ID", "specific order"],
+      "sql_hint": "DCM-only lowest grain. WHERE ORDER_ID = '<value>'.",
+      "fast_path": true,
+      "applies_to": ["DCM"]
+    },
+    {
+      "column": "BROKER_CODE / BND_BROKER / SYNDICATE_ROLE / SYNDICATE_MEMBER_NAME",
+      "user_phrases": ["Citi B&D", "non-B&D", "non B&D", "not B&D", "bookrunner", "lead broker", "solo", "Citi solo", "bill and deliver", "syndicate bank", "dealers who participated", "Citi billed", "billed by Citi", "non-Citi billed"],
+      "sql_hint": "Use branch-aware token matching. ECM: pipe-aligned lists with '(^| \\| )' anchor. DCM: scalar BND_BROKER + SYNDICATE_MEMBER_NAME LIKE. For non-B&D: negate BND_BROKER TRUE set — do NOT call entity_search. For 'Citi billed'=B&D, 'non-Citi billed'=non-B&D.",
+      "fast_path": true,
+      "note": "ALL broker/syndicate intents bypass entity_search entirely. 'non-B&D', 'not B&D', 'non bill and deliver' are SQL filter modifiers — not entity names."
+    },
+    {
+      "column": "IDENTIFIER_TYPE / IDENTIFIER_VALUE / TICKER",
+      "user_phrases": ["security identifiers", "CUSIP", "ISIN", "FIGI", "ticker", "RIC", "Valoren", "SMCP ID", "with identifiers"],
+      "sql_hint": "Include IDENTIFIER_TYPE, IDENTIFIER_VALUE, TICKER in SELECT when requested. Both ECM and DCM.",
+      "fast_path": true
+    }
+  ]
+}

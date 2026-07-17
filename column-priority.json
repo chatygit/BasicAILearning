@@ -1,0 +1,57 @@
+{
+  "purpose": "Deterministic tie-break rules for ambiguous natural-language criteria mapping across columns in VW_DEAL_ORDER_SUMMARY.",
+  "rules": [
+    {
+      "id": "region_vs_tranche_region",
+      "when_user_mentions": ["region", "NAM", "EMEA", "APAC", "LATAM"],
+      "prefer_column": "TRANCHE_REGION",
+      "fallback_column": "DEAL_REGION",
+      "decision_logic": [
+        "If ask is tranche-level or mentions tranche, use TRANCHE_REGION.",
+        "If ask is explicitly deal-level region (ECM), DEAL_REGION is acceptable.",
+        "The old REGION column has been removed from the view — never emit REGION.",
+        "If uncertain, use TRANCHE_REGION as default and include a brief note."
+      ]
+    },
+    {
+      "id": "pricing_vs_settlement_date",
+      "when_user_mentions": ["in 2024", "last 6 months", "Q1", "year", "priced", "settled"],
+      "prefer_column": "PRICING_TS",
+      "fallback_column": "SETTLEMENT_TS",
+      "decision_logic": [
+        "Use PRICING_TS for generic time-window asks unless the user explicitly says settlement.",
+        "Use SETTLEMENT_TS only for settlement-specific requests (for example 'settled in')."
+      ]
+    },
+    {
+      "id": "investor_vs_issuer_name_filters",
+      "when_user_mentions": ["investor", "issuer", "company", "allocated", "issued by"],
+      "prefer_columns": ["GPNUM", "GFCID"],
+      "decision_logic": [
+        "Investor-side asks map to GPNUM filtering.",
+        "Issuer-side asks map to GFCID filtering.",
+        "Do not rely on INVESTOR_NAME/ISSUER_NAME LIKE in final SQL once identifier is resolved."
+      ]
+    },
+    {
+      "id": "security_identifier_projection",
+      "when_user_mentions": ["identifier", "security id", "CUSIP", "ISIN", "ticker"],
+      "prefer_columns": ["IDENTIFIER_TYPE", "IDENTIFIER_VALUE"],
+      "optional_columns": ["TICKER"],
+      "decision_logic": [
+        "Include IDENTIFIER_TYPE and IDENTIFIER_VALUE in SELECT when requested.",
+        "Include TICKER when helpful and available."
+      ]
+    },
+    {
+      "id": "dcm_order_amount_vs_ecm_allocation",
+      "when_user_mentions": ["order amount", "indication amount", "highest share", "highest allocation"],
+      "prefer_columns": ["AMT", "ALLOCATION"],
+      "decision_logic": [
+        "DCM order amount semantics map to AMT.",
+        "Investor share/allocation semantics map to ALLOCATION.",
+        "If user says 'highest share' without more detail, confirm allocation intent then use ALLOCATION."
+      ]
+    }
+  ]
+}

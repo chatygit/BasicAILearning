@@ -1,0 +1,124 @@
+{
+  "purpose": "Explicit list of user intent patterns that cannot be answered from DGSTREAM.VW_DEAL_ORDER_SUMMARY. When the LLM detects any of these patterns it MUST respond with the user_message immediately — do NOT attempt entity_search, do NOT attempt SQL generation.",
+  "policy": "Match patterns case-insensitively and as substrings/phrases. If the ask partially overlaps with a supported ask, answer the supported part and surface the unsupported part as a separate note. IMPORTANT — compound asks: scan the ENTIRE ask and detect ALL matching unsupported intents.",
+  "unsupported_intents": [
+    {
+      "id": "peer_company_graph",
+      "patterns": [
+        "peer companies",
+        "peers of",
+        "competitor companies",
+        "holds stock in peer",
+        "investors in peer"
+      ],
+      "reason": "No peer company relationship graph or peer mapping table is available in this domain. Peer relationships require an external entity graph that is not part of VW_DEAL_ORDER_SUMMARY.",
+      "user_message": "I'm unable to answer questions about peer companies — this domain does not have a peer company relationship graph. I can search for investors in a specific sector or named company instead. Would you like that?"
+    },
+    {
+      "id": "settlement_currency_mismatch",
+      "patterns": [
+        "settlement currency differs from",
+        "settlement currency different",
+        "settlement currency vs deal currency",
+        "currency mismatch between settlement",
+        "different settlement currency"
+      ],
+      "reason": "VW_DEAL_ORDER_SUMMARY has SETTLEMENT_TS (date) but no SETTLEMENT_CURRENCY column. Settlement currency data lives in the tradebook, which is a separate source.",
+      "user_message": "I can't filter by settlement currency — the settlement currency field is not available in this dataset (it comes from the tradebook). I can filter by deal pricing currency (CURRENCY column) instead. Would that work?"
+    },
+    {
+      "id": "issuer_country_domicile",
+      "patterns": [
+        "country of domicile",
+        "domicile is",
+        "domicile country",
+        "incorporated in",
+        "country of incorporation",
+        "issuer country",
+        "based in usa",
+        "headquartered in"
+      ],
+      "reason": "VW_DEAL_ORDER_SUMMARY does not have issuer country of domicile or country of incorporation columns. Issuer geography is not stored in this view.",
+      "user_message": "I'm unable to filter by issuer country of domicile or incorporation — those fields are not available in the deal orderbook view. I can filter by deal region (TRANCHE_REGION: NAM, EMEA, APAC) as a geographic proxy. Would that work?"
+    },
+    {
+      "id": "matched_orders",
+      "patterns": [
+        "matched orders",
+        "matched order status",
+        "orders that were matched",
+        "show matched"
+      ],
+      "reason": "No order match/matched status column exists in VW_DEAL_ORDER_SUMMARY.",
+      "user_message": "Matched order status is not available in this dataset. I can filter orders by deal status (Priced/Settled/Closed) or investor category instead."
+    },
+    {
+      "id": "investor_region_country",
+      "patterns": [
+        "investor region is usa",
+        "investor region is non usa",
+        "investor region non-usa",
+        "investor country",
+        "usa-based investors",
+        "usa based investors",
+        "us based investors",
+        "usa based",
+        "us based",
+        "non-usa investors",
+        "investors from usa",
+        "investors from emea",
+        "investors based in",
+        "usa orders",
+        "us orders",
+        "orders from usa",
+        "orders from us investors",
+        "us investors",
+        "investors in usa",
+        "investor region usa",
+        "investor region"
+      ],
+      "reason": "VW_DEAL_ORDER_SUMMARY does not have an investor region or investor country column. Investor geography is not stored in this view. Do NOT substitute TRANCHE_REGION/DEAL_REGION for investor-region intent — those are the deal/tranche geography, not the investor's.",
+      "user_message": "I'm unable to filter by investor region or investor country — those fields are not in this dataset (TRANCHE_REGION is the deal/tranche region, not the investor's region). I can filter by investor category (Long Only, Hedge Fund, etc.) or by deal/tranche region instead. Would that work?"
+    },
+    {
+      "id": "ttw_orders",
+      "patterns": [
+        "TTW",
+        "selected as TTW",
+        "take the wall",
+        "take-the-wall"
+      ],
+      "reason": "No TTW (Take the Wall) flag column exists in VW_DEAL_ORDER_SUMMARY.",
+      "user_message": "TTW (Take the Wall) order information is not available in this dataset — the TTW flag is not exposed in the deal orderbook view. Please raise this with the product team if it is needed."
+    },
+    {
+      "id": "other_syndicate_allocation",
+      "patterns": [
+        "allocation given by other syndicate",
+        "allocation by other syndicated",
+        "per-bank allocation",
+        "bank-level allocation",
+        "which bank allocated"
+      ],
+      "reason": "VW_DEAL_ORDER_SUMMARY does not have a column attributing allocation to a specific syndicate bank. ALLOCATION is an investor-side metric; per-bank allocation attribution is not in this view.",
+      "user_message": "Per-bank allocation attribution is not available in this dataset — I can't tell you how much each syndicate bank allocated. I can show you total allocation per investor for a deal, or show you which banks were in the syndicate."
+    },
+    {
+      "id": "cancelled_deleted_orders",
+      "patterns": [
+        "cancelled orders",
+        "deleted orders",
+        "orders that were cancelled",
+        "orders that were deleted",
+        "show all cancelled",
+        "show all deleted"
+      ],
+      "reason": "VW_DEAL_ORDER_SUMMARY has DEAL_STATUS which includes 'cancelled'/'deleted' at the DEAL level, not at the individual ORDER level. Per-order cancellation/deletion status is not in this view.",
+      "user_message": "Order-level cancellation/deletion status is not available in this view. I can filter deals by deal status (cancelled/deleted) if you meant deal-level status. Would that work?",
+      "partial_support": {
+        "supported": "Filter DEAL_STATUS IN ('cancelled','deleted') for deal-level cancelled/deleted deals",
+        "column": "DEAL_STATUS"
+      }
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+skills:
+# Skills are auto-discovered from app/skills/ directories.
+# The format-user-introduction skill is loaded from:
+#   app/skills/format-user-introduction/SKILL.md
+#
+# If you need to define skills inline (without SKILL.md files),
+# you can add entries like:
+
+  - name: "format-user-introduction"
+    display_name: "User Introduction Formatter"
+    description: "Generates a professional introduction note from user profile data"
+    tags: ["demo", "user-profile", "introduction"]
+    metadata: {}
+
+  - name: "summarize-as-meeting-notes-and-todos"
+    display_name: "Meeting Notes & Todos Summarizer"
+    description: "Process raw meeting notes from investment and corporate banking into structured interpretations with mee..."  # cut off at right edge
+    tags: ["banking", "summarization", "meeting-notes"]
+    metadata: {}
+
+  - name: "text2sql-credit-facilities"
+    display_name: "Credit Facilities Text-to-SQL"
+    description: "Domain skill for querying credit facility data via text-to-SQL"
+    tags: ["text2sql", "credit-facilities"]
+    metadata: {}
+
+  - name: "text2sql-revenue-returns"
+    display_name: "Revenue Returns Text-to-SQL"
+    description: "Domain skill for querying revenue and returns data via text-to-SQL"
+    tags: ["text2sql", "revenue-returns"]
+    metadata: {}
+
+  - name: "text2sql-wallet"
+    display_name: "Wallet Analysis Text-to-SQL"
+    description: "Domain skill for querying wallet/Dealogic data via text-to-SQL"
+    tags: ["text2sql", "wallet"]
+    metadata: {}
+
+  - name: "text2sql-ecm-dcm"
+    display_name: "ECM/DCM Text-to-SQL"
+    description: "Domain skill for querying deal orderbook data via text-to-SQL"
+    tags: ["text2sql", "ecm-dcm"]
+    metadata: {}
+
+  - name: "text2sql-domain-config"
+    display_name: "Text-to-SQL Domain Configuration"
+    description: "Domain routing reference and shared Text2SQL configuration for all domain orchestrators"
+    tags: ["text2sql", "orchestration", "domain-config"]
+    metadata: {}
+
+  - name: "conversation-history"
+    display_name: "Conversation History"
+    description: "Retrieve and manage user conversation history from MongoDB"
+    tags: ["conversations", "history", "mongodb"]
+    metadata: {}

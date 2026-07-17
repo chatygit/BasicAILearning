@@ -1,0 +1,471 @@
+{
+  "databaseName": "DGSTREAM",
+  "tables": [
+    {
+      "tableName": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+      "tableDescription": "Consolidated view of ECM (Equity Capital Markets) and DCM (Debt Capital Markets) deals, tranches, orders, and investor allocations. Use PRODUCT column to filter between 'ECM' and 'DCM' records.",
+      "domain": "ecm_dcm",
+      "columns": [
+        {
+          "columnName": "PRODUCT",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Product type identifier. 'ECM' for Equity Capital Markets, 'DCM' for Debt Capital Markets. Use this column to filter by product.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "DEAL_ID",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Unique identifier for the deal/transaction. Primary key for linking deals to orders and tranches. Corresponds to dealId in the UI.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "DEAL_NAME",
+          "dataType": "VARCHAR2",
+          "columnDescription": "The name of the deal/transaction (e.g., syndicate deal name). Displayed in the UI header.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "TRANCHE_ID",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Unique identifier for a tranche within a deal. A deal can have multiple tranches. Used as a foreign key to link orders to specific tranches. Populated for both ECM (O.TRANCHE_ID) and DCM (O.PARENT_ID).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "TRANCHE_NAME",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Human-readable name of the tranche. Displayed in the orderbook grid's 'Tranche' column.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "TRANCHE_SIZE",
+          "dataType": "NUMBER",
+          "columnDescription": "The total size of the tranche offering. For ECM, represents deal size in shares (corresponds to dealSizeInShares in the UI). For DCM, represents the total Nominal or Principal amount of debt issued in that specific tranche.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "INVESTOR_NAME",
+          "dataType": "VARCHAR2",
+          "columnDescription": "The name of the INVESTOR/account that placed the order or received an allocation. Also known as investor or account. This is the human-readable name - for FILTERING/JOINING use GPNUM (the precise investor identifier). In queries, prefer GPNUM for exact investor matching.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "PRICING_TS",
+          "dataType": "TIMESTAMP",
+          "columnDescription": "Timestamp when the deal/tranche was priced.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "CURRENCY",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Denomination in which all cashflows associated with the deal are made, also known as pricing currency (e.g., USD, EUR, GBP).",
+          "possible_values": [
+            "USD",
+            "GBP",
+            "BRL",
+            "MXN",
+            "EUR",
+            "JPY",
+            "CHF",
+            "AUD",
+            "CAD",
+            "CNY",
+            "CNH",
+            "HKD",
+            "SGD",
+            "INR",
+            "KRW",
+            "TWD",
+            "ZAR",
+            "TRY",
+            "PLN",
+            "HUF",
+            "CZK",
+            "RON",
+            "SEK",
+            "NOK",
+            "DKK",
+            "NZD",
+            "THB",
+            "IDR",
+            "MYR",
+            "PHP",
+            "VND",
+            "AED",
+            "SAR",
+            "QAR",
+            "KWD",
+            "BHD",
+            "OMR",
+            "ILS",
+            "EGP",
+            "NGN",
+            "KES",
+            "GHS",
+            "MAD",
+            "COP",
+            "CLP",
+            "ARS",
+            "UYU",
+            "PEN",
+            "UZS",
+            "BDT"
+          ],
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "SETTLEMENT_TS",
+          "dataType": "TIMESTAMP",
+          "columnDescription": "Settlement date. Date on which the transaction is completed, with investors making the payment and issuer delivering the securities. Note: often NULL for DCM rows, but kept available for both products.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "TRANCHE_REGION",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Geographic area associated with the issuance, distribution, or investor targeting of that specific tranche within a deal.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "ALLOCATION",
+          "dataType": "NUMBER",
+          "columnDescription": "Final allocation - the confirmed and approved distribution of securities to an INVESTOR by the syndicate. For ECM, corresponds to allocation.privateAllocation in the UI. For DCM, it is currently mapped from the order amount fields.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "INVESTOR_CATEGORY_KEY",
+          "dataType": "VARCHAR2",
+          "columnDescription": "The key/code for the INVESTOR category classification (e.g., LONG_ONLY, HEDGE_FUND, OUTRIGHT). Used for investor summary grouping. INVESTOR-side column - any GROUP BY on this column implies an investor-scoped query; pair with investor-level aggregation.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM"]
+        },
+        {
+          "columnName": "INVESTOR_CATEGORY",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Classification of INVESTORS based on their institutional category or investment profile. For ECM, displayed as 'Long/Hedge' or 'Outright/Hedge' for convertible deals. For DCM, possible values are: 'Central Bank', 'Official Institution', 'Insurance/Pension', 'Asset Manager', and others.",
+          "possible_values": [
+            "Outright",
+            "Long Only",
+            "Hedge Fund",
+            "Long/Hedge",
+            "Outright/Hedge",
+            "Central Bank",
+            "Official Institution",
+            "Insurance/Pension",
+            "Asset Manager",
+            "Corporate Treasury",
+            "Bank Treasury",
+            "Private Bank",
+            "Co-lead Retention",
+            "Co-lead Trading",
+            "Other Trading",
+            "Broker",
+            "Co-lead Order",
+            "Co-lead Pot",
+            "Other",
+            "JLM Trading",
+            "Syndicate"
+          ],
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "MEETING_TYPE_KEY",
+          "dataType": "VARCHAR2",
+          "columnDescription": "The key/code for the meeting type (e.g., NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM"]
+        },
+        {
+          "columnName": "MEETING_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Human-readable meeting type between the issuer/syndicate and the investor (e.g., 'No Meeting', 'One-to-One', 'Conference Call', 'Small Group', 'Group Meeting'). Display counterpart of MEETING_TYPE_KEY.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM"]
+        },
+        {
+          "columnName": "ISSUER_NAME",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Name of the issuing company/entity raising capital through the deal.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "ISSUER_RATINGS",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Credit ratings of the issuer from rating agencies (e.g., Moody's / S&P / Fitch). Primarily populated for DCM records but kept available for both products.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "TICKER",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Stock exchange ticker symbol of the issuer. Primarily populated for ECM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "SECTOR",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Industry sector of the issuer (e.g., Financials, Energy, Technology, Healthcare).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "EXCHANGE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Stock exchange on which the issuer's securities are listed/traded. Primarily populated for ECM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "DEAL_STATUS",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Current lifecycle status of the deal (e.g., Announced, Open, Priced, Closed, Cancelled).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "DEAL_SIZE",
+          "dataType": "NUMBER",
+          "columnDescription": "Total size of the deal across all tranches. For ECM, expressed in shares or monetary value at deal level; for DCM, total Principal/Nominal amount across tranches. See TRANCHE_SIZE for tranche-level size.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "DEAL_REGION",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Geographic region of the overall deal (e.g., AMER, EMEA, APAC). See TRANCHE_REGION for tranche-level targeting.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "ROOT_ID",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Root identifier on order rows linking the order back to its parent deal. ROOT_ID on orders joins to DEAL_ID on deals.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "PARENT_ID",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Parent identifier on order rows linking the order to its tranche. For DCM, PARENT_ID on orders joins to TRANCHE_ID on tranches.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "ORDER_ID",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Unique identifier for an individual investor order. Part of the DCM primary key (DEAL_ID, TRANCHE_ID, ORDER_ID).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "ORDER_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Type/classification of the order placed by the investor (e.g., limit vs. market, or order source classification).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "DEMAND_QTY",
+          "dataType": "NUMBER",
+          "columnDescription": "Order demand quantity - the amount of securities requested by the investor before allocation. Compare with ALLOCATION for the final approved amount.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "AMT",
+          "dataType": "NUMBER",
+          "columnDescription": "Order amount - the monetary amount associated with the investor's order.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "OFFERING_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Type of the offering (e.g., IPO, Follow-On, Block, Convertible for ECM; benchmark or tap issuance for DCM).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "PRODUCT_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Detailed sub-classification of the product within ECM or DCM (e.g., equity offering type or bond instrument type).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "PRODUCT_CLASS",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Higher-level classification of the product/instrument, above PRODUCT_TYPE granularity.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "EQUITY_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Type of equity offered (e.g., Common Shares, Preferred, ADR/GDR). Only applies to ECM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM"]
+        },
+        {
+          "columnName": "ESG_BOND",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Indicates whether the bond is an ESG-labelled instrument (e.g., Green, Social, Sustainability, Sustainability-Linked). Only applies to DCM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["DCM"]
+        },
+        {
+          "columnName": "USE_OF_PROCEEDS",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Stated purpose for which the issuer will use the funds raised (e.g., General Corporate Purposes, Refinancing, Acquisition, Green Projects).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "TENORS",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Tenor(s) of the tranche - the time to maturity of the debt instrument (e.g., 3Y, 5Y, 10Y, 30Y). Only applies to DCM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["DCM"]
+        },
+        {
+          "columnName": "SECURITIES_MATURITY",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Maturity date(s) of the securities issued in the tranche. Only applies to DCM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["DCM"]
+        },
+        {
+          "columnName": "SENIORITY",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Ranking of the debt within the issuer's capital structure (e.g., Senior Unsecured, Senior Secured, Subordinated, Tier 2). Only applies to DCM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["DCM"]
+        },
+        {
+          "columnName": "COUPON_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Type of coupon for the debt instrument (e.g., Fixed, Floating, Fixed-to-Floating, Zero). Only applies to DCM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["DCM"]
+        },
+        {
+          "columnName": "COUPON_FREQ",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Frequency of coupon payments (e.g., Annual, Semi-Annual, Quarterly). Only applies to DCM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["DCM"]
+        },
+        {
+          "columnName": "REG_CATEGORY",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Regulatory registration category of the offering (e.g., registered vs. exempt offering classification).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "SYNDICATE_MEMBER_NAME",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Name of the syndicate bank/member participating in the deal.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "SYNDICATE_ROLE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Role of the syndicate member on the deal (e.g., Active Bookrunner, Passive Bookrunner, Global Coordinator, Co-Manager).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "BROKER_CODE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Code identifying the broker associated with the order.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "BND_BROKER",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Bond broker name/identifier associated with the order. Primarily applies to DCM records.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["DCM"]
+        },
+        {
+          "columnName": "IDENTIFIER_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Type of security identifier provided in IDENTIFIER_VALUE (e.g., ISIN, CUSIP).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "IDENTIFIER_VALUE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Value of the security identifier (e.g., the ISIN or CUSIP code) for the tranche/security.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "EXECUTION_STATUS",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Execution status of the deal/order (e.g., Live, Priced, Executed, Closed, Cancelled).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "GFCID",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Global Financial Client ID - institutional client identifier for the investor. Alternate identifier to GPNUM.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        },
+        {
+          "columnName": "DELIVERY_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Type of security delivery or exemption for DCM deals. Common values: '144A', 'RegS', '3(a)(2) Exempt'. Indicates the legal exemption or delivery type for the security issuance. Only applies to DCM records.",
+          "allowed_values": [
+            {"value": "144A", "description": "Rule 144A exemption for qualified institutional buyers."},
+            {"value": "RegS", "description": "Regulation S exemption for non-US investors."},
+            {"value": "3(a)(2) Exempt", "description": "Section 3(a)(2) exemption for certain bank-issued securities."}
+          ],
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["DCM"]
+        },
+        {
+          "columnName": "GPNUM",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Global Participant Number - identifies the INVESTOR (the buyer / allocatee / order-placer) on the deal. Use this for ALL investor-side filters, e.g. `WHERE GPNUM = '<investor-gpnum>'` or `WHERE GPNUM IN ('<gp1>', '<gp2>')`.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
+          "applies_to": ["ECM", "DCM"]
+        }
+      ],
+      "primary_keys": {
+        "ECM": ["DEAL_ID", "INVESTOR_NAME"],
+        "DCM": ["DEAL_ID", "TRANCHE_ID", "ORDER_ID"]
+      },
+      "mandatory_filters": {
+        "ECM": "PRODUCT = 'ECM'",
+        "DCM": "PRODUCT = 'DCM'"
+      },
+      "relationships": {
+        "DCM": {
+          "deal_to_tranche": "DEAL_ID links deals to tranches",
+          "order_to_deal": "ROOT_ID on orders joins to DEAL_ID on deals",
+          "order_to_tranche": "PARENT_ID on orders joins to TRANCHE_ID on tranches"
+        }
+      }
+    }
+  ]
+}

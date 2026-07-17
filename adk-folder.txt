@@ -1,0 +1,23 @@
+agent-repo/
+├── .venv/  (library root)
+└── app/
+    ├── .adk/
+    ├── askbanking_root_agent/
+    ├── config/
+    │   ├── agents.yaml
+    │   ├── skills.yaml
+    │   └── tools.yaml
+    ├── internal/
+    ├── skills/
+    │   ├── conversation-history/
+    │   ├── example-skill/
+    │   ├── format-user-introduction/
+    │   ├── summarize-as-meeting-notes-and-todos/
+    │   ├── text2sql-credit-facilities/
+    │   ├── text2sql-domain-config/
+    │   ├── text2sql-ecm-dcm/
+    │   │   └── SKILL.md
+    │   ├── text2sql-revenue-returns/
+    │   └── text2sql-wallet/
+    ├── .env
+    └── .env.example
