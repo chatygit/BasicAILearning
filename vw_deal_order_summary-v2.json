@@ -90,39 +90,11 @@
           "columnName": "CURRENCY",
           "dataType": "VARCHAR2",
           "columnDescription": "Denomination in which all cashflows associated with the deal are made, also known as pricing currency (e.g., USD, EUR, GBP).",
-          "possible_values": [
-            "USD",
-            "GBP",
-            "BRL",
-            "MXN",
-            "EUR",
-            "JPY",
-            "CHF",
-            "AUD",
-            "CAD",
-            "CNY",
-            "CNH",
-            "HKD",
-            "SGD",
-            "INR",
-            "KRW",
-            "TWD",
-            "ZAR",
-            "TRY",
-            "PLN",
-            "HUF",
-            "CZK",
-            "RON",
-            "SEK",
-            "NOK",
-            "DKK"
-          ],
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
           "applies_to": [
             "ECM",
             "DCM"
-          ],
-          "possible_values_note": "Sample of valid ISO codes (server truncates lists >25 anyway); other codes exist \u2014 use exact ISO code matching. rmb/renminbi -> CNY and CNH."
+          ]
         },
         {
           "columnName": "SETTLEMENT_TS",
@@ -167,29 +139,6 @@
           "columnName": "INVESTOR_CATEGORY",
           "dataType": "VARCHAR2",
           "columnDescription": "Classification of INVESTORS based on their institutional category or investment profile. For ECM, displayed as 'Long/Hedge' or 'Outright/Hedge' for convertible deals. For DCM, possible values are: 'Central Bank', 'Official Institution', 'Insurance/Pension', 'Asset Manager', and others.",
-          "possible_values": [
-            "Outright",
-            "Long Only",
-            "Hedge Fund",
-            "Long/Hedge",
-            "Outright/Hedge",
-            "Central Bank",
-            "Official Institution",
-            "Insurance/Pension",
-            "Asset Manager",
-            "Corporate Treasury",
-            "Bank Treasury",
-            "Private Bank",
-            "Co-lead Retention",
-            "Co-lead Trading",
-            "Other Trading",
-            "Broker",
-            "Co-lead Order",
-            "Co-lead Pot",
-            "Other",
-            "JLM Trading",
-            "Syndicate"
-          ],
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
           "applies_to": [
             "ECM",
@@ -550,20 +499,6 @@
           "columnName": "DELIVERY_TYPE",
           "dataType": "VARCHAR2",
           "columnDescription": "Type of security delivery or exemption for DCM deals. Common values: '144A', 'RegS', '3(a)(2) Exempt'. Indicates the legal exemption or delivery type for the security issuance. Only applies to DCM records.",
-          "allowed_values": [
-            {
-              "value": "144A",
-              "description": "Rule 144A exemption for qualified institutional buyers."
-            },
-            {
-              "value": "RegS",
-              "description": "Regulation S exemption for non-US investors."
-            },
-            {
-              "value": "3(a)(2) Exempt",
-              "description": "Section 3(a)(2) exemption for certain bank-issued securities."
-            }
-          ],
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY",
           "applies_to": [
             "DCM"
