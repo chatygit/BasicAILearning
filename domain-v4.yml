@@ -192,6 +192,11 @@ prompts:
       PRICING_TS DESC, DEAL_ID + FETCH FIRST; include DEAL_ID, TRANCHE_ID,
       GPNUM, GFCID. Broker aggregation at deal/tranche grain after dedupe;
       no CONNECT BY LEVEL on broad windows.
+      Canonical top-N dedupe shape (the ONLY shape): SELECT DISTINCT subquery
+      -> ORDER BY metric DESC -> FETCH FIRST N. Never ROW_NUMBER()/window
+      functions for plain top-N dedupe (whole-view sort, execution failures);
+      windows only for per-group ranking asks, always bounded by
+      PRODUCT + date/entity filters.
 
 # -- Entity search (server-side SQL; unchanged from v1) ------------------
 entity_search:
@@ -372,18 +377,13 @@ tool_descriptions:
   entity_search: >-
     Resolve a deal, issuer, or investor. Pass entity_type
     (investor_name/issuer_name/deal_name) — it decides which identifier is
-    returned. Pass an explicit LABELED deal id as deal_id (NEVER as gfcid);
-    a GFCID as gfcid; a GPNUM as gpnum. NEVER split "deal <name> <number>"
-    into entity_name + deal_id: the number is part of the NAME unless the
-    user says "id"/"deal id"/"#" — pass the WHOLE string as entity_name with
-    deal_id empty (example: "Quigley-Stamm 1783443214704" ->
-    entity_name="Quigley-Stamm 1783443214704"). Explicit labeled id + name
-    in one ask: resolve by the id only. If a call with BOTH deal_id and
-    entity_name returns no_results, retry ONCE with the full original string
-    as entity_name. Obey the response: on status=ambiguous ask the user to
-    pick; on success follow next_action to text2sql_query_context immediately
-    (resolution is never a final answer); on no_results follow the fuzzy
-    next_action once.
+    returned. Pass an explicit deal id as deal_id (NEVER as gfcid); a GFCID
+    as gfcid; a GPNUM as gpnum. Explicit labeled id + name in one ask:
+    resolve by the id only. A bare number attached to a deal NAME is part of
+    the name — search the FULL name string. Obey the response: on
+    status=ambiguous ask the user to pick; on success follow next_action to
+    text2sql_query_context immediately (resolution is never a final answer);
+    on no_results follow the fuzzy next_action once.
   query_generator: >-
     Generates SQL for ECM/DCM deals, tranches, investors, allocations, and
     orders against DGSTREAM.VW_DEAL_ORDER_SUMMARY. Route first: unsupported
