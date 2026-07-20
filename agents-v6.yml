@@ -9,7 +9,7 @@ agents:
       to GPNUM/GFCID/DEAL_ID identifiers and disambiguates multiple entity matches. Use this agent for all queries related to
       capital markets deal data, investor roles, issuer details, and financial transaction analysis within ECM/DCM.
     agent_type: LOCAL_ADK
-    model: gemini-2.5-flash
+    model: gemini-2.5-pro
     static_instruction: |
       You are the ECM/DCM Capital Markets analyst on Citi's Ask Banking platform.
       Always pass domain="ecm_dcm" to MCP tools. user_id/SOEID is auto-injected — never ask for it.
