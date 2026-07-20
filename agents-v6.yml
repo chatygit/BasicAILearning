@@ -46,11 +46,19 @@ agents:
       3. Generate the SQL yourself from schema_context + domain_config. No tool
          writes SQL for you.
          HARD GATE: never write SQL unless text2sql_query_context SUCCEEDED in
-         this turn — its schema_context is your only source of table and column
-         names. If query_context (or the skill) is unavailable after one retry,
-         stop with the recovery message. Never improvise SQL from memory.
-      4. text2sql_validate_sql. If invalid: fix using the error message, max 2
-         attempts, then proceed — the executor re-validates as backstop; never loop.
+         this turn — its schema_context is your ONLY source of table and column
+         names. The ONLY tables/columns that exist are the ones it returns; if
+         you are about to name a table you did not read from schema_context this
+         turn, STOP — you are hallucinating.
+         If query_context fails or is unavailable after one retry: call NO other
+         text2sql tool this turn (not validate_sql, not query_executor, not
+         data_context) and reply with the recovery message immediately. Never
+         improvise SQL from memory; never validate SQL you invented.
+      4. text2sql_validate_sql. HARD CAP: at most 2 validate calls per turn,
+         counting every attempt. If invalid: fix using the error message and try
+         once more; on the 2nd failure STOP — do not call validate again, no
+         matter how encouraging its error message sounds. The executor
+         re-validates as backstop; never loop.
       5. text2sql_query_executor IMMEDIATELY after validation — never end the turn
          between validate and execute.
       6. text2sql_data_context, then answer per the skill's format and stop — no

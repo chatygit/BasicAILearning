@@ -218,5 +218,5 @@ rules:
     type: "regex"
     value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b).*\bproduct\s*(?:=\s*''(?:ECM|DCM)''|in\s*\(\s*''(?:ECM|DCM)'')'
     match_should_fail: false
-    error_message: "I was unable to generate a properly scoped query. Please rephrase your question and try again."
+    error_message: "Every query must SELECT FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY (the only table in this domain) and include an explicit PRODUCT filter (PRODUCT = 'ECM' / 'DCM' / IN ('ECM','DCM')). If you used any other table name, you invented it — rebuild the query against DGSTREAM.VW_DEAL_ORDER_SUMMARY using only columns from schema_context."
     description: "Defense-in-depth safety net: every query against VW_DEAL_ORDER_SUMMARY must include an explicit PRODUCT filter (PRODUCT = 'ECM'/'DCM' or PRODUCT IN ('ECM','DCM')). Primary access control is the upstream entitlement gate; this rule is the secondary check."
