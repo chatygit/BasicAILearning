@@ -69,7 +69,7 @@
         {
           "columnName": "TRANCHE_REGION",
           "dataType": "VARCHAR2",
-          "columnDescription": "Geographic area associated with the issuance, distribution, or investor targeting of that specific tranche within a deal.",
+          "columnDescription": "Tranche-level geographic region - the default region column for both products. Values: NAM, EMEA, APAC. This is the DEAL/tranche side, never the investor's geography.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -87,13 +87,13 @@
         {
           "columnName": "INVESTOR_CATEGORY",
           "dataType": "VARCHAR2",
-          "columnDescription": "Classification of INVESTORS based on their institutional category or investment profile. For ECM, displayed as 'Long/Hedge' or 'Outright/Hedge' for convertible deals. For DCM, possible values are: 'Central Bank', 'Official Institution', 'Insurance/Pension', 'Asset Manager', and others.",
+          "columnDescription": "Classification of the investor. Exact DB values: Outright, Long Only, Hedge Fund, Long/Hedge, Outright/Hedge, Central Bank, Official Institution, Insurance/Pension, Asset Manager, Corporate Treasury, Bank Treasury, Private Bank, Co-lead Retention, Co-lead Trading, Co-lead Order, Co-lead Pot, Other Trading, Broker, Syndicate, JLM Trading, Other. Not valid: Strategic, Family Office, Retail, SWF, DSP, Index, Quant.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "MEETING_TYPE_KEY",
           "dataType": "VARCHAR2",
-          "columnDescription": "The key/code for the meeting type (e.g., NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING).",
+          "columnDescription": "Coded roadshow meeting type (ECM). Values: ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING, NO_MEETING. '1x1'/'one-to-one' -> ONE_TO_ONE; 'other than 1x1' -> <> 'ONE_TO_ONE'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -123,7 +123,7 @@
         {
           "columnName": "SECTOR",
           "dataType": "VARCHAR2",
-          "columnDescription": "Industry sector of the issuer (e.g., Financials, Energy, Technology, Healthcare).",
+          "columnDescription": "Industry sector of the issuer. Exact DB values: Aero/Defense, Agriculture, Autos, Banks, Chemical, Consumer Goods, Energy, Financial Services, Healthcare, Industrials, Information Technology, Insurance, Pharmaceuticals, Retail, Telecommunications, Transportation, Technology. Note 'Information Technology' and 'Technology' are distinct, and there is no 'Financials' (use 'Financial Services' or 'Banks').",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -135,7 +135,7 @@
         {
           "columnName": "DEAL_STATUS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Current lifecycle status of the deal (e.g., Announced, Open, Priced, Closed, Cancelled).",
+          "columnDescription": "Current lifecycle status of the deal (deal level only). Values seen include Settled, Final Settled, Live, Priced, Draft, Postponed, Announced, Cancelled, Confidential, Deleted, Allocated, Subject, Archived, FreeToTrade, Mandated, Private, Open, Closed. WARNING: casing is inconsistent in the data (both 'Open' and 'OPEN', 'Closed' and 'CLOSED') - always compare with UPPER() on BOTH sides.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -147,7 +147,7 @@
         {
           "columnName": "DEAL_REGION",
           "dataType": "VARCHAR2",
-          "columnDescription": "Geographic region of the overall deal (e.g., AMER, EMEA, APAC). See TRANCHE_REGION for tranche-level targeting.",
+          "columnDescription": "Deal-level geographic region. Values: NAM, EMEA, APAC (there is no 'AMER'). Populated for ECM; use TRANCHE_REGION for tranche-level or generic region asks.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -189,25 +189,25 @@
         {
           "columnName": "OFFERING_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of the offering (e.g., IPO, Follow-On, Block, Convertible for ECM; benchmark or tap issuance for DCM).",
+          "columnDescription": "Type of the offering. ECM values are ONLY 'IPO' and 'FO' (follow-on). 'Convertible', 'Block' and 'Rights Issue' are NOT offering types - convertibles live in EQUITY_TYPE. DCM: benchmark or tap issuance.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "PRODUCT_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Detailed sub-classification of the product within ECM or DCM (e.g., equity offering type or bond instrument type).",
+          "columnDescription": "Fine-grained ECM security type (more specific than EQUITY_TYPE): e.g. ADR, ADS, GDR, GDS, Common Stock, Rights, Mandatory Convertible Preferred Stock. Free text - prefer LIKE. Use EQUITY_TYPE for coarse security class; both columns can contain 'Common Stock'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "PRODUCT_CLASS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Higher-level classification of the product/instrument, above PRODUCT_TYPE granularity.",
+          "columnDescription": "Bond/product class. Exact DB values: Investment Grade, Preferred, Emerging Market, Covered Bond, High Yield, Agencies, CLO, LevFin Loan, Asset Backed, SSA, Taxable Muni, ABS, RMBS, CMBS, Municipals. Expand IG->'Investment Grade', HY->'High Yield', EM->'Emerging Market' (never the abbreviation itself). Mainly DCM.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "EQUITY_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of equity offered (e.g., Common Shares, Preferred, ADR/GDR). Only applies to ECM records.",
+          "columnDescription": "Type of equity offered. Exact DB values: 'Equity Units', 'Exchangable Notes' (sic - misspelled in the data), 'Global Depository', 'Convertible Bonds', 'Common Stock', 'Convertible Preferred', 'Warrants'. NOTE: the value is 'Common Stock', NOT 'Common Shares'. For 'convertible(s)' use LIKE '%Convertible%'. ECM rows.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -243,7 +243,7 @@
         {
           "columnName": "COUPON_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of coupon for the debt instrument (e.g., Fixed, Floating, Fixed-to-Floating, Zero). Only applies to DCM records.",
+          "columnDescription": "Coupon structure of the debt instrument. Exact DB values (note SPACES, not hyphens): 'Fixed', 'FRN', 'Zero Coupon', 'Fixed to FRN', 'Fixed to Fixed', 'Exchanged', 'Structured', 'Funged', 'Step Coupon'. Map floating->'FRN', fixed-to-floating->'Fixed to FRN'. DCM rows.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -285,7 +285,7 @@
         {
           "columnName": "IDENTIFIER_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of security identifier provided in IDENTIFIER_VALUE (e.g., ISIN, CUSIP).",
+          "columnDescription": "Type of security identifier in IDENTIFIER_VALUE. Exact DB values: 'CUSIP', 'FIGI', 'Valoren', 'ISIN', 'RIC', 'SMCP ID'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
