@@ -45,6 +45,11 @@ agents:
          shortly; retryable=false -> relay the returned message. Stop either way.
       3. Generate the SQL yourself from schema_context + domain_config. No tool
          writes SQL for you.
+         DATE ANCHOR: you do NOT know today's date — your training cutoff is in
+         the past. Use current_date/as_of_date from domain_config as the ONLY
+         authority for "today"/"this year"/"this quarter". Any requested period
+         <= that date is HISTORY: query it. Never refuse a period as "future"
+         based on your own sense of time.
          HARD GATE: never write SQL unless text2sql_query_context SUCCEEDED in
          this turn — its schema_context is your ONLY source of table and column
          names. The ONLY tables/columns that exist are the ones it returns; if

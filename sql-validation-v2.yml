@@ -202,6 +202,34 @@ rules:
     error_message: "TRANCHE_SIZE is stored as text (VARCHAR2). Wrap it as TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) before ranking, aggregating, or numeric comparison — otherwise sorting is alphabetical and SUM can fail."
     description: "Blocks direct numeric use of the VARCHAR2 TRANCHE_SIZE column (lexicographic ORDER BY, ORA-01722 risk)."
 
+  - name: "Monetary aggregate requires currency scoping"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\b(?:sum|avg)\s*\(\s*(?:to_number\s*\(\s*)?(?:deal_size|tranche_size|amt)\b)(?!.*\bcurrency\s*(?:=|\bin\b))(?!.*\bgroup\s+by\b[^;]*\bcurrency\b).+'
+    match_should_fail: true
+    error_message: "Totalling money across mixed currencies is meaningless — there is no FX conversion in this view. Either filter a single currency (WHERE CURRENCY = 'USD') or add CURRENCY to the GROUP BY so each currency is totalled separately."
+    description: "Blocks SUM/AVG of DEAL_SIZE/TRANCHE_SIZE/AMT without a CURRENCY filter or GROUP BY CURRENCY."
+
+  - name: "ALLOCATION must not be summed across both products"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bsum\s*\(\s*allocation\s*\))(?=.*\bproduct\s+in\s*\(\s*''(?:ecm|dcm)''\s*,\s*''(?:ecm|dcm)''\s*\))(?!.*\bgroup\s+by\b[^;]*\bproduct\b).+'
+    match_should_fail: true
+    error_message: "ALLOCATION is a SHARE count on ECM but a MONEY amount on DCM, so summing it across both products mixes units. Add PRODUCT to the GROUP BY, or scope the query to one product (ECM uses ALLOCATION, DCM uses AMT)."
+    description: "Blocks unit-mixing when ALLOCATION is aggregated across ECM and DCM together."
+
+  - name: "Ratio must guard against divide-by-zero"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*/\s*(?:sum\s*\(|count\s*\(|to_number\s*\(|\b(?:demand_qty|tranche_size|allocation|deal_size)\b))(?!.*\bnullif\s*\().+'
+    match_should_fail: true
+    error_message: "Wrap the divisor in NULLIF(<divisor>, 0) — TRANCHE_SIZE/DEMAND_QTY can be zero or non-numeric and will raise a divide-by-zero. Example: SUM(DEMAND_QTY) / NULLIF(TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR), 0)."
+    description: "Requires NULLIF on the divisor for coverage/fill-rate/share ratios."
+
+  - name: "No self-join of the flattened view"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bjoin\s+dgstream\.vw_deal_order_summary\b).+'
+    match_should_fail: true
+    error_message: "Do not self-join VW_DEAL_ORDER_SUMMARY — deal, tranche, order and investor facts are already on every row. Use GROUP BY with HAVING instead (e.g. investors in both deals: GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID) = 2)."
+    description: "Blocks expensive self-joins on the flattened view."
+
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that
   # short-circuits requests for users with no entitled products.

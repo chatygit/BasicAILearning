@@ -38,7 +38,9 @@ Flat view: every row = one order line with tranche + deal facts copied on. Befor
 SELECT <cols> FROM (SELECT DISTINCT <cols> FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY WHERE <filters>)
 ORDER BY <metric> DESC FETCH FIRST N ROWS ONLY
 ```
-Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the entire flattened view and fail at execution on large scans. Window functions are reserved for genuine per-group ranking asks ("top investor in EACH deal"), and even then must be bounded by PRODUCT + date/entity filters.
+Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the entire flattened view and fail at execution on large scans. Window functions are reserved for genuine per-group ranking asks ("top investor in EACH deal") and share-of-total math (§5a), and even then must be bounded by PRODUCT + date/entity filters.
+
+**NEVER self-join VW_DEAL_ORDER_SUMMARY.** Deal + tranche + order + investor facts are already on every row, so a join is never needed and is expensive on a flat view. Comparisons like "investors in both deals" or "who bought A but not B" are `GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID)=2` / `HAVING SUM(CASE WHEN DEAL_ID='B' THEN 1 ELSE 0 END)=0`. ROOT_ID/PARENT_ID exist as legacy join keys but you almost never need them — filter DEAL_ID / TRANCHE_ID directly.
 
 ## 4. Who's who
 
@@ -70,6 +72,27 @@ Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the
 - "More than N deals" asks: `GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID) > N`.
 - **"Got scaled back"** = allocation cut, NOT ORDER_TYPE: rank by DEMAND_QTY − ALLOCATION (or ALLOCATION/DEMAND_QTY ASC) per GPNUM. Only "scaled orders" means ORDER_TYPE LIKE '%SCALED%'.
 
+### 5a. Derived metrics — the numbers a syndicate desk actually asks for
+| Banker asks | Compute | Grain / guard |
+|---|---|---|
+| oversubscribed, coverage, "how many times covered", "book was 3x" | SUM(DEMAND_QTY) / NULLIF(TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR),0) | tranche grain; dedupe tranche facts first |
+| fill rate, hit rate, "% of their order they got", pro-rata | SUM(ALLOCATION) / NULLIF(SUM(DEMAND_QTY),0) per GPNUM | investor grain |
+| share of book, "% of the book", "how much of the deal did X take" | investor SUM / NULLIF(SUM(...) OVER (),0) | both sides SAME metric + SAME grain |
+| concentration, "top 5 as % of book" | top-N sum / NULLIF(total sum,0) | dedupe before both sums |
+| book size, total demand | SUM(DEMAND_QTY) | tranche or deal grain |
+| how many investors / accounts | COUNT(DISTINCT GPNUM) | never COUNT(*) |
+| how many orders | DCM: COUNT(DISTINCT ORDER_ID) · ECM: COUNT(DISTINCT INVESTOR_NAME) | §3 |
+| anchor order, biggest order | MAX/top DEMAND_QTY per tranche | — |
+| repeat investors, "participated in >N deals" | GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID) > N | — |
+| investors in BOTH deals | GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID) = 2 — **never self-join the view** | — |
+| roadshow effect (ECM): "did 1x1s get better allocations" | AVG allocation GROUP BY MEETING_TYPE_KEY | ECM only |
+
+**Always divide with NULLIF(x,0)** — TRANCHE_SIZE/DEMAND_QTY can be 0 or non-numeric and will otherwise error.
+
+### 5b. ⚠ Two money traps — these silently produce meaningless numbers
+1. **Never sum money across currencies.** There is NO FX column. `SUM(DEAL_SIZE)` over USD+EUR+JPY is nonsense. Any SUM/AVG of DEAL_SIZE / TRANCHE_SIZE / AMT must EITHER filter one CURRENCY or `GROUP BY CURRENCY` — and say which you did in the answer.
+2. **Never sum a metric across both products when its unit differs.** ALLOCATION is SHARES on ECM but a MONEY amount on DCM. `SUM(ALLOCATION)` with `PRODUCT IN ('ECM','DCM')` mixes shares and cash. Split by product (`GROUP BY PRODUCT`) or use the per-product metric (§5). Same caution for any "total" spanning both products.
+
 ## 6. Column dictionary
 
 **How to use the value lists below: they are REFERENCE snapshots and may be INCOMPLETE.** Use them to (a) route the user's word to the right column and (b) pick the closest known literal for a fast, correct query. Prefer LIKE / case-insensitive matching over rigid `=` so a valid-but-unlisted value still matches. NEVER refuse an ask just because a value isn't in a list — run the query and let the data decide. Only refuse when the whole CONCEPT has no column at all (§9).
@@ -81,7 +104,7 @@ Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the
 | DEAL_ID / DEAL_NAME | the deal | both | id exact; name → resolve, then drop LIKE |
 | DEAL_SIZE | total deal size | both | §5 |
 | DEAL_STATUS | lifecycle. DB values (mixed case, WITH case-duplicates — Open/OPEN, Closed/CLOSED, announced/Announced, postponed/Postponed, priced/Priced): Settled, Final Settled, Live, Priced, Draft, Postponed, Announced, Cancelled, Confidential, Deleted, Allocated, Subject, Archived, FreeToTrade, Mandated, Private, Open, Closed. ⚠ MUST use `UPPER(DEAL_STATUS) = 'OPEN'` (upper BOTH sides) — plain `= 'Open'` silently misses the 'OPEN' rows → wrong counts. "settled/open/deleted deals" = DEAL_STATUS ask, NOT a settlement-timestamp ask. Deal-level only | both | UPPER(DEAL_STATUS)=UPPER('value') |
-| EXECUTION_STATUS | execution stage (Live/Priced/Executed/Closed/Cancelled) | both | = |
+| EXECUTION_STATUS | execution stage (Live/Priced/Executed/Closed/Cancelled) — overlaps DEAL_STATUS. **Tie-break: any generic "status/live/priced/closed deals" ask → DEAL_STATUS (the primary lifecycle). Use EXECUTION_STATUS ONLY when the user says "execution status"** | both | UPPER(=) |
 | DEAL_REGION | deal-level region — NAM/EMEA/APAC (earlier 'AMER' was from the unreliable schema doc — corrected) | ECM | only for explicit "deal-level region" asks |
 | USE_OF_PROCEEDS | why raised — "GCP" = literal 'General Corporate Purposes' | both | LIKE '%General Corporate%', '%Refinanc%', '%Green%' |
 | OFFERING_TYPE | ECM: only **'IPO'** and **'FO'** (follow-on) · DCM: benchmark, tap. ⚠ "Convertible"/"Block"/"Rights Issue" are NOT offering types | both | IN ('IPO','FO') for ECM |
@@ -103,7 +126,7 @@ Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the
 | ESG_BOND | Green, Social, Sustainability, **Sustainability-Linked** | DCM | UPPER(ESG_BOND) LIKE '%GREEN%' / '%SOCIAL%' / '%SUSTAINAB%' (catches SLB too; casing varies) |
 | REG_CATEGORY | registration: 144A, Reg S, private placement, eurobond, domestic | DCM | LIKE. **Bare "144a/reg s/3(a)(2)" asks → REG_CATEGORY. Only "<x> delivery" wording → DELIVERY_TYPE.** "SEC Registered" is not a DELIVERY_TYPE value — treat as REG_CATEGORY ask |
 | DELIVERY_TYPE | legal delivery: '144A', 'RegS', '3(a)(2) Exempt' only | DCM | = (see tie-break above) |
-| PRODUCT_TYPE | fine ECM security type: ADR, GDR, Common Stock, Mandatory Convertible… | ECM mainly | LIKE |
+| PRODUCT_TYPE | FINE-grained ECM security type: ADR, ADS, GDR, GDS, depositary receipt, Rights, Mandatory Convertible Preferred… **Tie-break vs EQUITY_TYPE: coarse security class (common stock, convertible, warrants) → EQUITY_TYPE; depositary/ADR/GDR/rights/mandatory wording → PRODUCT_TYPE. Both columns can contain 'Common Stock' — for a generic security-type ask that returns nothing from EQUITY_TYPE, retry once against PRODUCT_TYPE with LIKE** | ECM mainly | LIKE |
 | PRODUCT_CLASS | DB values (exact): Investment Grade, Preferred, Emerging Market, Covered Bond, High Yield, Agencies, CLO, LevFin Loan, Asset Backed, SSA, Taxable Muni, ABS, RMBS, CMBS, Municipals. Expansions: IG→'Investment Grade', HY→'High Yield', **EM→'Emerging Market'** (never 'EM'), levfin→'LevFin Loan', munis→'Municipals'. ⚠ 'ABS' and 'Asset Backed' are BOTH values; 'Municipals' and 'Taxable Muni' are BOTH values — if the user is generic use LIKE to catch both. "IG"/"high yield" → here, not SENIORITY | DCM mainly | = exact / LIKE when generic |
 | EQUITY_TYPE | exact DB values: 'Equity Units', 'Exchangable Notes' (sic — misspelled in data), 'Global Depository', 'Convertible Bonds', 'Common Stock', 'Convertible Preferred', 'Warrants'. **"convertible(s)" → EQUITY_TYPE LIKE '%Convertible%'** (matches both Convertible Bonds + Preferred), NEVER OFFERING_TYPE. Use the exact literal or LIKE the user's stem — never paraphrase (e.g. 'Common Stock', not 'Common Shares') | ECM | IN / LIKE |
 
@@ -126,7 +149,7 @@ Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the
 | INVESTOR_CATEGORY | FULL valid set: Outright, Long Only, Hedge Fund, Long/Hedge, Outright/Hedge, Central Bank, Official Institution, Insurance/Pension, Asset Manager, Corporate Treasury, Bank Treasury, Private Bank, Co-lead Retention, Co-lead Trading, Co-lead Order, Co-lead Pot, Other Trading, Broker, Syndicate, JLM Trading, Other. Bare "pot"/"retention" → 'Co-lead Pot'/'Co-lead Retention'. NOT valid (say so, list valid ones): Strategic, Family Office, Retail, SWF, DSP, Index, Quant | both | = ("investor category syndicate/broker" asks are THIS column, not broker columns) |
 | INVESTOR_CATEGORY_KEY | code form (LONG_ONLY…) | ECM | grouping |
 | MEETING_TYPE_KEY | 1x1→ONE_TO_ONE · conference call→CONFERENCE_CALL · small group→SMALL_GROUP · group meeting→GROUP_MEETING · no meeting→NO_MEETING; "other than 1x1" → <> 'ONE_TO_ONE' | ECM | = |
-| ROOT_ID / PARENT_ID | order→deal / order→tranche (DCM) joins | — | join |
+| ROOT_ID / PARENT_ID | legacy join keys (order→deal / order→tranche, DCM). Rarely needed — all facts are already on one row; filter DEAL_ID/TRANCHE_ID instead and never self-join (§3) | — | rarely used |
 | IDENTIFIER_TYPE + IDENTIFIER_VALUE | IDENTIFIER_TYPE values (exact): CUSIP, FIGI, Valoren, ISIN, RIC, SMCP ID. As FILTER: "tranche with CUSIP XXX" → IDENTIFIER_TYPE='CUSIP' AND IDENTIFIER_VALUE='XXX'. Include (+TICKER) in SELECT when asked "with identifiers" | both | = / projection |
 
 ## 7. Brokers & syndicate (branch-aware)
@@ -155,7 +178,11 @@ correct: REGEXP_LIKE(col, '(^| \| )CITI', 'i')     WRONG: '(^|\|)CITI'
 - No CONNECT BY LEVEL token splitting (timeouts).
 
 ## 8. Time
-Sargable ranges only: `PRICING_TS >= DATE '2025-01-01' AND PRICING_TS < DATE '2026-01-01'`. Never TO_CHAR/EXTRACT/TRUNC on PRICING_TS in WHERE. Last 12 months: `>= ADD_MONTHS(SYSDATE,-12)`. This week (closed): `>= TRUNC(<ref>,'IW') AND < TRUNC(<ref>,'IW')+7`. Q1=Jan–Mar, Q2=Apr–Jun, Q3=Jul–Sep, Q4=Oct–Dec. **Any period up to today = history — just query it; never call it "the future".** Genuinely future → explain + offer history.
+
+**⚠ YOU DO NOT KNOW TODAY'S DATE. Your training data ends before now, so your instinct about "the current year" is WRONG and must never be used.** The ONLY authority on today is `current_date` (or `as_of_date`) in the `domain_config` returned by `text2sql_query_context` — read it first and use it for every relative expression ("today", "this year", "this quarter", "last 12 months", "YTD"). **A requested year/quarter that is <= that date is HISTORY: query it normally.** Never tell a user a period is "in the future", "not yet available", or "I can only search prior years" based on your own sense of time — if the date is not clearly beyond `current_date`, just run the query.
+
+Sargable ranges only: `PRICING_TS >= DATE '2025-01-01' AND PRICING_TS < DATE '2026-01-01'`. Never TO_CHAR/EXTRACT/TRUNC on PRICING_TS in WHERE. Last 12 months: `>= ADD_MONTHS(SYSDATE,-12)`. This week (closed): `>= TRUNC(<ref>,'IW') AND < TRUNC(<ref>,'IW')+7`. Q1=Jan–Mar, Q2=Apr–Jun, Q3=Jul–Sep, Q4=Oct–Dec. **Any period up to today = history — just query it; never call it "the future".**
+**PRICING_TS vs SETTLEMENT_TS and the future:** a future PRICING_TS window is genuinely unknowable (deals aren't priced yet) → explain + offer history. But **a future SETTLEMENT_TS is completely normal and VALID — priced deals settle days later. "What settles next week / this month", "unsettled deals", "settlement pipeline" are legitimate forward-looking queries: run them.** Never refuse a settlement-window ask for being "in the future". NULL SETTLEMENT_TS = not yet scheduled (common on DCM) — mention it rather than dropping those rows silently.
 
 ## 9. Cannot answer (refuse instantly, zero tools, offer plan B)
 

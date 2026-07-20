@@ -195,8 +195,34 @@ prompts:
       Canonical top-N dedupe shape (the ONLY shape): SELECT DISTINCT subquery
       -> ORDER BY metric DESC -> FETCH FIRST N. Never ROW_NUMBER()/window
       functions for plain top-N dedupe (whole-view sort, execution failures);
-      windows only for per-group ranking asks, always bounded by
-      PRODUCT + date/entity filters.
+      windows only for per-group ranking / share-of-total, always bounded by
+      PRODUCT + date/entity filters. NEVER self-join the view (all deal +
+      tranche + order facts are already on one row); "investors in both deals"
+      = GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID)=2.
+
+      MONEY INTEGRITY (both are silent-wrong-answer traps):
+      - No FX column exists. Any SUM/AVG of DEAL_SIZE / TRANCHE_SIZE / AMT must
+        filter a single CURRENCY or GROUP BY CURRENCY — never total across
+        mixed currencies.
+      - ALLOCATION is SHARES on ECM but a MONEY amount on DCM. Never SUM it
+        across PRODUCT IN ('ECM','DCM'); split with GROUP BY PRODUCT or use the
+        per-product metric (ECM=ALLOCATION, DCM=AMT).
+
+      Derived metrics (always divide with NULLIF(x,0)):
+      coverage/oversubscription = SUM(DEMAND_QTY) / NULLIF(TO_NUMBER(
+        TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR),0) at tranche grain |
+      fill/hit rate = SUM(ALLOCATION)/NULLIF(SUM(DEMAND_QTY),0) per GPNUM |
+      share of book = investor SUM / NULLIF(SUM(...) OVER (),0), same metric
+        and grain both sides | investor count = COUNT(DISTINCT GPNUM), never
+        COUNT(*) | order count = DCM COUNT(DISTINCT ORDER_ID), ECM
+        COUNT(DISTINCT INVESTOR_NAME).
+
+      Column tie-breaks: generic status ask -> DEAL_STATUS (EXECUTION_STATUS
+      only when the user says "execution"); coarse security class ->
+      EQUITY_TYPE, depositary/ADR/GDR/rights wording -> PRODUCT_TYPE.
+      SETTLEMENT_TS in the FUTURE is valid (priced deals settle later) — never
+      refuse a settlement-window ask as "future"; only future PRICING_TS is
+      unknowable.
 
 # -- Entity search (server-side SQL; unchanged from v1) ------------------
 entity_search:
