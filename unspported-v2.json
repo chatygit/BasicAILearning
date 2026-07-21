@@ -56,34 +56,6 @@
       "user_message": "Matched order status is not available in this dataset. I can filter orders by deal status (Priced/Settled/Closed) or investor category instead."
     },
     {
-      "id": "investor_region_country",
-      "patterns": [
-        "investor region is usa",
-        "investor region is non usa",
-        "investor region non-usa",
-        "investor country",
-        "usa-based investors",
-        "usa based investors",
-        "us based investors",
-        "usa based",
-        "us based",
-        "non-usa investors",
-        "investors from usa",
-        "investors from emea",
-        "investors based in",
-        "usa orders",
-        "us orders",
-        "orders from usa",
-        "orders from us investors",
-        "us investors",
-        "investors in usa",
-        "investor region usa",
-        "investor region"
-      ],
-      "reason": "VW_DEAL_ORDER_SUMMARY does not have an investor region or investor country column. Investor geography is not stored in this view. Do NOT substitute TRANCHE_REGION/DEAL_REGION for investor-region intent \u2014 those are the deal/tranche geography, not the investor's.",
-      "user_message": "I'm unable to filter by investor region or investor country \u2014 those fields are not in this dataset (TRANCHE_REGION is the deal/tranche region, not the investor's region). I can filter by investor category (Long Only, Hedge Fund, etc.) or by deal/tranche region instead. Would that work?"
-    },
-    {
       "id": "ttw_orders",
       "patterns": [
         "TTW",

@@ -170,12 +170,25 @@ prompts:
          dedupe by DEAL_ID; tranche-level by DEAL_ID+TRANCHE_ID; then
          aggregate/rank/limit. ORDER_ID is DCM-only (ECM grain =
          DEAL_ID+INVESTOR_NAME).
+      B2. The SELECT column list IS the dedupe grain (biggest duplicate-row
+         trap): SELECT DISTINCT only collapses rows identical across the LISTED
+         columns, so any column finer than the ask re-introduces duplicates.
+         DEAL listing -> only deal-level columns (no tranche/order columns);
+         TRANCHE listing -> add tranche columns, still no order/investor
+         columns; order/investor columns (ORDER_ID, ORDER_TYPE, IOI_TYPE,
+         GPNUM, INVESTOR_NAME, AMT, ALLOCATION, DEMAND_QTY) belong only in an
+         order-level query. Never list order columns in a deal/tranche listing.
       C. Investor -> WHERE GPNUM=value; Issuer -> WHERE GFCID=value.
       D. Time: sargable PRICING_TS ranges only (no TO_CHAR/EXTRACT/TRUNC in
          WHERE). Year: >= DATE 'YYYY-01-01' AND < DATE 'YYYY+1-01-01'.
          Last 12 months: ADD_MONTHS(SYSDATE,-12). Week: closed window
          >= TRUNC(ref,'IW') AND < TRUNC(ref,'IW')+7.
-      E. Region: TRANCHE_REGION default (NAM/EMEA/APAC/LATAM); DEAL_REGION
+      E0. Investor geography IS supported via INVESTOR_REGION (values like
+         'United States','Germany','EU'); "US investors"/"investors based in X"
+         -> INVESTOR_REGION LIKE. Keep it DISTINCT from the deal's region.
+         IOI type (LIMIT/MARKET/SCALED) -> IOI_TYPE; order handling
+         (OTT/AWAY/REGULAR) -> ORDER_TYPE.
+      E. Region: TRANCHE_REGION default (NAM/EMEA/APAC); DEAL_REGION
          (values AMER/EMEA/APAC) only for explicit deal-level asks; the old
          REGION column was removed — never emit REGION.
       F. Broker/syndicate: branch-aware per DOMAIN_VIEW_BUILD_NOTES and

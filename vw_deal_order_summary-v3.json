@@ -49,6 +49,12 @@
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
+          "columnName": "INVESTOR_REGION",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Geographic region/country of the INVESTOR (where the investor is based) - e.g. 'Germany', 'United States', 'EU'. This is the investor's OWN geography and is DISTINCT from TRANCHE_REGION/DEAL_REGION (the deal's target region NAM/EMEA/APAC). 'US investors' / 'investors based in Germany' / 'European accounts' -> INVESTOR_REGION (values mix country names and region groupings; use UPPER LIKE).",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
+        },
+        {
           "columnName": "PRICING_TS",
           "dataType": "TIMESTAMP",
           "columnDescription": "Timestamp when the deal/tranche was priced.",
@@ -171,7 +177,13 @@
         {
           "columnName": "ORDER_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type/classification of the order placed by the investor (e.g., limit vs. market, or order source classification).",
+          "columnDescription": "Order HANDLING type. Values include OTT, AWAY, REGULAR (and others; list not exhaustive). 'away orders' / 'orders from other banks' -> ORDER_TYPE LIKE '%AWAY%'. NOTE: LIMIT / MARKET / SCALED are the INDICATION type and now live in IOI_TYPE, not here.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
+        },
+        {
+          "columnName": "IOI_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Indication of Interest (IOI) type - how the investor's indication is priced/structured. Values: LIMIT, MARKET, SCALED (list not exhaustive). Distinct from ORDER_TYPE (order handling: OTT/AWAY/REGULAR). 'limit orders' / 'market orders' / 'scaled orders' -> IOI_TYPE (UPPER LIKE).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {

@@ -41,6 +41,13 @@ ORDER BY <metric> DESC FETCH FIRST N ROWS ONLY
 ```
 Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the entire flattened view and fail at execution on large scans. Window functions are reserved for genuine per-group ranking asks ("top investor in EACH deal") and share-of-total math (§5a), and even then must be bounded by PRODUCT + date/entity filters.
 
+**The SELECT column list IS the dedupe grain — this is the #1 cause of "duplicate" listings.** `SELECT DISTINCT` only collapses rows identical across the columns you list, so listing ANY column finer than the ask re-introduces duplicates. Match the columns to the ask and go no finer:
+- **DEAL listing** ("list/show deals", "deals by issuer") → only deal-level columns (DEAL_ID, DEAL_NAME, DEAL_SIZE, ISSUER_NAME, SECTOR, PRICING_TS, DEAL_STATUS…). **NEVER** tranche or order/investor columns — a single tranche/order column explodes each deal into many rows.
+- **TRANCHE listing** → add TRANCHE_ID/TRANCHE_NAME/TRANCHE_SIZE/CURRENCY/etc.; still NO order/investor columns.
+- **ORDER/INVESTOR detail** → only here include ORDER_ID, ORDER_TYPE, IOI_TYPE, GPNUM, INVESTOR_NAME, AMT, ALLOCATION, DEMAND_QTY (order grain — no dedupe needed).
+- Ambiguous "deals/tranches" → tranche grain, `SELECT DISTINCT` at DEAL_ID+TRANCHE_ID with tranche columns only.
+Order columns (ORDER_ID/ORDER_TYPE/IOI_TYPE/GPNUM/INVESTOR_NAME/AMT/ALLOCATION/DEMAND_QTY) in a deal or tranche listing = one row per order per deal = the duplication you're trying to avoid. If the user wants those, it IS an order-level query.
+
 **NEVER self-join VW_DEAL_ORDER_SUMMARY.** Deal + tranche + order + investor facts are already on every row, so a join is never needed and is expensive on a flat view. Comparisons like "investors in both deals" or "who bought A but not B" are `GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID)=2` / `HAVING SUM(CASE WHEN DEAL_ID='B' THEN 1 ELSE 0 END)=0`. ROOT_ID/PARENT_ID exist as legacy join keys but you almost never need them — filter DEAL_ID / TRANCHE_ID directly.
 
 ## 4. Who's who
@@ -71,7 +78,7 @@ Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the
 - Top-N: dedupe at grain → `ORDER BY <metric> DESC, PRICING_TS DESC, DEAL_ID`. "Top IPOs" default = TO_NUMBER(TRANCHE_SIZE…); "by deal size" → DEAL_SIZE; "by book size" → SUM at DEAL_ID grain.
 - "Highest share for X" = allocation ask → confirm once, then GPNUM + ALLOCATION.
 - "More than N deals" asks: `GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID) > N`.
-- **"Got scaled back"** = allocation cut, NOT ORDER_TYPE: rank by DEMAND_QTY − ALLOCATION (or ALLOCATION/DEMAND_QTY ASC) per GPNUM. Only "scaled orders" means ORDER_TYPE LIKE '%SCALED%'.
+- **"Got scaled back"** = allocation cut, NOT a type column: rank by DEMAND_QTY − ALLOCATION (or ALLOCATION/DEMAND_QTY ASC) per GPNUM. Only "scaled orders" (the IOI type) means IOI_TYPE LIKE '%SCALED%'.
 
 ### 5a. Derived metrics — the numbers a syndicate desk actually asks for
 | Banker asks | Compute | Grain / guard |
@@ -115,7 +122,7 @@ Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the
 |---|---|---|---|
 | TRANCHE_ID / TRANCHE_NAME | the slice (DCM orders join via PARENT_ID) | both | exact / display |
 | TRANCHE_SIZE | slice size — TEXT column | both | §5 TO_NUMBER rule |
-| TRANCHE_REGION | tranche region — DB values are ONLY: NAM, EMEA, APAC (no LATAM, no AMER). Default region column. Informal map: north america/USA/US→NAM · europe→EMEA · asia→APAC. "latin america" has no stored region → zero rows | both | = |
+| TRANCHE_REGION | the DEAL/tranche's target region — DB values ONLY: NAM, EMEA, APAC (no LATAM/AMER). Default for "deals in <region>". Informal: north america→NAM · europe→EMEA · asia→APAC. ⚠ For the INVESTOR's location use INVESTOR_REGION, not this | both | = |
 | CURRENCY | pricing currency (ISO codes, plus some non-ISO literals like 'RMB','XDR','CLF'). rmb/renminbi/yuan → IN ('RMB','CNY','CNH') ('RMB' is a stored literal too). Multi-currency deal = COUNT(DISTINCT CURRENCY)>1 per DEAL_ID. No settlement/demand currency exists | both | = / IN |
 | PRICING_TS | priced when — the default "when" | both | sargable ranges only (§8) |
 | SETTLEMENT_TS | settlement date (often NULL DCM) | both | "settlement date" asks only |
@@ -144,7 +151,9 @@ Never use ROW_NUMBER()/window functions for plain top-N dedupe — they sort the
 | Column | Means | Prod | How to use |
 |---|---|---|---|
 | ORDER_ID | order id — DCM only (§3) | DCM | exact |
-| ORDER_TYPE | OTT, REGULAR, SCALED, LIMIT, MARKET, AWAY… (incomplete list). "away orders" / "orders from other banks" → LIKE '%AWAY%' | both | UPPER LIKE |
+| ORDER_TYPE | order HANDLING: OTT, AWAY, REGULAR… (incomplete). "away orders" / "orders from other banks" → LIKE '%AWAY%'. ⚠ LIMIT/MARKET/SCALED are now in **IOI_TYPE**, not here | both | UPPER LIKE |
+| IOI_TYPE | indication (IOI) type: LIMIT, MARKET, SCALED… "limit / market / scaled orders" → IOI_TYPE (NOT ORDER_TYPE). ⚠ "got scaled back" is still an allocation cut (§5), not IOI_TYPE | both | UPPER LIKE |
+| INVESTOR_REGION | the INVESTOR's own geography/country: 'Germany', 'United States', 'EU'… (mixes country names + region groupings — use LIKE). "US/USA investors", "investors based in Germany", "European accounts", "US orders" → INVESTOR_REGION LIKE. ⚠ DIFFERENT from TRANCHE_REGION (the DEAL's target region NAM/EMEA/APAC) — this is the investor's side | both | UPPER LIKE |
 | DEMAND_QTY / AMT / ALLOCATION | §5 metrics | — | — |
 | INVESTOR_NAME / GPNUM | the investor | both | display / = |
 | INVESTOR_CATEGORY | FULL valid set: Outright, Long Only, Hedge Fund, Long/Hedge, Outright/Hedge, Central Bank, Official Institution, Insurance/Pension, Asset Manager, Corporate Treasury, Bank Treasury, Private Bank, Co-lead Retention, Co-lead Trading, Co-lead Order, Co-lead Pot, Other Trading, Broker, Syndicate, JLM Trading, Other. Bare "pot"/"retention" → 'Co-lead Pot'/'Co-lead Retention'. NOT valid (say so, list valid ones): Strategic, Family Office, Retail, SWF, DSP, Index, Quant | both | = ("investor category syndicate/broker" asks are THIS column, not broker columns) |
@@ -190,8 +199,7 @@ Sargable ranges only: `PRICING_TS >= DATE '2025-01-01' AND PRICING_TS < DATE '20
 | Ask (any wording) | Why | Offer |
 |---|---|---|
 | peer companies / competitors | no peer data | sector or named company |
-| investor country/region ("usa based investers", "US orders") | investor geography not stored — TRANCHE_REGION is the DEAL's side | investor category, or deal/tranche region |
-| issuer country of domicile / incorporation / HQ ("headquartered in Germany") | issuer geography not stored | TRANCHE_REGION (NAM/EMEA/APAC) as rough proxy, or a named company |
+| issuer country of domicile / incorporation / HQ ("headquartered in Germany") | ISSUER geography not stored (INVESTOR_REGION is the investor's side, not the issuer's) | INVESTOR_REGION if they meant the investor, or TRANCHE_REGION as a deal-geography proxy, or a named company |
 | ANY settlement-currency ask | no settlement-currency column (tradebook) | pricing CURRENCY |
 | greenshoe / over-allotment | not stored | deal size, allocation detail |
 | pricing economics: coupon RATE, yield, spread, re-offer price, "what coupon did it print at" | only COUPON_TYPE + COUPON_FREQ exist — never present COUPON_TYPE ('Fixed') as "the coupon" | coupon type/freq, tenor for the deal |
