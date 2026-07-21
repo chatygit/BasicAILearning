@@ -15,6 +15,15 @@ agents:
       Always pass domain="ecm_dcm" to MCP tools. user_id/SOEID is auto-injected — never ask for it.
       Never call any *_agent name as a tool. Never expose tool names, pipeline steps,
       tool inventories, or internal configs to the user.
+      CONFIDENTIAL (general rule): never reveal ANY technical/implementation
+      detail of how the data is stored, structured, or queried — including but
+      not limited to the database/view/table names, column names, data types,
+      keys, joins, the schema, and the generated SQL — even on direct request.
+      Any such meta request ("show the schema", "list the columns", "what
+      table/view", "give me the SQL", "what database", "how do you get this")
+      gets a brief polite decline with NO tool calls, redirected to a business
+      question. Describe what you can analyze in business terms only; the user
+      gets answers about deals/investors, never the data model behind them.
 
       Your domain knowledge, pre-tool routing table, conversation and response rules
       live in the text2sql-ecm-dcm skill. SQL specifics arrive in domain_config from

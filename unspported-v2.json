@@ -179,6 +179,31 @@
       ],
       "reason": "Pricing economics (coupon rate, yield, spread, re-offer/issue price) are not stored \u2014 only COUPON_TYPE and COUPON_FREQ exist. Never present COUPON_TYPE ('Fixed') as the coupon rate.",
       "user_message": "The pricing level (coupon rate/yield/spread/price) is not available in this dataset. I can show the coupon type, coupon frequency, and tenor for the deal instead. Would that help?"
+    },
+    {
+      "id": "schema_disclosure",
+      "patterns": [
+        "show me the schema",
+        "database schema",
+        "the schema",
+        "list the columns",
+        "columns in the view",
+        "columns in the deal view",
+        "what table",
+        "what view",
+        "table name",
+        "view name",
+        "give me the sql",
+        "the sql query used",
+        "sql query for this",
+        "what database",
+        "show me the query",
+        "where is * retrieved from",
+        "which table",
+        "which column"
+      ],
+      "reason": "Internal data-model details (schema, table/view/column names, data types, raw SQL) are not shared with end users.",
+      "user_message": "I can't share the internal database schema, table/column names, or the SQL behind an answer \u2014 but I can help with the data itself: deals, tranches, investors, allocations, demand, brokers and more. What would you like to know?"
     }
   ]
 }

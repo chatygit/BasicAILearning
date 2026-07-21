@@ -209,6 +209,13 @@ rules:
     error_message: "Totalling money across mixed currencies is meaningless — there is no FX conversion in this view. Either filter a single currency (WHERE CURRENCY = 'USD') or add CURRENCY to the GROUP BY so each currency is totalled separately."
     description: "Blocks SUM/AVG of DEAL_SIZE/TRANCHE_SIZE/AMT without a CURRENCY filter or GROUP BY CURRENCY."
 
+  - name: "AMT is the DCM metric — use ALLOCATION for ECM"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\b(?:sum|avg)\s*\(\s*amt\s*\))(?=.*\bproduct\s*=\s*''ecm'').+'
+    match_should_fail: true
+    error_message: "AMT is the DCM investor-side money metric and is empty on ECM rows. For an ECM investor amount ('how much did X invest/order/get'), use SUM(ALLOCATION), not SUM(AMT)."
+    description: "Blocks SUM/AVG(AMT) on ECM-scoped queries where ALLOCATION is the correct metric."
+
   - name: "ALLOCATION must not be summed across both products"
     type: "regex"
     value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bsum\s*\(\s*allocation\s*\))(?=.*\bproduct\s+in\s*\(\s*''(?:ecm|dcm)''\s*,\s*''(?:ecm|dcm)''\s*\))(?!.*\bgroup\s+by\b[^;]*\bproduct\b).+'

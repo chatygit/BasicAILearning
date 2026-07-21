@@ -75,7 +75,7 @@
         {
           "columnName": "ALLOCATION",
           "dataType": "NUMBER",
-          "columnDescription": "Final allocation - the confirmed and approved distribution of securities to an INVESTOR by the syndicate. For ECM, corresponds to allocation.privateAllocation in the UI. For DCM, it is currently mapped from the order amount fields.",
+          "columnDescription": "Final allocation to the investor. This is the ECM investor-side metric (a SHARE count on ECM). On DCM it is currently mapped from order-amount fields (a money value). 'How much did investor X get/invest' on ECM -> SUM(ALLOCATION). Because the unit differs by product (ECM shares vs DCM money), never SUM ALLOCATION across both products together - GROUP BY PRODUCT or scope to one.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -177,13 +177,13 @@
         {
           "columnName": "DEMAND_QTY",
           "dataType": "NUMBER",
-          "columnDescription": "Order demand quantity - the amount of securities requested by the investor before allocation. Compare with ALLOCATION for the final approved amount.",
+          "columnDescription": "Demand quantity - shares/amount the investor asked for (indication), before allocation. ECM and DCM. 'Demand'/'indication in shares' -> DEMAND_QTY (never ALLOCATION or AMT). Compare with ALLOCATION for the final approved amount.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "AMT",
           "dataType": "NUMBER",
-          "columnDescription": "Order amount - the monetary amount associated with the investor's order.",
+          "columnDescription": "Order/indication MONEY amount. This is the DCM investor-side money metric. For ECM rows AMT is generally empty/zero - use ALLOCATION for ECM investor amounts. 'How much did investor X invest/order': ECM -> SUM(ALLOCATION), DCM -> SUM(AMT). Never SUM(AMT) on an ECM-scoped query.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
