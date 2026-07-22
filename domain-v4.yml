@@ -109,8 +109,8 @@ prompts:
     DOMAIN_COLUMN_CRITERIA_POLICY: |
       Map user criteria to columns via DOMAIN_COLUMN_INTENT_MAP_JSON; resolve
       competing columns via DOMAIN_COLUMN_PRIORITY_RULES_JSON (ask only if
-      material ambiguity remains). Multiple conditions AND by default. Exact
-      match for coded fields; LIKE only for free text. Always explicit
+      material ambiguity remains). Multiple conditions AND by default. Coded fields: UPPER(col)=UPPER(closest known literal); a plausible but
+      unlisted value -> try LIKE (value lists may be incomplete). Free text -> LIKE. Always explicit
       PRODUCT + date predicates.
     DOMAIN_UNSUPPORTED_INTENTS: |
       Patterns and user replies: DOMAIN_UNSUPPORTED_INTENTS_JSON. Scan the
@@ -120,8 +120,8 @@ prompts:
     DOMAIN_FAST_PATH_ROUTING_POLICY: |
       Before any tool call: 1) unsupported -> reply per JSON, no tools for
       that part. 2) fast-path match (DOMAIN_FAST_PATH_INTENTS_JSON) with no
-      named entity -> skip entity_search/fuzzy entirely: query_context ->
-      validate -> executor. 3) named investor/issuer/deal -> entity_search
+      named entity -> skip entity_search/fuzzy entirely: query_context -> executor
+      (server-side validation; fix-once on error). 3) named investor/issuer/deal -> entity_search
       once per name (non-terminal), then continue. Broker/syndicate/rating
       asks and taxonomy/top-N asks with no named entity NEVER call
       entity_search. Metric defaults, sector/region normalizations:
@@ -135,17 +135,18 @@ prompts:
       0) entity_search is NON-terminal: on resolved ID follow the response's
          next_action to query_context (pass gfcid/gpnum/filter_criteria as
          parameters) in the SAME turn. Do not stop at resolution output.
-      1) Budget (hard cap): max 2 text2sql_validate_sql calls and 2 SQL
-         regeneration attempts per turn; the executor re-validates as
-         backstop. Execute immediately after is_valid=true; stop after the
-         first non-empty result; never re-run query_context for the same ask.
+      1) Budget (hard cap): go straight to the executor — it validates
+         server-side. On a validation error fix once and re-execute: max 2
+         executor attempts and 2 SQL regenerations per turn (validate_sql is
+         optional). Stop after the first non-empty result; follow-ups reuse
+         the conversation's existing schema_context.
       2) Zero rows -> one targeted refinement suggestion, then wait. No
          chained executor calls.
       3) Top-N on flattened rows: dedupe at business grain (DEAL_ID or
          DEAL_ID+TRANCHE_ID) FIRST, then ORDER BY <metric> DESC,
          PRICING_TS DESC, DEAL_ID. Deal size = DEAL_SIZE column (never
-         SUM(TRANCHE_SIZE)); book size = SUM(TO_NUMBER(TRANCHE_SIZE ...))
-         at DEAL_ID grain.
+         SUM(TRANCHE_SIZE)); book size (total demand) = SUM(DEMAND_QTY) at
+         DEAL_ID grain; tranche/issue size = TO_NUMBER(TRANCHE_SIZE ...).
       4) B&D/billed asks: SQL must include BROKER_CODE or
          SYNDICATE_MEMBER_NAME context; never BND_BROKER-only filters.
       5) "with security identifiers" -> include IDENTIFIER_TYPE,
@@ -189,7 +190,7 @@ prompts:
          IOI type (LIMIT/MARKET/SCALED) -> IOI_TYPE; order handling
          (OTT/AWAY/REGULAR) -> ORDER_TYPE.
       E. Region: TRANCHE_REGION default (NAM/EMEA/APAC); DEAL_REGION
-         (values AMER/EMEA/APAC) only for explicit deal-level asks; the old
+         (values NAM/EMEA/APAC) only for explicit deal-level asks; the old
          REGION column was removed — never emit REGION.
       F. Broker/syndicate: branch-aware per DOMAIN_VIEW_BUILD_NOTES and
          DOMAIN_BROKER_ALIASES_JSON. Solo = ECM only
@@ -229,8 +230,9 @@ prompts:
       coverage/oversubscription = SUM(DEMAND_QTY) / NULLIF(TO_NUMBER(
         TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR),0) at tranche grain |
       fill/hit rate = SUM(ALLOCATION)/NULLIF(SUM(DEMAND_QTY),0) per GPNUM |
-      share of book = investor SUM / NULLIF(SUM(...) OVER (),0), same metric
-        and grain both sides | investor count = COUNT(DISTINCT GPNUM), never
+      share of book = SUM(CASE WHEN GPNUM=<x> THEN metric END) /
+        NULLIF(SUM(metric),0) over deal-scoped rows (NEVER filter the investor
+        in WHERE — denominator becomes 100%) | investor count = COUNT(DISTINCT GPNUM), never
         COUNT(*) | order count = DCM COUNT(DISTINCT ORDER_ID), ECM
         COUNT(DISTINCT INVESTOR_NAME).
 
@@ -478,9 +480,9 @@ tool_descriptions:
     resolve once each. Generate carefully ONCE using
     DOMAIN_COLUMN_INTENT_MAP_JSON + DOMAIN_COLUMN_PRIORITY_RULES_JSON and
     the mandatory filters (PRODUCT, sargable PRICING_TS, dedupe at grain,
-    GPNUM/GFCID doctrine, branch-aware broker patterns). Validate at most
-    twice, execute immediately after passing, stop at the first non-empty
-    result. Pending blocking clarification -> no tool execution until the
+    GPNUM/GFCID doctrine, branch-aware broker patterns). Go straight to the executor (it validates server-side); on a validation
+    error fix once and re-execute (max 2 executor attempts), stop at the
+    first non-empty result. Pending blocking clarification -> no tool execution until the
     user confirms.
   data_presenter: >-
     Summarizes query results: answer-first narrative, markdown table with

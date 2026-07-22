@@ -11,7 +11,6 @@
         "holds stock in peer",
         "investors in peer"
       ],
-      "reason": "No peer company relationship graph or peer mapping table is available in this domain. Peer relationships require an external entity graph that is not part of VW_DEAL_ORDER_SUMMARY.",
       "user_message": "I'm unable to answer questions about peer companies \u2014 this domain does not have a peer company relationship graph. I can search for investors in a specific sector or named company instead. Would you like that?"
     },
     {
@@ -26,8 +25,7 @@
         "settled in currency",
         "settlement ccy"
       ],
-      "reason": "VW_DEAL_ORDER_SUMMARY has SETTLEMENT_TS (date) but no SETTLEMENT_CURRENCY column at all. Settlement currency data lives in the tradebook, which is a separate source.",
-      "user_message": "I can't filter by settlement currency \u2014 the settlement currency field is not available in this dataset (it comes from the tradebook). I can filter by deal pricing currency (CURRENCY column) instead. Would that work?"
+      "user_message": "I can't filter by settlement currency \u2014 it isn't available in this dataset. I can filter by the deal's pricing currency instead. Would that work?"
     },
     {
       "id": "issuer_country_domicile",
@@ -38,11 +36,9 @@
         "incorporated in",
         "country of incorporation",
         "issuer country",
-        "based in usa",
         "headquartered in"
       ],
-      "reason": "VW_DEAL_ORDER_SUMMARY does not have issuer country of domicile or country of incorporation columns. Issuer geography is not stored in this view.",
-      "user_message": "I'm unable to filter by issuer country of domicile or incorporation \u2014 those fields are not available in the deal orderbook view. I can filter by deal region (TRANCHE_REGION: NAM, EMEA, APAC) as a geographic proxy. Would that work?"
+      "user_message": "I'm unable to filter by the issuer's country of domicile or incorporation \u2014 that isn't tracked. I can use the deal's region (North America / EMEA / APAC) as a geographic proxy, or if you meant where the INVESTORS are based (e.g. US-based investors), that IS supported \u2014 just say which."
     },
     {
       "id": "matched_orders",
@@ -52,7 +48,6 @@
         "orders that were matched",
         "show matched"
       ],
-      "reason": "No order match/matched status column exists in VW_DEAL_ORDER_SUMMARY.",
       "user_message": "Matched order status is not available in this dataset. I can filter orders by deal status (Priced/Settled/Closed) or investor category instead."
     },
     {
@@ -63,7 +58,6 @@
         "take the wall",
         "take-the-wall"
       ],
-      "reason": "No TTW (Take the Wall) flag column exists in VW_DEAL_ORDER_SUMMARY.",
       "user_message": "TTW (Take the Wall) order information is not available in this dataset \u2014 the TTW flag is not exposed in the deal orderbook view. Please raise this with the product team if it is needed."
     },
     {
@@ -75,7 +69,6 @@
         "bank-level allocation",
         "which bank allocated"
       ],
-      "reason": "VW_DEAL_ORDER_SUMMARY does not have a column attributing allocation to a specific syndicate bank. ALLOCATION is an investor-side metric; per-bank allocation attribution is not in this view.",
       "user_message": "Per-bank allocation attribution is not available in this dataset \u2014 I can't tell you how much each syndicate bank allocated. I can show you total allocation per investor for a deal, or show you which banks were in the syndicate."
     },
     {
@@ -88,10 +81,9 @@
         "show all cancelled",
         "show all deleted"
       ],
-      "reason": "VW_DEAL_ORDER_SUMMARY has DEAL_STATUS which includes 'cancelled'/'deleted' at the DEAL level, not at the individual ORDER level. Per-order cancellation/deletion status is not in this view.",
-      "user_message": "Order-level cancellation/deletion status is not available in this view. I can filter deals by deal status (cancelled/deleted) if you meant deal-level status. Would that work?",
+      "user_message": "Order-level cancellation/deletion status isn't available. I can filter deals by deal-level status (cancelled/deleted) if you meant that. Would that work?",
       "partial_support": {
-        "supported": "Filter DEAL_STATUS IN ('cancelled','deleted') for deal-level cancelled/deleted deals",
+        "supported": "Filter UPPER(DEAL_STATUS) IN ('CANCELLED','DELETED') for deal-level cancelled/deleted deals",
         "column": "DEAL_STATUS"
       }
     },
@@ -102,7 +94,6 @@
         "selling restrictions",
         "sell restriction in"
       ],
-      "reason": "No selling-restriction column exists in VW_DEAL_ORDER_SUMMARY.",
       "user_message": "Selling-restriction data by country is not available in this dataset. I can filter by regulatory category (144A/Reg S) or delivery type instead. Would that help?"
     },
     {
@@ -112,7 +103,6 @@
         "by target market",
         "grouped by target market"
       ],
-      "reason": "No target-market column exists in VW_DEAL_ORDER_SUMMARY.",
       "user_message": "Target-market grouping is not available in this dataset. I can group by tranche region (NAM/EMEA/APAC) instead. Would that work?"
     },
     {
@@ -122,8 +112,7 @@
         "more than one hedge security",
         "hedge security count"
       ],
-      "reason": "No hedge-securities attribute exists in VW_DEAL_ORDER_SUMMARY.",
-      "user_message": "Hedge-security counts are not available in this dataset. For convertibles I can filter EQUITY_TYPE (Convertible Bonds/Preferred). Would that help?"
+      "user_message": "Hedge-security counts aren't available in this dataset. For convertibles I can filter by security type (convertible bonds / convertible preferred). Would that help?"
     },
     {
       "id": "greenshoe_overallotment",
@@ -134,7 +123,6 @@
         "overallotment",
         "over allotment"
       ],
-      "reason": "No greenshoe/over-allotment column exists in VW_DEAL_ORDER_SUMMARY. Not related to ESG_BOND.",
       "user_message": "Greenshoe/over-allotment data is not available in this dataset. I can show deal size or allocation detail for the deal instead."
     },
     {
@@ -142,14 +130,19 @@
       "patterns": [
         "coupon rate",
         "what coupon",
-        "yield",
-        "spread",
         "re-offer price",
         "reoffer price",
         "priced at",
-        "issue price"
+        "issue price",
+        "yield of",
+        "yield on",
+        "what yield",
+        "yield to maturity",
+        "yield was",
+        "spread over",
+        "reoffer spread",
+        "spread of the"
       ],
-      "reason": "Pricing economics (coupon rate, yield, spread, re-offer/issue price) are not stored \u2014 only COUPON_TYPE and COUPON_FREQ exist. Never present COUPON_TYPE ('Fixed') as the coupon rate.",
       "user_message": "The pricing level (coupon rate/yield/spread/price) is not available in this dataset. I can show the coupon type, coupon frequency, and tenor for the deal instead. Would that help?"
     },
     {
@@ -174,7 +167,6 @@
         "which table",
         "which column"
       ],
-      "reason": "Internal data-model details (schema, table/view/column names, data types, raw SQL) are not shared with end users.",
       "user_message": "I can't share the internal database schema, table/column names, or the SQL behind an answer \u2014 but I can help with the data itself: deals, tranches, investors, allocations, demand, brokers and more. What would you like to know?"
     }
   ]

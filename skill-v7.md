@@ -71,12 +71,12 @@ Order columns (ORDER_ID/ORDER_TYPE/IOI_TYPE/GPNUM/INVESTOR_NAME/AMT/ALLOCATION/D
 | allocation, alocation, alloc, got/received shares | **ALLOCATION** | what the investor received |
 | order amount / order size (DCM), indication amount, "invested", "how much did X put in/invest" | **ECM → ALLOCATION, DCM → AMT** | AMT is DCM-only money (≈empty on ECM). For ECM investor amounts ALWAYS SUM(ALLOCATION), never SUM(AMT). "invest/investment" is investor-side → §4 GPNUM |
 | deal size, biggest deal, deal value | **DEAL_SIZE** | deal-level; NEVER SUM(TRANCHE_SIZE); dedupe DEAL_ID |
-| book size, tranche size, issue size | **TRANCHE_SIZE** | ⚠ stored as TEXT — always `TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR)` before comparing/ranking/summing |
+| tranche size, issue size | **TRANCHE_SIZE** | ⚠ stored as TEXT — always `TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR)` before comparing/ranking/summing |
 | oversubscribed, coverage | SUM(DEMAND_QTY) ÷ TO_NUMBER(TRANCHE_SIZE…) | tranche grain |
 
 - Bare "top investors …" (no metric named): rank SUM(ALLOCATION) for ECM / SUM(AMT) for DCM — deterministic, do NOT ask.
-- Top-N: dedupe at grain → `ORDER BY <metric> DESC, PRICING_TS DESC, DEAL_ID`. "Top IPOs" default = TO_NUMBER(TRANCHE_SIZE…); "by deal size" → DEAL_SIZE; "by book size" → SUM at DEAL_ID grain.
-- "Highest share for X" = allocation ask → confirm once, then GPNUM + ALLOCATION.
+- Top-N: dedupe at grain → `ORDER BY <metric> DESC, PRICING_TS DESC, DEAL_ID`. "Top IPOs" default = TO_NUMBER(TRANCHE_SIZE…); "by deal size" → DEAL_SIZE; "by book size" → SUM(DEMAND_QTY) at DEAL_ID grain (the BOOK = total demand, NOT tranche size).
+- "Highest share for X" = allocation ask → default to SUM(ALLOCATION) per GPNUM and state the assumption in the answer (offer share-of-book §5a as a follow-up) — do NOT spend a clarification turn.
 - "More than N deals" asks: `GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID) > N`.
 - **"Got scaled back"** = allocation cut, NOT a type column: rank by DEMAND_QTY − ALLOCATION (or ALLOCATION/DEMAND_QTY ASC) per GPNUM. Only "scaled orders" (the IOI type) means IOI_TYPE LIKE '%SCALED%'.
 
@@ -85,11 +85,11 @@ Order columns (ORDER_ID/ORDER_TYPE/IOI_TYPE/GPNUM/INVESTOR_NAME/AMT/ALLOCATION/D
 |---|---|---|
 | oversubscribed, coverage, "how many times covered", "book was 3x" | SUM(DEMAND_QTY) / NULLIF(TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR),0) | tranche grain; dedupe tranche facts first |
 | fill rate, hit rate, "% of their order they got", pro-rata | SUM(ALLOCATION) / NULLIF(SUM(DEMAND_QTY),0) per GPNUM | investor grain |
-| share of book, "% of the book", "how much of the deal did X take" | investor SUM / NULLIF(SUM(...) OVER (),0) | both sides SAME metric + SAME grain |
+| share of book, "% of the book", "how much of the deal did X take" | SUM(CASE WHEN GPNUM=<x> THEN metric END) / NULLIF(SUM(metric),0) over the DEAL-scoped rows | ⚠ NEVER filter the investor in WHERE for share asks — the denominator becomes the investor alone (always 100%). WHERE scopes the deal; the investor lives only inside CASE |
 | concentration, "top 5 as % of book" | top-N sum / NULLIF(total sum,0) | dedupe before both sums |
-| book size, total demand | SUM(DEMAND_QTY) | tranche or deal grain |
+| book size, total demand, "size of the book" | SUM(DEMAND_QTY) | the BOOK is demand; the OFFERING size is TRANCHE_SIZE |
 | how many investors / accounts | COUNT(DISTINCT GPNUM) | never COUNT(*) |
-| how many orders | DCM: COUNT(DISTINCT ORDER_ID) · ECM: COUNT(DISTINCT INVESTOR_NAME) | §3 |
+| how many orders | DCM: COUNT(DISTINCT ORDER_ID) · ECM one deal: COUNT(DISTINCT INVESTOR_NAME) · ECM multi-deal window: count DISTINCT deal+investor pairs (concatenate DEAL_ID with INVESTOR_NAME) | §3 |
 | anchor order, biggest order | MAX/top DEMAND_QTY per tranche | — |
 | repeat investors, "participated in >N deals" | GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID) > N | — |
 | investors in BOTH deals | GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID) = 2 — **never self-join the view** | — |
@@ -113,7 +113,7 @@ Order columns (ORDER_ID/ORDER_TYPE/IOI_TYPE/GPNUM/INVESTOR_NAME/AMT/ALLOCATION/D
 | DEAL_SIZE | total deal size | both | §5 |
 | DEAL_STATUS | lifecycle. DB values (mixed case, WITH case-duplicates — Open/OPEN, Closed/CLOSED, announced/Announced, postponed/Postponed, priced/Priced): Settled, Final Settled, Live, Priced, Draft, Postponed, Announced, Cancelled, Confidential, Deleted, Allocated, Subject, Archived, FreeToTrade, Mandated, Private, Open, Closed. ⚠ MUST use `UPPER(DEAL_STATUS) = 'OPEN'` (upper BOTH sides) — plain `= 'Open'` silently misses the 'OPEN' rows → wrong counts. "settled/open/deleted deals" = DEAL_STATUS ask, NOT a settlement-timestamp ask. Deal-level only | both | UPPER(DEAL_STATUS)=UPPER('value') |
 | EXECUTION_STATUS | execution stage (Live/Priced/Executed/Closed/Cancelled) — overlaps DEAL_STATUS. **Tie-break: any generic "status/live/priced/closed deals" ask → DEAL_STATUS (the primary lifecycle). Use EXECUTION_STATUS ONLY when the user says "execution status"** | both | UPPER(=) |
-| DEAL_REGION | deal-level region — NAM/EMEA/APAC (earlier 'AMER' was from the unreliable schema doc — corrected) | ECM | only for explicit "deal-level region" asks |
+| DEAL_REGION | deal-level region — NAM/EMEA/APAC (never 'AMER') | ECM | only for explicit "deal-level region" asks |
 | USE_OF_PROCEEDS | why raised — "GCP" = literal 'General Corporate Purposes' | both | LIKE '%General Corporate%', '%Refinanc%', '%Green%' |
 | OFFERING_TYPE | ECM: only **'IPO'** and **'FO'** (follow-on) · DCM: benchmark, tap. ⚠ "Convertible"/"Block"/"Rights Issue" are NOT offering types | both | IN ('IPO','FO') for ECM |
 
@@ -122,7 +122,7 @@ Order columns (ORDER_ID/ORDER_TYPE/IOI_TYPE/GPNUM/INVESTOR_NAME/AMT/ALLOCATION/D
 |---|---|---|---|
 | TRANCHE_ID / TRANCHE_NAME | the slice (DCM orders join via PARENT_ID) | both | exact / display |
 | TRANCHE_SIZE | slice size — TEXT column | both | §5 TO_NUMBER rule |
-| TRANCHE_REGION | the DEAL/tranche's target region — DB values ONLY: NAM, EMEA, APAC (no LATAM/AMER). Default for "deals in <region>". Informal: north america→NAM · europe→EMEA · asia→APAC. ⚠ For the INVESTOR's location use INVESTOR_REGION, not this | both | = |
+| TRANCHE_REGION | the DEAL/tranche's target region — DB values ONLY: NAM, EMEA, APAC (no LATAM/AMER). Default for "deals in <region>". Informal: north america/usa/us/america→NAM (deal-side: "US deals/tranches") · europe→EMEA · asia→APAC. ⚠ For the INVESTOR's location use INVESTOR_REGION, not this | both | = |
 | CURRENCY | pricing currency (ISO codes, plus some non-ISO literals like 'RMB','XDR','CLF'). rmb/renminbi/yuan → IN ('RMB','CNY','CNH') ('RMB' is a stored literal too). Multi-currency deal = COUNT(DISTINCT CURRENCY)>1 per DEAL_ID. No settlement/demand currency exists | both | = / IN |
 | PRICING_TS | priced when — the default "when" | both | sargable ranges only (§8) |
 | SETTLEMENT_TS | settlement date (often NULL DCM) | both | "settlement date" asks only |
@@ -134,7 +134,7 @@ Order columns (ORDER_ID/ORDER_TYPE/IOI_TYPE/GPNUM/INVESTOR_NAME/AMT/ALLOCATION/D
 | ESG_BOND | Green, Social, Sustainability, **Sustainability-Linked** | DCM | UPPER(ESG_BOND) LIKE '%GREEN%' / '%SOCIAL%' / '%SUSTAINAB%' (catches SLB too; casing varies) |
 | REG_CATEGORY | registration: 144A, Reg S, private placement, eurobond, domestic | DCM | LIKE. **Bare "144a/reg s/3(a)(2)" asks → REG_CATEGORY. Only "<x> delivery" wording → DELIVERY_TYPE.** "SEC Registered" is not a DELIVERY_TYPE value — treat as REG_CATEGORY ask |
 | DELIVERY_TYPE | legal delivery: '144A', 'RegS', '3(a)(2) Exempt' only | DCM | = (see tie-break above) |
-| PRODUCT_TYPE | FINE-grained ECM security type: ADR, ADS, GDR, GDS, depositary receipt, Rights, Mandatory Convertible Preferred… **Tie-break vs EQUITY_TYPE: coarse security class (common stock, convertible, warrants) → EQUITY_TYPE; depositary/ADR/GDR/rights/mandatory wording → PRODUCT_TYPE. Both columns can contain 'Common Stock' — for a generic security-type ask that returns nothing from EQUITY_TYPE, retry once against PRODUCT_TYPE with LIKE** | ECM mainly | LIKE |
+| PRODUCT_TYPE | FINE-grained ECM security type: ADR, ADS, GDR, GDS, depositary receipt, Rights, Mandatory Convertible Preferred… **Tie-break vs EQUITY_TYPE: coarse security class (common stock, convertible, warrants) → EQUITY_TYPE; depositary/ADR/GDR/rights/mandatory wording → PRODUCT_TYPE. Both columns can contain 'Common Stock' — for a GENERIC security-type ask query BOTH in one pass — (UPPER(EQUITY_TYPE) LIKE stem OR UPPER(PRODUCT_TYPE) LIKE stem) — never a second-query retry** | ECM mainly | LIKE |
 | PRODUCT_CLASS | DB values (exact): Investment Grade, Preferred, Emerging Market, Covered Bond, High Yield, Agencies, CLO, LevFin Loan, Asset Backed, SSA, Taxable Muni, ABS, RMBS, CMBS, Municipals. Expansions: IG→'Investment Grade', HY→'High Yield', **EM→'Emerging Market'** (never 'EM'), levfin→'LevFin Loan', munis→'Municipals'. ⚠ 'ABS' and 'Asset Backed' are BOTH values; 'Municipals' and 'Taxable Muni' are BOTH values — if the user is generic use LIKE to catch both. "IG"/"high yield" → here, not SENIORITY | DCM mainly | = exact / LIKE when generic |
 | EQUITY_TYPE | exact DB values: 'Equity Units', 'Exchangable Notes' (sic — misspelled in data), 'Global Depository', 'Convertible Bonds', 'Common Stock', 'Convertible Preferred', 'Warrants'. **"convertible(s)" → EQUITY_TYPE LIKE '%Convertible%'** (matches both Convertible Bonds + Preferred), NEVER OFFERING_TYPE. Use the exact literal or LIKE the user's stem — never paraphrase (e.g. 'Common Stock', not 'Common Shares') | ECM | IN / LIKE |
 
@@ -143,7 +143,7 @@ Order columns (ORDER_ID/ORDER_TYPE/IOI_TYPE/GPNUM/INVESTOR_NAME/AMT/ALLOCATION/D
 |---|---|---|
 | ISSUER_NAME / GFCID | the issuer | display / = after resolution |
 | TICKER | stock ticker | UPPER LIKE — direct filter, no resolution |
-| EXCHANGE | listing venue | LIKE '%NEW YORK STOCK EXCHANGE%' matches BOTH stored NYSE spellings; plain '%NYSE%' misses rows |
+| EXCHANGE | listing venue | UPPER(EXCHANGE) LIKE '%NEW YORK STOCK EXCHANGE%' (UPPER both sides; literals unverified — prefer broad LIKE); plain '%NYSE%' misses rows |
 | SECTOR | industry. Map the user's word to the closest EXACT value from this canonical list: Aero/Defense, Agriculture, Autos, Banks, Chemical, Consumer Goods, Energy, Financial Services, Healthcare, Industrials, Information Technology, Insurance, Pharmaceuticals, Retail, Telecommunications, Transportation, Technology. Note 'Information Technology' and 'Technology' are DISTINCT. Watch singular/plural: chemicals→Chemical, industrial→Industrials, auto/automotive→Autos. Informal: defence→Aero/Defense · pharma→Pharmaceuticals · banking→Banks · financial→Financial Services · telecom→Telecommunications · it→Information Technology · tech→Technology | = (exact value from list) |
 | ISSUER_RATINGS | agency ratings, pipe-separated. ⚠ Moody's notation: Aaa/Aa2/Baa1 · S&P/Fitch: AAA/AA-. "AAA Moody's" → LIKE '%Aaa%' | LIKE |
 
@@ -153,7 +153,7 @@ Order columns (ORDER_ID/ORDER_TYPE/IOI_TYPE/GPNUM/INVESTOR_NAME/AMT/ALLOCATION/D
 | ORDER_ID | order id — DCM only (§3) | DCM | exact |
 | ORDER_TYPE | order HANDLING: OTT, AWAY, REGULAR… (incomplete). "away orders" / "orders from other banks" → LIKE '%AWAY%'. ⚠ LIMIT/MARKET/SCALED are now in **IOI_TYPE**, not here | both | UPPER LIKE |
 | IOI_TYPE | indication (IOI) type: LIMIT, MARKET, SCALED… "limit / market / scaled orders" → IOI_TYPE (NOT ORDER_TYPE). ⚠ "got scaled back" is still an allocation cut (§5), not IOI_TYPE | both | UPPER LIKE |
-| INVESTOR_REGION | the INVESTOR's own geography/country: 'Germany', 'United States', 'EU'… (mixes country names + region groupings — use LIKE). "US/USA investors", "investors based in Germany", "European accounts", "US orders" → INVESTOR_REGION LIKE. ⚠ DIFFERENT from TRANCHE_REGION (the DEAL's target region NAM/EMEA/APAC) — this is the investor's side | both | UPPER LIKE |
+| INVESTOR_REGION | the INVESTOR's own geography/country: 'Germany', 'United States', 'EU'… (mixes country names + region groupings — use LIKE). "US/USA investors", "investors based in Germany", "European accounts", "US orders" → INVESTOR_REGION LIKE. Literals: us/usa/american → UPPER LIKE '%UNITED STATES%' (NEVER bare '%US%' — matches RUSSIA/AUSTRIA/AUSTRALIA); german → '%GERMANY%'; eu/european → = 'EU' (values unverified — prefer full words). ⚠ DIFFERENT from TRANCHE_REGION (the DEAL's target region NAM/EMEA/APAC) — this is the investor's side | both | UPPER LIKE |
 | DEMAND_QTY / AMT / ALLOCATION | §5 metrics | — | — |
 | INVESTOR_NAME / GPNUM | the investor | both | display / = |
 | INVESTOR_CATEGORY | FULL valid set: Outright, Long Only, Hedge Fund, Long/Hedge, Outright/Hedge, Central Bank, Official Institution, Insurance/Pension, Asset Manager, Corporate Treasury, Bank Treasury, Private Bank, Co-lead Retention, Co-lead Trading, Co-lead Order, Co-lead Pot, Other Trading, Broker, Syndicate, JLM Trading, Other. Bare "pot"/"retention" → 'Co-lead Pot'/'Co-lead Retention'. NOT valid (say so, list valid ones): Strategic, Family Office, Retail, SWF, DSP, Index, Quant | both | = ("investor category syndicate/broker" asks are THIS column, not broker columns) |
@@ -171,7 +171,7 @@ Order columns (ORDER_ID/ORDER_TYPE/IOI_TYPE/GPNUM/INVESTOR_NAME/AMT/ALLOCATION/D
 | SYNDICATE_ROLE | pipe list | NULL — roles aren't tracked for DCM: say so, don't query |
 | BND_BROKER | pipe-aligned true/false list | scalar 'true'/'false' |
 
-- SYNDICATE_MEMBER_NAME values are full bank names (e.g. 'Citigroup Global Markets Inc.', 'Goldman Sachs & Co. LLC'), often tagged in parens ((LEAD)/(CO)/(Broker)). Match a bank by LIKE on its stem — Citi → '%Citigroup Global Markets%' (or '%Citi %'); goldman → '%Goldman%'. Don't rely on exact member strings.
+- SYNDICATE_MEMBER_NAME values are full bank names (e.g. 'Citigroup Global Markets Inc.', 'Goldman Sachs & Co. LLC'), often tagged in parens ((LEAD)/(CO)/(Broker)). Match a bank by LIKE on its stem — Citi → '%Citigroup Global Markets%'; goldman → '%Goldman%'. Bank matching is ALWAYS case-insensitive: UPPER(col) LIKE, and every REGEXP_LIKE takes the 'i' flag. Don't rely on exact member strings.
 - ECM delimiter is space-pipe-space. Token anchor:
 ```
 correct: REGEXP_LIKE(col, '(^| \| )CITI', 'i')     WRONG: '(^|\|)CITI'
@@ -223,7 +223,7 @@ Compound asks: answer the supported part, note EVERY unsupported part, one reply
 - Typos never block (§4 fuzzy; match by meaning): invester, isuer, demmand, alocation, trache, sindicate, brocker, cussip, curency, grean, EMA→EMEA…
 
 ## 11. SQL & pipeline golden rules
-1. PRODUCT filter always, scoped to entitlement — never widen. 2. SELECT named columns only; FETCH FIRST N on broad listings; include ids (DEAL_ID, TRANCHE_ID, GPNUM, GFCID). 3. Sargable dates (§8), dedupe (§3), id doctrine (§4), broker branch rules (§7), TO_NUMBER on TRANCHE_SIZE (§5). **Coded value columns: match case-insensitively — `UPPER(col) = UPPER('value')` — DB casing is inconsistent (DEAL_STATUS holds both 'Open' and 'OPEN'); plain `=` silently drops the other-cased rows.** 4. **Pass resolved ids as query_context PARAMETERS** (`gfcid=…`, `gpnum=…`, `filter_criteria` from the resolution — gpnum IS supported); the server builds the mandatory WHERE filters from them. 5. Validate once → fix from the error message → max 2 attempts → execute immediately (the executor re-validates as a backstop — never loop validate); never end the turn between validate and execute; stop at first non-empty result. 6. Zero rows on a valid historical ask → "no matching records found" + ONE widening suggestion — no speculation.
+1. PRODUCT filter always, scoped to entitlement — never widen. 2. SELECT named columns only; FETCH FIRST N on broad listings; include ids (DEAL_ID, TRANCHE_ID, GPNUM, GFCID). 3. Sargable dates (§8), dedupe (§3), id doctrine (§4), broker branch rules (§7), TO_NUMBER on TRANCHE_SIZE (§5). **Coded value columns: match case-insensitively — `UPPER(col) = UPPER('value')` — DB casing is inconsistent (DEAL_STATUS holds both 'Open' and 'OPEN'); plain `=` silently drops the other-cased rows.** 4. **Pass resolved ids as query_context PARAMETERS** (`gfcid=…`, `gpnum=…`, `filter_criteria` from the resolution — gpnum IS supported); the server builds the mandatory WHERE filters from them. 5. Go STRAIGHT to the executor — it validates server-side before running. On a validation error, fix from the message and re-execute (max 2 executor attempts per turn); stop at the first non-empty result. text2sql_validate_sql is OPTIONAL — skip it on the happy path. 6. Zero rows on a valid historical ask → "no matching records found" + ONE widening suggestion — no speculation.
 
 ## 12. Entitlement
 `text2sql_query_context` scopes products to the caller's entitlement.
@@ -235,7 +235,7 @@ Compound asks: answer the supported part, note EVERY unsupported part, one reply
 | Ask | Route | Shape |
 |---|---|---|
 | "wich deals goldman billed 2024" | broker ask, zero resolution | ECM member token '(true)' + DCM member LIKE '%GOLDMAN%'; dedupe DEAL_ID |
-| "usa based investers in grean bonds" | mixed: geo part unsupported, green part supported | ONE reply: run UPPER(ESG_BOND) LIKE '%GREEN%' breakdown by INVESTOR_CATEGORY, and note investor geography isn't stored |
+| "usa based investers in grean bonds" | fully supported — investor geography = INVESTOR_REGION | DCM: UPPER(INVESTOR_REGION) LIKE '%UNITED STATES%' (never '%US%' — matches RUSSIA/AUSTRIA) AND UPPER(ESG_BOND) LIKE '%GREEN%'; investor listing → SELECT DISTINCT investor-grain columns (§3) |
 | "same for dcm" after "top ipos this week" | flip → ECM-only filter | zero SQL: explain IPO=ECM, offer top DCM benchmark deals this week |
 
 ## 14. Answering style

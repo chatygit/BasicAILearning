@@ -51,7 +51,7 @@
         {
           "columnName": "INVESTOR_REGION",
           "dataType": "VARCHAR2",
-          "columnDescription": "Geographic region/country of the INVESTOR (where the investor is based) - e.g. 'Germany', 'United States', 'EU'. This is the investor's OWN geography and is DISTINCT from TRANCHE_REGION/DEAL_REGION (the deal's target region NAM/EMEA/APAC). 'US investors' / 'investors based in Germany' / 'European accounts' -> INVESTOR_REGION (values mix country names and region groupings; use UPPER LIKE).",
+          "columnDescription": "Geographic region/country of the INVESTOR (where the investor is based) - e.g. 'Germany', 'United States', 'EU'. DISTINCT from TRANCHE_REGION/DEAL_REGION (the deal's target region NAM/EMEA/APAC). Literals: us/usa/american -> UPPER(INVESTOR_REGION) LIKE '%UNITED STATES%' (NEVER bare '%US%' - matches RUSSIA/AUSTRIA); german -> '%GERMANY%'; eu/european -> = 'EU'. Values unverified - prefer full words with LIKE.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -159,19 +159,19 @@
         {
           "columnName": "ROOT_ID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Root identifier on order rows linking the order back to its parent deal. ROOT_ID on orders joins to DEAL_ID on deals.",
+          "columnDescription": "Legacy lineage key (order -> its deal). All deal/tranche/order facts are already flattened onto every row - NEVER join or self-join this view; filter DEAL_ID directly.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "PARENT_ID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Parent identifier on order rows linking the order to its tranche. For DCM, PARENT_ID on orders joins to TRANCHE_ID on tranches.",
+          "columnDescription": "Legacy lineage key (order -> its tranche, DCM). Facts are already flattened onto every row - NEVER join; filter TRANCHE_ID directly.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "ORDER_ID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Unique identifier for an individual investor order. Part of the DCM primary key (DEAL_ID, TRANCHE_ID, ORDER_ID).",
+          "columnDescription": "Unique identifier for an individual investor order. DCM ONLY - not usable on ECM rows (ECM grain is DEAL_ID+INVESTOR_NAME). ECM order counts = COUNT(DISTINCT INVESTOR_NAME) per deal, never COUNT(DISTINCT ORDER_ID).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -183,7 +183,7 @@
         {
           "columnName": "IOI_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Indication of Interest (IOI) type - how the investor's indication is priced/structured. Values: LIMIT, MARKET, SCALED (list not exhaustive). Distinct from ORDER_TYPE (order handling: OTT/AWAY/REGULAR). 'limit orders' / 'market orders' / 'scaled orders' -> IOI_TYPE (UPPER LIKE).",
+          "columnDescription": "Indication of Interest (IOI) type - how the indication is priced/structured. Values: LIMIT, MARKET, SCALED (not exhaustive). Distinct from ORDER_TYPE (handling: OTT/AWAY/REGULAR). 'limit/market/scaled orders' -> IOI_TYPE (UPPER LIKE). BUT 'got scaled back'/'scaled-down allocation' = an allocation cut - rank by DEMAND_QTY - ALLOCATION, NOT this column.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -267,7 +267,7 @@
         {
           "columnName": "REG_CATEGORY",
           "dataType": "VARCHAR2",
-          "columnDescription": "Regulatory registration category of the offering (e.g., registered vs. exempt offering classification).",
+          "columnDescription": "Regulatory registration category. Values include 144A, Reg S, private placement, eurobond, domestic - match with LIKE. Bare '144A' / 'Reg S' / '3(a)(2)' asks -> THIS column; only '<x> delivery' wording -> DELIVERY_TYPE. DCM rows.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -309,19 +309,19 @@
         {
           "columnName": "EXECUTION_STATUS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Execution status of the deal/order (e.g., Live, Priced, Executed, Closed, Cancelled).",
+          "columnDescription": "Execution stage of the deal (Live/Priced/Executed/Closed/Cancelled). Overlaps DEAL_STATUS - use ONLY when the user explicitly says 'execution status'; any generic 'status / live / priced / closed deals' ask -> DEAL_STATUS.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "GFCID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Global Financial Client ID - institutional client identifier for the investor. Alternate identifier to GPNUM.",
+          "columnDescription": "Global Financial Client ID - identifies the ISSUER (the company raising capital) on the deal. Use for ALL issuer-side filters, e.g. WHERE GFCID = '<issuer-gfcid>' after resolving the issuer name. NEVER use GFCID for investor filters - investors are filtered by GPNUM.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "DELIVERY_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of security delivery or exemption for DCM deals. Common values: '144A', 'RegS', '3(a)(2) Exempt'. Indicates the legal exemption or delivery type for the security issuance. Only applies to DCM records.",
+          "columnDescription": "Legal delivery type: '144A', 'RegS', '3(a)(2) Exempt' only. Use ONLY when the user says 'delivery' - bare 144A/RegS asks go to REG_CATEGORY. DCM rows.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -347,11 +347,7 @@
         "DCM": "PRODUCT = 'DCM'"
       },
       "relationships": {
-        "DCM": {
-          "deal_to_tranche": "DEAL_ID links deals to tranches",
-          "order_to_deal": "ROOT_ID on orders joins to DEAL_ID on deals",
-          "order_to_tranche": "PARENT_ID on orders joins to TRANCHE_ID on tranches"
-        }
+        "note": "Flattened view - all deal/tranche/order facts are on every row. Do NOT join; filter DEAL_ID / TRANCHE_ID / ORDER_ID directly."
       }
     }
   ]

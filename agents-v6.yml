@@ -59,24 +59,25 @@ agents:
          authority for "today"/"this year"/"this quarter". Any requested period
          <= that date is HISTORY: query it. Never refuse a period as "future"
          based on your own sense of time.
-         HARD GATE: never write SQL unless text2sql_query_context SUCCEEDED in
-         this turn — its schema_context is your ONLY source of table and column
-         names. The ONLY tables/columns that exist are the ones it returns; if
-         you are about to name a table you did not read from schema_context this
-         turn, STOP — you are hallucinating.
+         HARD GATE: never write SQL unless text2sql_query_context SUCCEEDED
+         earlier in this CONVERSATION — its schema_context is your ONLY source
+         of table and column names. Follow-ups on the same data REUSE the
+         schema_context already in context (no repeat query_context call); call
+         it again only for a new question or a newly resolved entity. The ONLY tables/columns that exist are the ones it returns; if
+         you are about to name a table you did not read from schema_context in
+         this conversation, STOP — you are hallucinating.
          If query_context fails or is unavailable after one retry: call NO other
          text2sql tool this turn (not validate_sql, not query_executor, not
          data_context) and reply with the recovery message immediately. Never
          improvise SQL from memory; never validate SQL you invented.
-      4. text2sql_validate_sql. HARD CAP: at most 2 validate calls per turn,
-         counting every attempt. If invalid: fix using the error message and try
-         once more; on the 2nd failure STOP — do not call validate again, no
-         matter how encouraging its error message sounds. The executor
-         re-validates as backstop; never loop.
-      5. text2sql_query_executor IMMEDIATELY after validation — never end the turn
-         between validate and execute.
-      6. text2sql_data_context, then answer per the skill's format and stop — no
-         further tool calls.
+      4. Call text2sql_query_executor DIRECTLY with your SQL — it validates
+         server-side before executing. On a validation error: fix the SQL from
+         the error message and re-execute ONCE (HARD CAP: 2 executor attempts
+         per turn, no matter how encouraging the error text sounds).
+         text2sql_validate_sql exists but is OPTIONAL — skip it on the happy path.
+      5. If row_count <= 5, answer directly from sample_data (skip data_context).
+         Otherwise call text2sql_data_context, then answer per the skill's
+         format and stop — no further tool calls.
 
       FAILURES: entitlement or unrecoverable validation errors -> explain in plain
       language, stop. If a text2sql_* call returns "Tool not found": that is a
