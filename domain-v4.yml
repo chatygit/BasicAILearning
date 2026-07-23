@@ -149,7 +149,10 @@ prompts:
          explicit user-confirmed full scans run WITH a FETCH FIRST cap.
       3) Top-N on flattened rows: dedupe at business grain (DEAL_ID or
          DEAL_ID+TRANCHE_ID) FIRST, then ORDER BY <metric> DESC,
-         PRICING_TS DESC, DEAL_ID. Deal size = DEAL_SIZE column (never
+         PRICING_TS DESC, DEAL_ID. EVERY listing (not just top-N) carries a
+         deterministic ORDER BY (default PRICING_TS DESC, DEAL_ID,
+         TRANCHE_ID). Column-add follow-ups keep the prior SQL identical
+         except the SELECT list, so rows and order match the prior answer. Deal size = DEAL_SIZE column (never
          SUM(TRANCHE_SIZE)); book size (total demand) = SUM(DEMAND_QTY) at
          DEAL_ID grain; tranche/issue size = TO_NUMBER(TRANCHE_SIZE ...).
       4) B&D/billed asks: SQL must include BROKER_CODE or
@@ -170,8 +173,12 @@ prompts:
       Multiple GPNUM/GFCID matches -> stop and list numbered options.
       Years/quarters <= current date are retrieval, never "future".
     DOMAIN_MANDATORY_FILTERS: |
-      A. PRODUCT: entitlement-scoped explicit filter in every query; never
-         widen beyond entitled products.
+      A. PRODUCT: explicit filter in every query, within the ENTITLED
+         products from this config. Any entitled product is available on any
+         turn — never infer a narrower "current view" from session history,
+         and never claim missing access unless a tool returned
+         permission_denied. Product-specific asks auto-imply their product
+         (coupon/tenor/seniority -> DCM; IPO/equity type -> ECM).
       B. De-duplication (REQUIRED — view is flattened): deal-level asks
          dedupe by DEAL_ID; tranche-level by DEAL_ID+TRANCHE_ID; then
          aggregate/rank/limit. ORDER_ID is DCM-only (ECM grain =
@@ -184,11 +191,19 @@ prompts:
          columns; order/investor columns (ORDER_ID, ORDER_TYPE, IOI_TYPE,
          GPNUM, INVESTOR_NAME, AMT, ALLOCATION, DEMAND_QTY) belong only in an
          order-level query. Never list order columns in a deal/tranche listing.
+         PRICING_TS and CURRENCY vary PER TRANCHE: a deal listing must
+         aggregate them (GROUP BY deal cols + MIN(PRICING_TS)) or drop them;
+         per-tranche rows must include TRANCHE_NAME so rows are
+         distinguishable. Date windows are half-open (>= start AND < end).
       C. Investor -> WHERE GPNUM=value; Issuer -> WHERE GFCID=value.
       D. Time: sargable PRICING_TS ranges only (no TO_CHAR/EXTRACT/TRUNC in
          WHERE). Year: >= DATE 'YYYY-01-01' AND < DATE 'YYYY+1-01-01'.
          Last 12 months: ADD_MONTHS(SYSDATE,-12). Week: closed window
-         >= TRUNC(ref,'IW') AND < TRUNC(ref,'IW')+7.
+         >= TRUNC(ref,'IW') AND < TRUNC(ref,'IW')+7. To-now windows
+         ("past N days") have NO upper bound — an upper bound at
+         current_date (midnight) excludes today's rows. "New deals" =
+         recent PRICING_TS OR (PRICING_TS IS NULL AND active DEAL_STATUS);
+         no creation-date column exists.
       E0. Investor geography IS supported via INVESTOR_REGION (values like
          'United States','Germany','EU'); "US investors"/"investors based in X"
          -> INVESTOR_REGION LIKE. Keep it DISTINCT from the deal's region.
@@ -467,7 +482,9 @@ event_messages:
 # -- Tool descriptions --------------------------------------------------
 tool_descriptions:
   entity_search: >-
-    Resolve a deal, issuer, or investor. Pass entity_type
+    Resolve a deal, issuer, or investor NAME only. NEVER call this for
+    taxonomy words (sectors like defence/pharma, regions, currencies,
+    statuses, offering types) — those are SQL filter values. Pass entity_type
     (investor_name/issuer_name/deal_name) — it decides which identifier is
     returned. Pass an explicit deal id as deal_id (NEVER as gfcid); a GFCID
     as gfcid; a GPNUM as gpnum. Explicit labeled id + name in one ask:

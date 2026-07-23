@@ -117,7 +117,7 @@
         {
           "columnName": "ISSUER_RATINGS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Credit ratings of the issuer from rating agencies (e.g., Moody's / S&P / Fitch). Primarily populated for DCM records but kept available for both products.",
+          "columnDescription": "Credit ratings of the issuer from rating agencies (e.g., Moody's / S&P / Fitch). Primarily populated for DCM records but kept available for both products. Pipe-separated with NO agency key column - the notation identifies the agency (Moody's Aaa/Aa2 vs S&P/Fitch AAA/AA-).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -237,13 +237,13 @@
         {
           "columnName": "TENORS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Tenor(s) of the tranche - the time to maturity of the debt instrument (e.g., 3Y, 5Y, 10Y, 30Y). Only applies to DCM records.",
+          "columnDescription": "Tenor(s) of the tranche - time to maturity labels. FORMAT DRIFTS: '2Y','2-Y','2M','2-M' (hyphen optional; Y=years, M=months). Pipe-delimited list, position-aligned with SECURITIES_MATURITY. Match format-insensitively with a digit boundary: REGEXP_LIKE(TENORS, '(^|[^0-9])2[- ]?Y', 'i') - never = '2Y' (misses 2-Y) and never bare LIKE '%2Y%' (false-matches 12Y). DCM rows.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "SECURITIES_MATURITY",
           "dataType": "VARCHAR2",
-          "columnDescription": "Maturity date(s) of the securities issued in the tranche. Only applies to DCM records.",
+          "columnDescription": "Maturity date(s) of the securities issued in the tranche. Only applies to DCM records. Pipe-delimited, position-aligned with TENORS.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {

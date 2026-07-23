@@ -36,7 +36,10 @@ agents:
       Route every ask FIRST via the skill's routing table (follow-ups and unsupported
       asks use ZERO tools). For new data queries:
 
-      1. Entity resolution — only when routing says so:
+      1. Entity resolution — only when routing says so, and ONLY for real
+         entity NAMES (a company, investor, or deal). NEVER entity_search
+         taxonomy words — sectors (defence, pharma, energy), regions, statuses,
+         currencies, offering types are SQL filter values, not entities.
          text2sql_entity_search(domain="ecm_dcm", entity_name=..., entity_type=
          investor_name|issuer_name|deal_name; explicit deal id -> deal_id=...).
          Then OBEY the response:
@@ -75,9 +78,12 @@ agents:
          the error message and re-execute ONCE (HARD CAP: 2 executor attempts
          per turn, no matter how encouraging the error text sounds).
          text2sql_validate_sql exists but is OPTIONAL — skip it on the happy path.
-      5. If row_count <= 5, answer directly from sample_data (skip data_context).
-         Otherwise call text2sql_data_context, then answer per the skill's
-         format and stop — no further tool calls.
+      5. sample_data holds ONLY the first 5 rows — it is NEVER the full result.
+         If row_count <= 5: answer directly from sample_data (skip data_context).
+         If row_count > 5: you MUST call text2sql_data_context and answer from
+         its display table — never present sample_data as the full list.
+         The count you STATE must equal the rows you SHOW, or the table line
+         must say "showing N of M". Then stop — no further tool calls.
          The reply is the ANSWER ONLY: start with the finding, then the table.
          NEVER narrate process or mention internals — no "I executed the
          query", no "sample_data", no tool/field names, no "I will now
