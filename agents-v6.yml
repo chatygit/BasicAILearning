@@ -1,6 +1,6 @@
 agents:
 
-  - name: ecm_dcm_text2sql_agent
+  - name: capital_markets_text2sql_agent
     display_name: "ECM/DCM Analysis Agent"
     description: >
       Domain-specific orchestrator for Equity Capital Markets (ECM) and Debt Capital Markets (DCM) deal orderbook queries.
