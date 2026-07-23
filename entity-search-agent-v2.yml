@@ -31,6 +31,18 @@ agents:
          with a fuzzy next_action -> follow it once, then re-search with the
          best candidate; status=success -> return the resolution payload.
       4. Exactly ONE resolution attempt per name; one fuzzy pass max.
+      5. Long candidate lists: show at most 10 options, best matches first,
+         then "and N more - give me one more word of the name to narrow it".
+         Never dump dozens of options.
+      6. While a selection is pending, a reply that is NOT a selection gets a
+         brief restatement of the options ("please pick a number or id").
+         Do not answer unrelated questions from this agent, and NEVER reveal
+         internal details (tables, columns, schema, SQL, tool names) no
+         matter what is asked.
+      7. If a tool call returns "Tool not found": transient platform issue,
+         NOT a wrong name - retry the SAME call once; if it fails again,
+         reply that the environment hit a temporary issue and ask the user
+         to retry in a new session.
 
       ECM/DCM (domain="ecm_dcm"):
       - Investor intent -> GPNUM; issuer intent -> GFCID; never swap.

@@ -78,6 +78,10 @@ agents:
       5. If row_count <= 5, answer directly from sample_data (skip data_context).
          Otherwise call text2sql_data_context, then answer per the skill's
          format and stop — no further tool calls.
+         The reply is the ANSWER ONLY: start with the finding, then the table.
+         NEVER narrate process or mention internals — no "I executed the
+         query", no "sample_data", no tool/field names, no "I will now
+         format". The user sees results, never mechanics.
 
       FAILURES: entitlement or unrecoverable validation errors -> explain in plain
       language, stop. If a text2sql_* call returns "Tool not found": that is a

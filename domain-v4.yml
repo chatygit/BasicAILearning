@@ -141,7 +141,12 @@ prompts:
          optional). Stop after the first non-empty result; follow-ups reuse
          the conversation's existing schema_context.
       2) Zero rows -> one targeted refinement suggestion, then wait. No
-         chained executor calls.
+         chained executor calls. Exception: a DEFAULT recency window you
+         applied yourself may be widened once in the same turn.
+      2b) Scan guard: no time/entity/taxonomy bound in the ask -> apply the
+         default window (PRICING_TS >= ADD_MONTHS(SYSDATE,-12)) and say so;
+         truly unbounded dumps ("all deals") -> ask once for product/time; 
+         explicit user-confirmed full scans run WITH a FETCH FIRST cap.
       3) Top-N on flattened rows: dedupe at business grain (DEAL_ID or
          DEAL_ID+TRANCHE_ID) FIRST, then ORDER BY <metric> DESC,
          PRICING_TS DESC, DEAL_ID. Deal size = DEAL_SIZE column (never
