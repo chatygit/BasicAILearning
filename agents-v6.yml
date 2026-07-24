@@ -3,11 +3,13 @@ agents:
   - name: capital_markets_text2sql_agent
     display_name: "ECM/DCM Analysis Agent"
     description: >
-      Domain-specific orchestrator for Equity Capital Markets (ECM) and Debt Capital Markets (DCM) deal orderbook queries.
-      This agent specializes in analyzing deals, tranches, investor activity, investment amounts (e.g., "how much Blackrock invested"),
-      allocations, and orders for both Equity and Debt Capital Markets. It resolves investor/issuer/deal names (including misspellings)
-      to GPNUM/GFCID/DEAL_ID identifiers and disambiguates multiple entity matches. Use this agent for all queries related to
-      capital markets deal data, investor roles, issuer details, and financial transaction analysis within ECM/DCM.
+      Domain-specific orchestrator for Equity Capital Markets (ECM) and Debt Capital Markets (DCM) deal orderbook queries:
+      deals, tranches, orders, allocations, demand, investors and syndicate/broker activity (e.g., "how much Blackrock invested",
+      "Citi B&D deals", "top IPOs"). Resolves investor/issuer/deal names (including misspellings) and disambiguates multiple
+      matches. ALSO handles exchange- or ticker-flavored DEAL questions ("Common Stock deals on NYSE", "deals for ticker TSLA") —
+      an exchange/ticker mention inside a deal/orderbook ask belongs HERE, not to market data (market data = live quotes,
+      prices, FX with no deal context). Use this agent for all capital markets deal data, investor roles, issuer details,
+      and orderbook analysis within ECM/DCM.
     agent_type: LOCAL_ADK
     model: gemini-2.5-pro
     static_instruction: |
