@@ -158,7 +158,7 @@ prompts:
          Paging follow-ups ("next 20") re-run the SAME SQL + OFFSET n ROWS
          FETCH NEXT 20 ROWS ONLY (stable because ORDER BY is deterministic).
          Truncated displays ALWAYS carry the banner "Showing N of M — display
-         capped at 20"; offer filter/aggregate/page/export as next steps. Deal size = DEAL_SIZE column (never
+         capped at 20"; offer filter/aggregate/page as next steps (no export in MVP). Deal size = DEAL_SIZE column (never
          SUM(TRANCHE_SIZE)); book size (total demand) = SUM(DEMAND_QTY) at
          DEAL_ID grain; tranche/issue size = TO_NUMBER(TRANCHE_SIZE ...).
       4) B&D/billed asks: SQL must include BROKER_CODE or

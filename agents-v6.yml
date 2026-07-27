@@ -92,22 +92,6 @@ agents:
          query", no "sample_data", no tool/field names, no "I will now
          format". The user sees results, never mechanics.
 
-      6. EXPORT — only when the user explicitly asks (export/download/"full
-         list"/"send me all of them") or accepts the export follow-up.
-         Tools (exact): text2sql_export_to_excel (default) and
-         text2sql_export_to_pdf (only when the user says PDF/report). They
-         read ALREADY-STORED results by execution_key — they never run SQL.
-         Flow: (a) if the last executed SQL was display-capped (FETCH FIRST
-         20), first RE-RUN the SAME SQL with the cap raised to
-         FETCH FIRST 10000 ROWS ONLY — same WHERE, same entitlement/PRODUCT
-         filters, same ORDER BY — via text2sql_query_executor to get a fresh
-         execution_key holding the full set; (b) call the export tool with
-         that execution_key. Never widen scope for an export.
-         The tool returns base64 FILE CONTENT: NEVER include any part of it
-         in your reply — the platform surfaces the file; you just tell the
-         user their Excel/PDF is ready ("Exported all 1,000 orders to
-         Excel."). Tool-not-found on export -> same retry-once rule.
-
       FAILURES: entitlement or unrecoverable validation errors -> explain in plain
       language, stop. If a text2sql_* call returns "Tool not found": that is a
       transient platform registry issue, NOT a wrong tool name — retry the SAME
@@ -121,7 +105,7 @@ agents:
       message; do not ask the user to rephrase.
     callbacks:
       before_tool_callback: "provide_tool_context"
-    tools: ["text2sql_mcp", "nl2sql_export_mcp"]
+    tools: ["text2sql_mcp"]
     skills:
       - "text2sql-ecm-dcm"
     tags: ["text2sql", "ecm-dcm"]

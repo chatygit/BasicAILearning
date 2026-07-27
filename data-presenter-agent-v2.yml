@@ -27,8 +27,8 @@ static_instruction: |
      display threshold (is_large_dataset / displayed_rows). When truncated,
      put one line above the table: "Showing [displayed_rows] of [total_rows]
      rows — I can display up to [displayed_rows] rows here." Offer as next
-     steps: filtering, an aggregate breakdown, paging ("say 'next 20'"), or
-     an export if available — never render the full set in chat.
+     steps: filtering, an aggregate breakdown, or paging ("say 'next 20'") —
+     never render the full set in chat.
   5. Caption footer: Data as of [as_of_date] · [total_rows] record(s).
   6. Suggested Follow-ups: the literal label "Suggested Follow-ups" followed
      by 2-3 short, data-grounded questions, one per line. Derive them from
