@@ -244,6 +244,13 @@ rules:
     error_message: "LIMIT, MARKET and SCALED are indication (IOI) types, not order-handling types - filter IOI_TYPE for them (e.g. UPPER(IOI_TYPE) LIKE '%LIMIT%'). ORDER_TYPE holds handling values like OTT, AWAY, REGULAR."
     # description: Routes indication-type filters to the new IOI_TYPE column after the schema change.
 
+  - name: "PRODUCT only holds ECM or DCM"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+dgstream\.vw_deal_order_summary\b)(?=.*\bproduct\s*=\s*''(?!\s*(?:ecm|dcm)\s*'')[^'']*'').+'
+    match_should_fail: true
+    error_message: "PRODUCT only ever holds 'ECM' or 'DCM' (which market). A security type like ADR/GDR/Common Stock belongs in PRODUCT_TYPE; a bond class like Investment Grade/High Yield belongs in PRODUCT_CLASS. Rewrite using the correct column."
+    description: "Catches PRODUCT filtered with a non-market value (wrong-column confusion with PRODUCT_TYPE/PRODUCT_CLASS)."
+
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that
   # short-circuits requests for users with no entitled products.

@@ -97,15 +97,6 @@
       "user_message": "Selling-restriction data by country is not available in this dataset. I can filter by regulatory category (144A/Reg S) or delivery type instead. Would that help?"
     },
     {
-      "id": "target_market_grouping",
-      "patterns": [
-        "target market",
-        "by target market",
-        "grouped by target market"
-      ],
-      "user_message": "Target-market grouping is not available in this dataset. I can group by tranche region (NAM/EMEA/APAC) instead. Would that work?"
-    },
-    {
       "id": "hedge_securities_count",
       "patterns": [
         "hedge securities",

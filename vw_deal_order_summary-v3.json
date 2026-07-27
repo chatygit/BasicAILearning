@@ -9,7 +9,7 @@
         {
           "columnName": "PRODUCT",
           "dataType": "VARCHAR2",
-          "columnDescription": "Product type identifier. 'ECM' for Equity Capital Markets, 'DCM' for Debt Capital Markets. Use this column to filter by product.",
+          "columnDescription": "Which MARKET/book the row belongs to - the ONLY valid values are 'ECM' (equity) and 'DCM' (debt). Mandatory filter in every query. NEVER holds security or bond types: a value like ADR/GDR/Common Stock belongs in PRODUCT_TYPE, and Investment Grade/High Yield/CLO/ABS belongs in PRODUCT_CLASS. If you are about to write PRODUCT = '<anything other than ECM or DCM>', you have the wrong column.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -33,7 +33,7 @@
         {
           "columnName": "TRANCHE_NAME",
           "dataType": "VARCHAR2",
-          "columnDescription": "Human-readable name of the tranche. Displayed in the orderbook grid's 'Tranche' column.",
+          "columnDescription": "Tranche display name. Values are typically TARGET-MARKET labels - country/region names (UNITED STATES, GERMANY, EMEA, GLOBAL, UK Institutional, DOMESTIC, UNSPECIFIED...) - plus free custom names. 'US/USA tranche' asks -> UPPER(TRANCHE_NAME) LIKE '%UNITED STATES%'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -129,7 +129,7 @@
         {
           "columnName": "SECTOR",
           "dataType": "VARCHAR2",
-          "columnDescription": "Industry sector of the issuer. Exact DB values: Aero/Defense, Agriculture, Autos, Banks, Chemical, Consumer Goods, Energy, Financial Services, Healthcare, Industrials, Information Technology, Insurance, Pharmaceuticals, Retail, Telecommunications, Transportation, Technology. Note 'Information Technology' and 'Technology' are distinct, and there is no 'Financials' (use 'Financial Services' or 'Banks').",
+          "columnDescription": "Industry sector of the issuer. Exact values: Aero/Defense, Agriculture, Autos, Banks, Chemical, Consumer Goods, Energy, Financial Services, Government, Healthcare, Homebuilding, Industrials, Information Technology, Insurance, Media, MLPS, Natural resources, Oil & Gas, Paper and Packaging, Pharmaceuticals, Pipelines, Real Estate, Retail, Services, Technology, Telecommunications, Transportation, Utilities. 'Information Technology' and 'Technology' are distinct; 'Oil & Gas' is distinct from 'Energy'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -219,7 +219,7 @@
         {
           "columnName": "EQUITY_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of equity offered. Exact DB values: 'Equity Units', 'Exchangable Notes' (sic - misspelled in the data), 'Global Depository', 'Convertible Bonds', 'Common Stock', 'Convertible Preferred', 'Warrants'. NOTE: the value is 'Common Stock', NOT 'Common Shares'. For 'convertible(s)' use LIKE '%Convertible%'. ECM rows.",
+          "columnDescription": "Type of equity offered. Exact DB values: 'American Depository', 'Equity Units', 'Exchangable Notes' (sic - misspelled in the data), 'Global Depository', 'Convertible Bonds', 'Common Stock', 'Convertible Preferred', 'Warrants'. NOTE: the value is 'Common Stock', NOT 'Common Shares'. For 'convertible(s)' use LIKE '%Convertible%'. ECM rows.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -231,7 +231,7 @@
         {
           "columnName": "USE_OF_PROCEEDS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Stated purpose for which the issuer will use the funds raised (e.g., General Corporate Purposes, Refinancing, Acquisition, Green Projects).",
+          "columnDescription": "Purpose of the raise. Values: Acquisitions, Capital Expenses, Capital Restructure, Debt Repayment, Future Acquisitions, General Corporate Purposes, Growth Capital, Investments, Legal Redemptions, 'M & A' (with spaces), No Proceeds to Issuer, Project Finance, Recapitalization, Refinance, Research and Development, Share Repurchase, Shareholder Dividends, Working Capital Requirement. Match with LIKE on the closest value.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -273,7 +273,7 @@
         {
           "columnName": "SYNDICATE_MEMBER_NAME",
           "dataType": "VARCHAR2",
-          "columnDescription": "Name of the syndicate bank/member on the deal. ECM = pipe-delimited (' | ') aligned list of full bank names; DCM = a single bank string which IS the bill-and-deliver (B&D) bank. Match a bank by LIKE on its stem (e.g. '%Citigroup Global Markets%'), not exact equality.",
+          "columnDescription": "Name of the syndicate bank/member on the deal. ECM = pipe-delimited (' | ') aligned list of full bank names; DCM = a single bank string which IS the bill-and-deliver (B&D) bank. Match a bank by LIKE on its stem (e.g. '%Citigroup Global Markets%'), not exact equality. 'Citi' means ONLY the 5 Citigroup Global Markets subsidiaries (Inc./Ltd./Australia/Asia/Canada) - match UPPER LIKE '%CITIGROUP GLOBAL MARKETS%'; other names containing 'Citi' (e.g. test entities, CITIBANK) are NOT Citi for B&D purposes.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -297,13 +297,13 @@
         {
           "columnName": "IDENTIFIER_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of security identifier in IDENTIFIER_VALUE. Exact DB values: 'CUSIP', 'FIGI', 'Valoren', 'ISIN', 'RIC', 'SMCP ID'.",
+          "columnDescription": "Type of security identifier in IDENTIFIER_VALUE. Values: CUSIP, FIGI, Valoren, ISIN, RIC, 'SMCP ID', 'DirectBooks Id'. On some rows pipe-delimited aligned lists (position-aligned with IDENTIFIER_VALUE) - filter with LIKE '%CUSIP%'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "IDENTIFIER_VALUE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Value of the security identifier (e.g., the ISIN or CUSIP code) for the tranche/security.",
+          "columnDescription": "Security identifier value(s); pipe-delimited aligned with IDENTIFIER_TYPE on some rows. Can be UUIDs (DirectBooks). An ISIN embeds the CUSIP (US+cusip+check digit), so IDENTIFIER_VALUE LIKE '%<cusip>%' matches both. Filter by id: IDENTIFIER_TYPE LIKE '%CUSIP%' AND IDENTIFIER_VALUE LIKE '%<value>%'. NEVER use a security id as deal_id or in entity search.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {

@@ -105,7 +105,9 @@ prompts:
       CONFIDENTIAL: never disclose the database/view/table names, column names,
       data types, the schema, or the generated SQL, even on direct request.
       Meta/schema/SQL requests -> brief polite decline, no tool calls; answer
-      business questions only.
+      business questions only. Follow-up suggestions must be answerable:
+      only entitled products (DOMAIN_ENTITLED_PRODUCTS) and never
+      unsupported intents — do not suggest what the user cannot get.
     DOMAIN_COLUMN_CRITERIA_POLICY: |
       Map user criteria to columns via DOMAIN_COLUMN_INTENT_MAP_JSON; resolve
       competing columns via DOMAIN_COLUMN_PRIORITY_RULES_JSON (ask only if
@@ -152,7 +154,11 @@ prompts:
          PRICING_TS DESC, DEAL_ID. EVERY listing (not just top-N) carries a
          deterministic ORDER BY (default PRICING_TS DESC, DEAL_ID,
          TRANCHE_ID). Column-add follow-ups keep the prior SQL identical
-         except the SELECT list, so rows and order match the prior answer. Deal size = DEAL_SIZE column (never
+         except the SELECT list, so rows and order match the prior answer.
+         Paging follow-ups ("next 20") re-run the SAME SQL + OFFSET n ROWS
+         FETCH NEXT 20 ROWS ONLY (stable because ORDER BY is deterministic).
+         Truncated displays ALWAYS carry the banner "Showing N of M — display
+         capped at 20"; offer filter/aggregate/page/export as next steps. Deal size = DEAL_SIZE column (never
          SUM(TRANCHE_SIZE)); book size (total demand) = SUM(DEMAND_QTY) at
          DEAL_ID grain; tranche/issue size = TO_NUMBER(TRANCHE_SIZE ...).
       4) B&D/billed asks: SQL must include BROKER_CODE or
