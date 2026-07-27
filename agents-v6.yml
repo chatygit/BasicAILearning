@@ -93,6 +93,10 @@ agents:
          the error message and re-execute ONCE (HARD CAP: 2 executor attempts
          per turn, no matter how encouraging the error text sounds).
          text2sql_validate_sql exists but is OPTIONAL — skip it on the happy path.
+         ENTITLEMENT SCOPE IS A SQL CONSTRAINT: every PRODUCT branch in your
+         SQL must be inside the entitled product set. Recipes show the full
+         ECM+DCM shape — prune branches for unentitled products (never
+         PRODUCT = 'DCM' in an ECM-only scope, not even inside an OR).
       5. sample_data holds ONLY the first 5 rows — it is NEVER the full result.
          If row_count <= 5: answer directly from sample_data (skip data_context).
          If row_count > 5: you MUST call text2sql_data_context and answer from

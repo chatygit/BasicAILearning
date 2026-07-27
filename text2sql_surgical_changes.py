@@ -295,3 +295,66 @@ def tool_data_context(
         return {"status": "error", "message": str(e)}
     finally:
         logger.info("[perf] data_context(%s): %.2fs", domain, time.time() - start)
+
+
+# =============================================================================
+# 4) tool_query_executor — CHANGE E (SECURITY: enforce entitlement on the SQL)
+#
+#    BUG (QAT trace 2026-07-27, soeid=bk42867): entitlement_service resolved
+#    effective_clause=PRODUCT = 'ECM', but the executor ran a query containing
+#    "... OR (PRODUCT = 'DCM' AND ...)" and returned DCM rows to an ECM-only
+#    user. The entitlement clause is computed in query_context_hook (preflight)
+#    but NEVER enforced against the SQL the LLM actually submits — enforcement
+#    today is 100% LLM discipline, which is not a security boundary.
+#
+#    FIX: two independent checks in tool_query_executor, BEFORE execution.
+#    (a) reject-with-teaching-message — lets the LLM self-correct in its one
+#        retry, consistent with the validator UX;
+#    (b) hard wrap — guarantees zero leak even if (a)'s regex misses a shape.
+#    Also apply the same wrap to tool_entity_search: the entity templates
+#    hardcode PRODUCT IN ('ECM','DCM'), so an ECM-only user currently gets
+#    DCM deal names/counts in candidate lists.
+# =============================================================================
+import re as _re
+
+_PRODUCT_LITERAL = _re.compile(
+    r"\bPRODUCT\b\s*(?:=|<>|!=|IN\s*\()[^)']*?'(ECM|DCM)'"
+    r"|'(ECM|DCM)'(?=\s*(?:,\s*'(?:ECM|DCM)')*\s*\))",
+    _re.I | _re.S,
+)
+
+def _entitled_products(soeid: str) -> set:
+    # Same resolution the query_context_hook already performs — reuse its
+    # cached entitlement_service result; parse {'ECM','DCM'} from the
+    # effective_clause / entitlement payload.
+    raise NotImplementedError  # wire to entitlement_service cache
+
+def _enforce_entitlement(sql: str, soeid: str):
+    entitled = _entitled_products(soeid)          # e.g. {'ECM'}
+    referenced = {m.upper() for pair in _PRODUCT_LITERAL.findall(sql)
+                  for m in pair if m}
+    illegal = referenced - entitled
+    if illegal:
+        # (a) self-correcting rejection — same shape as validator errors
+        return None, {
+            "status": "validation_error",
+            "message": (
+                f"Access scope violation: this user is entitled to "
+                f"{sorted(entitled)} only. Remove every PRODUCT branch for "
+                f"{sorted(illegal)} (including OR branches) and re-run the "
+                f"query scoped to the entitled products."
+            ),
+        }
+    # (b) hard wrap — belt-and-braces: guarantees the result set cannot
+    # contain unentitled rows regardless of the SQL's shape (also covers
+    # queries that omit a PRODUCT filter entirely).
+    in_list = ", ".join(f"'{p}'" for p in sorted(entitled))
+    wrapped = f"SELECT * FROM ({sql}) WHERE PRODUCT IN ({in_list})"
+    return wrapped, None
+
+# In tool_query_executor, immediately after SQL validation passes:
+#     sql_query, err = _enforce_entitlement(sql_query, soeid)
+#     if err:
+#         return err
+# In tool_entity_search, wrap the rendered template the same way (or AND the
+# effective_clause into each template's WHERE during rendering).
