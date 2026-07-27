@@ -135,7 +135,7 @@
         {
           "columnName": "EXCHANGE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Stock exchange on which the issuer's securities are listed/traded. Primarily populated for ECM records.",
+          "columnDescription": "Stock exchange where the securities are listed - holds FULL venue names (e.g. 'New York Stock Exchange'), never tickers like NYSE, and may hold multiple venues. Primarily populated for ECM records. Never filter with '=' or an abbreviation (returns zero rows) - use a broad token instead: UPPER(EXCHANGE) LIKE '%NEW YORK%'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -207,7 +207,7 @@
         {
           "columnName": "PRODUCT_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Fine-grained ECM security type (more specific than EQUITY_TYPE): e.g. ADR, ADS, GDR, GDS, Common Stock, Rights, Mandatory Convertible Preferred Stock. Free text - prefer LIKE. Use EQUITY_TYPE for coarse security class; both columns can contain 'Common Stock'.",
+          "columnDescription": "Fine-grained security type. Values include ABBREVIATED literals 'Conv. Bond', 'Conv. Pfd', 'ADR Conv. Pref' (periods included), plus: 144A Common Stock, ADR, ADS, GDR, American Depositary Note, Class A Common Stock, Common Shares, Common Shares of Beneficial Interest, Common Stock, Common Units, Convertible Subordinated Notes, Equity Unit, Exchangable Sr. Notes, Exchangeable Senior Unsecured Notes, High Yield, Holder Shares, Locals, Mandatory Convertible Preferred Stock, Note, Ord Shares, Rights, Shares, Units, Warrant. Free text - match with UPPER(PRODUCT_TYPE) LIKE. If the user explicitly says 'product type', use THIS column regardless of the value ('product type Conv. Bond' -> UPPER(PRODUCT_TYPE) LIKE '%CONV%BOND%'), never EQUITY_TYPE.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -297,13 +297,13 @@
         {
           "columnName": "IDENTIFIER_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of security identifier in IDENTIFIER_VALUE. Values: CUSIP, FIGI, Valoren, ISIN, RIC, 'SMCP ID', 'DirectBooks Id'. On some rows pipe-delimited aligned lists (position-aligned with IDENTIFIER_VALUE) - filter with LIKE '%CUSIP%'.",
+          "columnDescription": "Type of security identifier in IDENTIFIER_VALUE. Values: CUSIP, FIGI, Valoren, ISIN, RIC, 'SMCP ID', 'DirectBooks Id'. On some rows pipe-delimited aligned lists (position-aligned with IDENTIFIER_VALUE) - filter with LIKE '%CUSIP%'. NOTE: identifiers are TRANCHE-grain (one set per tranche) - always SELECT TRANCHE_NAME alongside identifiers so each set can be labelled per tranche; otherwise a multi-tranche deal reads as duplicate CUSIPs/ISINs.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "IDENTIFIER_VALUE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Security identifier value(s); pipe-delimited aligned with IDENTIFIER_TYPE on some rows. Can be UUIDs (DirectBooks). An ISIN embeds the CUSIP (US+cusip+check digit), so IDENTIFIER_VALUE LIKE '%<cusip>%' matches both. Filter by id: IDENTIFIER_TYPE LIKE '%CUSIP%' AND IDENTIFIER_VALUE LIKE '%<value>%'. NEVER use a security id as deal_id or in entity search.",
+          "columnDescription": "Security identifier value(s); pipe-delimited aligned with IDENTIFIER_TYPE on some rows. Can be UUIDs (DirectBooks). An ISIN embeds the CUSIP (US+cusip+check digit), so IDENTIFIER_VALUE LIKE '%<cusip>%' matches both. Filter by id: IDENTIFIER_TYPE LIKE '%CUSIP%' AND IDENTIFIER_VALUE LIKE '%<value>%'. NEVER use a security id as deal_id or in entity search. NOTE: identifiers are TRANCHE-grain (one set per tranche) - always SELECT TRANCHE_NAME alongside identifiers so each set can be labelled per tranche; otherwise a multi-tranche deal reads as duplicate CUSIPs/ISINs.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {

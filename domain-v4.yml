@@ -330,69 +330,107 @@ entity_search:
       FETCH FIRST 50 ROWS ONLY
 
     investor_name: >-
-      SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID FROM (
-        SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID,
-               is_sub, MAX(is_sub) OVER () AS any_sub
+      SELECT NULL AS DEAL_ID, NULL AS DEAL_NAME, INVESTOR_NAME, GPNUM,
+             NULL AS ISSUER_NAME, NULL AS GFCID, DEAL_COUNT, LAST_ACTIVE, CATEGORY, REGION, PRODUCTS
+      FROM (
+        SELECT INVESTOR_NAME, GPNUM, DEAL_COUNT, LAST_ACTIVE, CATEGORY, REGION, PRODUCTS,
+               is_exact, is_sub,
+               MAX(is_exact) OVER () AS any_exact,
+               MAX(is_sub) OVER () AS any_sub
         FROM (
-          SELECT DISTINCT
-            NULL AS DEAL_ID, NULL AS DEAL_NAME, INVESTOR_NAME, GPNUM,
-            NULL AS ISSUER_NAME, NULL AS GFCID,
-            CASE WHEN UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
-                 THEN 1 ELSE 0 END AS is_sub
+          SELECT INVESTOR_NAME, GPNUM,
+                 COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
+                 MAX(PRICING_TS) AS LAST_ACTIVE,
+                 MAX(INVESTOR_CATEGORY) AS CATEGORY,
+                 MAX(INVESTOR_REGION) AS REGION,
+                 CASE WHEN COUNT(DISTINCT PRODUCT) = 2 THEN 'ECM+DCM'
+                      ELSE MAX(PRODUCT) END AS PRODUCTS,
+                 MAX(CASE WHEN UPPER(INVESTOR_NAME) = UPPER(:entity_name)
+                          THEN 1 ELSE 0 END) AS is_exact,
+                 MAX(CASE WHEN UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
+                          THEN 1 ELSE 0 END) AS is_sub
           FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
           WHERE PRODUCT IN ('ECM', 'DCM')
             AND (
               UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
               OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX(UPPER(:entity_name))
             )
+          GROUP BY INVESTOR_NAME, GPNUM
         )
       )
-      WHERE is_sub = 1 OR any_sub = 0
-      ORDER BY is_sub DESC, INVESTOR_NAME
+      WHERE is_exact = 1
+         OR (any_exact = 0 AND is_sub = 1)
+         OR (any_exact = 0 AND any_sub = 0)
+      ORDER BY is_exact DESC, is_sub DESC, DEAL_COUNT DESC, LAST_ACTIVE DESC
       FETCH FIRST 50 ROWS ONLY
 
     issuer_name: >-
-      SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID FROM (
-        SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID,
-               is_sub, MAX(is_sub) OVER () AS any_sub
+      SELECT NULL AS DEAL_ID, NULL AS DEAL_NAME, NULL AS INVESTOR_NAME,
+             NULL AS GPNUM, ISSUER_NAME, GFCID, DEAL_COUNT, LAST_ACTIVE, SECTOR, TICKER, PRODUCTS
+      FROM (
+        SELECT ISSUER_NAME, GFCID, DEAL_COUNT, LAST_ACTIVE, SECTOR, TICKER, PRODUCTS,
+               is_exact, is_sub,
+               MAX(is_exact) OVER () AS any_exact,
+               MAX(is_sub) OVER () AS any_sub
         FROM (
-          SELECT DISTINCT
-            NULL AS DEAL_ID, NULL AS DEAL_NAME, NULL AS INVESTOR_NAME,
-            NULL AS GPNUM, ISSUER_NAME, GFCID,
-            CASE WHEN UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
-                 THEN 1 ELSE 0 END AS is_sub
+          SELECT ISSUER_NAME, GFCID,
+                 COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
+                 MAX(PRICING_TS) AS LAST_ACTIVE,
+                 MAX(SECTOR) AS SECTOR,
+                 MAX(TICKER) AS TICKER,
+                 CASE WHEN COUNT(DISTINCT PRODUCT) = 2 THEN 'ECM+DCM'
+                      ELSE MAX(PRODUCT) END AS PRODUCTS,
+                 MAX(CASE WHEN UPPER(ISSUER_NAME) = UPPER(:entity_name)
+                          THEN 1 ELSE 0 END) AS is_exact,
+                 MAX(CASE WHEN UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
+                          THEN 1 ELSE 0 END) AS is_sub
           FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
           WHERE PRODUCT IN ('ECM', 'DCM')
             AND (
               UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
               OR SOUNDEX(UPPER(ISSUER_NAME)) = SOUNDEX(UPPER(:entity_name))
             )
+          GROUP BY ISSUER_NAME, GFCID
         )
       )
-      WHERE is_sub = 1 OR any_sub = 0
-      ORDER BY is_sub DESC, ISSUER_NAME
+      WHERE is_exact = 1
+         OR (any_exact = 0 AND is_sub = 1)
+         OR (any_exact = 0 AND any_sub = 0)
+      ORDER BY is_exact DESC, is_sub DESC, DEAL_COUNT DESC, LAST_ACTIVE DESC
       FETCH FIRST 50 ROWS ONLY
 
     deal_name: >-
-      SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID FROM (
-        SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID,
-               is_sub, MAX(is_sub) OVER () AS any_sub
+      SELECT DEAL_ID, DEAL_NAME, NULL AS INVESTOR_NAME, NULL AS GPNUM,
+             D_ISSUER AS ISSUER_NAME, NULL AS GFCID, DEAL_COUNT, LAST_ACTIVE, D_ISSUER, STATUS, PRODUCTS
+      FROM (
+        SELECT DEAL_NAME, DEAL_ID, DEAL_COUNT, LAST_ACTIVE, D_ISSUER, STATUS, PRODUCTS,
+               is_exact, is_sub,
+               MAX(is_exact) OVER () AS any_exact,
+               MAX(is_sub) OVER () AS any_sub
         FROM (
-          SELECT DISTINCT
-            DEAL_ID, DEAL_NAME, NULL AS INVESTOR_NAME, NULL AS GPNUM,
-            NULL AS ISSUER_NAME, NULL AS GFCID,
-            CASE WHEN UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
-                 THEN 1 ELSE 0 END AS is_sub
+          SELECT DEAL_NAME, DEAL_ID,
+                 COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
+                 MAX(PRICING_TS) AS LAST_ACTIVE,
+                 MAX(ISSUER_NAME) AS D_ISSUER,
+                 MAX(DEAL_STATUS) AS STATUS,
+                 MAX(PRODUCT) AS PRODUCTS,
+                 MAX(CASE WHEN UPPER(DEAL_NAME) = UPPER(:entity_name)
+                          THEN 1 ELSE 0 END) AS is_exact,
+                 MAX(CASE WHEN UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
+                          THEN 1 ELSE 0 END) AS is_sub
           FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
           WHERE PRODUCT IN ('ECM', 'DCM')
             AND (
               UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
               OR SOUNDEX(UPPER(DEAL_NAME)) = SOUNDEX(UPPER(:entity_name))
             )
+          GROUP BY DEAL_NAME, DEAL_ID
         )
       )
-      WHERE is_sub = 1 OR any_sub = 0
-      ORDER BY is_sub DESC, DEAL_NAME
+      WHERE is_exact = 1
+         OR (any_exact = 0 AND is_sub = 1)
+         OR (any_exact = 0 AND any_sub = 0)
+      ORDER BY is_exact DESC, is_sub DESC, LAST_ACTIVE DESC
       FETCH FIRST 50 ROWS ONLY
 
     by_identifier:
@@ -445,6 +483,30 @@ entity_search:
       index: 0
     - target: gfcid
       sources: [GFCID]
+      index: 0
+    - target: deal_count
+      sources: [DEAL_COUNT]
+      index: 0
+    - target: last_active
+      sources: [LAST_ACTIVE]
+      index: 0
+    - target: category
+      sources: [CATEGORY]
+      index: 0
+    - target: region
+      sources: [REGION]
+      index: 0
+    - target: products
+      sources: [PRODUCTS]
+      index: 0
+    - target: sector
+      sources: [SECTOR]
+      index: 0
+    - target: ticker
+      sources: [TICKER]
+      index: 0
+    - target: status
+      sources: [STATUS]
       index: 0
 
   context_mapping:

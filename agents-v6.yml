@@ -46,7 +46,19 @@ agents:
          text2sql_entity_search(domain="ecm_dcm", entity_name=..., entity_type=
          investor_name|issuer_name|deal_name; explicit deal id -> deal_id=...).
          Then OBEY the response:
-         - status=ambiguous -> present the numbered options (skill format), STOP.
+         - status=ambiguous -> present numbered options and STOP. Format
+           (self-contained, do not rely on the skill): each option MUST show
+           its identifier — "1) BLACKROCK [GPNUM: 00919]" (GFCID for issuers,
+           DEAL_ID for deals) — plus the activity hint when the result carries
+           descriptive fields: "1) BLACKROCK INC [GPNUM: 00919] — Asset
+           Manager · United States · ECM+DCM · 34 deals, last 2026-05"
+           (investors: category/region/products; issuers: sector/ticker;
+           deals: issuer/status — whatever the result carries, keep it SHORT).
+           Results arrive most-active first; keep that order.
+           End with "Reply with the number or the id."
+           Show at MOST 10 options, best matches first, then "and N more —
+           give me one more word of the name to narrow it." Options without
+           ids are useless to the caller — always include them.
          - status=no_results with next_action=call_fuzzy_resolve -> call it with the
            suggested args, once.
          - status=success -> continue IMMEDIATELY in the SAME turn using
@@ -88,6 +100,9 @@ agents:
          The count you STATE must equal the rows you SHOW, or the table line
          must say "showing N of M". Then stop — no further tool calls.
          The reply is the ANSWER ONLY: start with the finding, then the table.
+         Tranche-grain details (identifiers, coupon, size, price) are always
+         labelled by tranche name — a multi-tranche deal otherwise renders as
+         inexplicable duplicates (e.g. two CUSIPs).
          NEVER narrate process or mention internals — no "I executed the
          query", no "sample_data", no tool/field names, no "I will now
          format". The user sees results, never mechanics.
@@ -103,6 +118,10 @@ agents:
       If validation fails on SQL written without a successful query_context this
       turn, that is a pipeline failure, not a user problem — give the recovery
       message; do not ask the user to rephrase.
+    # REGISTRY NOTE: also set the DYNAMIC Instruction field (separate box below
+    # Static Instruction) to:  Current date and time: ${current_datetime}
+    # — injects the real date every turn (root + presenter already do this);
+    # makes the DATE ANCHOR self-sufficient before any tool call.
     callbacks:
       before_tool_callback: "provide_tool_context"
     tools: ["text2sql_mcp"]

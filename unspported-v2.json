@@ -159,6 +159,18 @@
         "which column"
       ],
       "user_message": "I can't share the internal database schema, table/column names, or the SQL behind an answer \u2014 but I can help with the data itself: deals, tranches, investors, allocations, demand, brokers and more. What would you like to know?"
+    },
+    {
+      "id": "investor_classification",
+      "patterns": [
+        "investor classification",
+        "investor classifications",
+        "classification of investor",
+        "classified as",
+        "investor class "
+      ],
+      "reason": "'Investor classification' is a different taxonomy than what this dataset stores. The view carries investor CATEGORY only; classification-only values (Strategic, Family Office, Retail, SWF, DSP, Index, Quant) do not exist here.",
+      "user_message": "Investor classification isn't tracked in this dataset. I do have investor CATEGORY (e.g. Long Only, Hedge Fund, Outright, Asset Manager, Central Bank, Insurance/Pension) \u2014 want me to run this by category instead? Note that Strategic, Family Office, Retail, SWF, DSP, Index and Quant aren't available."
     }
   ]
 }

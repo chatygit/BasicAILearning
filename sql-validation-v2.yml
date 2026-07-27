@@ -251,6 +251,20 @@ rules:
     error_message: "PRODUCT only ever holds 'ECM' or 'DCM' (which market). A security type like ADR/GDR/Common Stock belongs in PRODUCT_TYPE; a bond class like Investment Grade/High Yield belongs in PRODUCT_CLASS. Rewrite using the correct column."
     description: "Catches PRODUCT filtered with a non-market value (wrong-column confusion with PRODUCT_TYPE/PRODUCT_CLASS)."
 
+  - name: "B&D (true) flag must be matched inside the member token"
+    type: "regex"
+    value: '(?is)like\s*''%[^'']*%\s*\(true\)\s*'''
+    match_should_fail: true
+    error_message: "The (true) B&D flag belongs INSIDE the same member token - a pattern like LIKE '%<bank>% (TRUE)' matches whichever bank is LAST in the list, not <bank>. Use REGEXP_LIKE(SYNDICATE_MEMBER_NAME, '<bank>[^|]*\\(true\\)', 'i') for ECM, or SYNDICATE_MEMBER_NAME LIKE for DCM (the DCM member IS the B&D bank)."
+    description: "Blocks the malformed trailing-(true) LIKE pattern that mis-attributes the B&D flag."
+
+  - name: "EXCHANGE needs a broad LIKE - never equality or the NYSE ticker"
+    type: "regex"
+    value: '(?is)(?:\bexchange\s*=\s*''[^'']*''|\bexchange\s*\)?\s*like\s*''[^'']*nyse[^'']*'')'
+    match_should_fail: true
+    error_message: "EXCHANGE holds FULL venue names (e.g. 'New York Stock Exchange'), never tickers like NYSE, and can hold several venues - '=' or '%NYSE%' returns zero rows. Rewrite with a broad token: UPPER(EXCHANGE) LIKE '%NEW YORK%'."
+    description: "Catches equality or NYSE-ticker filters on EXCHANGE (a full-name, possibly multi-valued column)."
+
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that
   # short-circuits requests for users with no entitled products.
