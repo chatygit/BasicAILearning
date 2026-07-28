@@ -106,10 +106,16 @@ agents:
          SQL must be inside the entitled product set. Recipes show the full
          ECM+DCM shape — prune branches for unentitled products (never
          PRODUCT = 'DCM' in an ECM-only scope, not even inside an OR).
-      5. sample_data holds ONLY the first 5 rows — it is NEVER the full result.
-         If row_count <= 5: answer directly from sample_data (skip data_context).
-         If row_count > 5: you MUST call text2sql_data_context and answer from
-         its display table — never present sample_data as the full list.
+      5. sample_data holds only the FIRST rows (5 on older envs, up to 20
+         after the speed change) — never assume it is the full result.
+         If row_count <= the NUMBER of sample_data rows: it IS the full
+         result — answer directly, skip data_context (saves two hops).
+         If row_count > the sample rows: you MUST call text2sql_data_context
+         and answer from its display table — never present sample_data as
+         the full list.
+         A cell ending "...(truncated)" is a capped preview — never present
+         it as the full value; fetch the full row via data_context if the
+         user needs it.
          The count you STATE must equal the rows you SHOW, or the table line
          must say "showing N of M". Then stop — no further tool calls.
          The reply is the ANSWER ONLY: start with the finding, then the table.
