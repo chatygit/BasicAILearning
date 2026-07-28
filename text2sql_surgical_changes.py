@@ -65,21 +65,33 @@ _PRODUCT_LITERAL = _re.compile(
     _re.I | _re.S,
 )
 
-def _entitled_products(soeid: str) -> set:
-    # entitlement_service is the SAME component the query_context_hook uses.
-    # Its "source=api|cache" log line implies internal per-soeid caching, so
-    # calling it here is cheap on the hot path AND correct across pods
-    # (a pod-local cache miss re-resolves via the API inside the service).
-    # ADAPT the import/function name to the service's actual public API -
-    # it must return (or contain) the resolved effective_clause for soeid.
-    from .entitlement_service import resolve_entitlement  # adjust to real name
-    clause = resolve_entitlement(soeid).get("effective_clause", "")
-    # "PRODUCT = 'ECM'" -> {'ECM'};  "PRODUCT IN ('ECM','DCM')" -> both
-    return {m.upper() for m in _re.findall(r"'(ECM|DCM)'", clause, _re.I)}
+# AS SHIPPED (2026-07-30): entitlement_service exposes
+#   get_entitled_products(soeid) -> list[str]   (HTTP POST to entitlement API)
+# so no clause parsing is needed. 5-min TTL cache keeps the API off the
+# per-query hot path; fail-open keeps a broken API from locking users out
+# (the query_context preflight remains the hard gate).
+import time as _time
+from .entitlement_service import get_entitled_products
+
+_CACHE: dict = {}
+_CACHE_TTL_SECONDS = 300
+
+
+def entitled_products(soeid: str) -> set:
+    now = _time.time()
+    hit = _CACHE.get(soeid)
+    if hit and now - hit[1] < _CACHE_TTL_SECONDS:
+        return hit[0]
+    try:
+        products = {p.upper() for p in get_entitled_products(soeid)}
+    except Exception:
+        return set()  # fail open -> pre_execute passes through
+    _CACHE[soeid] = (products, now)
+    return products
 
 def pre_execute(sql_query: str, soeid: str):
     """Return an error dict to block execution, or None to proceed."""
-    entitled = _entitled_products(soeid)
+    entitled = entitled_products(soeid)
     referenced = {m.upper() for pair in _PRODUCT_LITERAL.findall(sql_query)
                   for m in pair if m}
     illegal = referenced - entitled
@@ -117,7 +129,7 @@ def pre_execute(sql_query: str, soeid: str):
 # Contract mirrors the preflight's lenient conventions: None = proceed,
 # error dict = returned verbatim. Only ecm_dcm registers a hook, so every
 # other domain resolves None and stays byte-identical to today.
-# The SAME _entitled_products() feeds CHANGE I1 (entity_search template
+# The SAME entitled_products() feeds CHANGE I1 (entity_search template
 # entitlement) - one cache, one review.
 
 
