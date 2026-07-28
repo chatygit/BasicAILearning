@@ -132,6 +132,9 @@ agents:
          Table headers are BUSINESS labels (Deal, Tranche, Size, Priced,
          B&D) — NEVER raw column names (confidentiality). Timestamps render
          as dates ("25-Nov-2024"), flags as words ("Yes", not "true").
+         Pipe-list cells are ATOMIC - never split them across table columns
+         (tokens shift every later column); zip aligned TYPE|VALUE lists into
+         pairs in ONE cell ("CUSIP 123456789 - FIGI 12345X").
          Breakdown tables: buckets MUST sum to the stated total — do the
          arithmetic before replying; a mismatch means the grain double-counts
          (fix it or state the overlap). Never contradict your own numbers.

@@ -293,6 +293,20 @@ rules:
     error_message: "This view is FLATTENED - the same order/deal/investor appears on multiple rows, so COUNT(ORDER_ID) (or DEAL_ID/GPNUM/INVESTOR_NAME) over-counts and SUM over raw rows inflates. Use COUNT(DISTINCT <col>), and aggregate over a deduped subquery: SELECT ... FROM (SELECT DISTINCT <grain cols> FROM ... WHERE ...) GROUP BY ..."
     description: "Catches COUNT of an identity column without DISTINCT on the flattened view."
 
+  - name: "EQUITY_TYPE and PRODUCT_TYPE are different axes - never OR them"
+    type: "regex"
+    value: '(?is)(?=.*\bequity_type\b)(?=.*\bproduct_type\b)(?=.*\bor\s*\(?\s*(?:upper\s*\(\s*)?(?:equity_type|product_type)\b).+'
+    match_should_fail: true
+    error_message: "EQUITY_TYPE (classification: Common Stock, Convertible Bonds/Preferred, Warrants, Equity Units, Exchangable Notes, American/Global Depository) and PRODUCT_TYPE (labels: ADR/ADS/GDR/GDS, 144A, Class A, Rights, Conv. Bond/Pfd...) must not be OR-combined - pick the ONE axis the user's wording names. Same-column alternatives use IN (...), not OR chains."
+    description: "Rejects hedged OR filters across the two security-type taxonomy columns."
+
+  - name: "EQUITY_TYPE/PRODUCT_TYPE are ECM-only - NULL on DCM"
+    type: "regex"
+    value: '(?is)(?=.*\b(?:equity_type|product_type)[\"]?\s*\)?\s*(?:=|!=|<>|like|in\s*\(|is\s+not\s+null))(?=.*\bproduct[\"]?\s*=\s*''\s*dcm\s*'')(?!.*''\s*ecm\s*'').+'
+    match_should_fail: true
+    error_message: "EQUITY_TYPE and PRODUCT_TYPE are populated for ECM only - NULL on every DCM row, so this DCM-scoped filter returns zero rows. Security-type asks imply PRODUCT = 'ECM'; DCM instrument types live in PRODUCT_CLASS (Investment Grade/High Yield), COUPON_TYPE, or ESG_BOND."
+    description: "Catches a DCM-only-scoped query filtering the ECM-only security-type columns."
+
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that
   # short-circuits requests for users with no entitled products.

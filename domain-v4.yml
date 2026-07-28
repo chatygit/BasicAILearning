@@ -184,7 +184,8 @@ prompts:
          turn — never infer a narrower "current view" from session history,
          and never claim missing access unless a tool returned
          permission_denied. Product-specific asks auto-imply their product
-         (coupon/tenor/seniority -> DCM; IPO/equity type -> ECM).
+         (coupon/tenor/seniority -> DCM; IPO/equity type/PRODUCT_TYPE
+         labels -> ECM: EQUITY_TYPE and PRODUCT_TYPE are NULL on DCM rows).
          USE_OF_PROCEEDS phrases (repay/refinance/M&A/capex) imply NO
          product - both products raise for all purposes; never narrow
          PRODUCT from a UOP word.
