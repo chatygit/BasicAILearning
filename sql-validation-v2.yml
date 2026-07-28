@@ -286,6 +286,13 @@ rules:
     error_message: "Comparing PRICING_TS/SETTLEMENT_TS to a bare string like 2026-01-01 relies on session NLS format and fails or misfilters. Always use the DATE keyword: PRICING_TS >= DATE 2026-01-01 AND PRICING_TS < DATE 2027-01-01."
     description: "Catches timestamp-vs-bare-string comparisons missing the DATE literal keyword."
 
+  - name: "COUNT of an id column needs DISTINCT (flattened view duplicates rows)"
+    type: "regex"
+    value: '(?is)\bcount\s*\(\s*(?:\w+\.)?(?:order_id|deal_id|tranche_id|gpnum|investor_name)\s*\)'
+    match_should_fail: true
+    error_message: "This view is FLATTENED - the same order/deal/investor appears on multiple rows, so COUNT(ORDER_ID) (or DEAL_ID/GPNUM/INVESTOR_NAME) over-counts and SUM over raw rows inflates. Use COUNT(DISTINCT <col>), and aggregate over a deduped subquery: SELECT ... FROM (SELECT DISTINCT <grain cols> FROM ... WHERE ...) GROUP BY ..."
+    description: "Catches COUNT of an identity column without DISTINCT on the flattened view."
+
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that
   # short-circuits requests for users with no entitled products.

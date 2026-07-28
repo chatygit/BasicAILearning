@@ -117,6 +117,9 @@ agents:
          Table headers are BUSINESS labels (Deal, Tranche, Size, Priced,
          B&D) — NEVER raw column names (confidentiality). Timestamps render
          as dates ("25-Nov-2024"), flags as words ("Yes", not "true").
+         Breakdown tables: buckets MUST sum to the stated total — do the
+         arithmetic before replying; a mismatch means the grain double-counts
+         (fix it or state the overlap). Never contradict your own numbers.
          NEVER narrate process or mention internals — no "I executed the
          query", no "sample_data", no tool/field names, no "I will now
          format". The user sees results, never mechanics.

@@ -175,7 +175,7 @@ prompts:
       entity_search(deal_name) with the FULL name string; investor name ->
       entity_search(investor_name) -> GPNUM; issuer name ->
       entity_search(issuer_name) -> GFCID; TRANCHE_ID/ORDER_ID -> direct
-      WHERE (DCM only). Broker/syndicate intent -> no entity_search.
+      WHERE (both products carry ORDER_ID). Broker/syndicate intent -> no entity_search.
       Multiple GPNUM/GFCID matches -> stop and list numbered options.
       Years/quarters <= current date are retrieval, never "future".
     DOMAIN_MANDATORY_FILTERS: |
@@ -185,10 +185,13 @@ prompts:
          and never claim missing access unless a tool returned
          permission_denied. Product-specific asks auto-imply their product
          (coupon/tenor/seniority -> DCM; IPO/equity type -> ECM).
+         USE_OF_PROCEEDS phrases (repay/refinance/M&A/capex) imply NO
+         product - both products raise for all purposes; never narrow
+         PRODUCT from a UOP word.
       B. De-duplication (REQUIRED — view is flattened): deal-level asks
          dedupe by DEAL_ID; tranche-level by DEAL_ID+TRANCHE_ID; then
-         aggregate/rank/limit. ORDER_ID is DCM-only (ECM grain =
-         DEAL_ID+INVESTOR_NAME).
+         aggregate/rank/limit. Order grain: ORDER_ID (BOTH products
+         carry it; fallback for NULL ECM ids: DEAL_ID+INVESTOR_NAME).
       B2. The SELECT column list IS the dedupe grain (biggest duplicate-row
          trap): SELECT DISTINCT only collapses rows identical across the LISTED
          columns, so any column finer than the ask re-introduces duplicates.
@@ -264,8 +267,8 @@ prompts:
       share of book = SUM(CASE WHEN GPNUM=<x> THEN metric END) /
         NULLIF(SUM(metric),0) over deal-scoped rows (NEVER filter the investor
         in WHERE — denominator becomes 100%) | investor count = COUNT(DISTINCT GPNUM), never
-        COUNT(*) | order count = DCM COUNT(DISTINCT ORDER_ID), ECM
-        COUNT(DISTINCT INVESTOR_NAME).
+        COUNT(*) | order count = COUNT(DISTINCT ORDER_ID) on both
+        products (NULL-id ECM fallback: DISTINCT DEAL_ID+INVESTOR_NAME).
 
       Column tie-breaks: generic status ask -> DEAL_STATUS (EXECUTION_STATUS
       only when the user says "execution"); coarse security class ->

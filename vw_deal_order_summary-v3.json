@@ -57,7 +57,7 @@
         {
           "columnName": "PRICING_TS",
           "dataType": "TIMESTAMP",
-          "columnDescription": "Timestamp when the deal/tranche was priced.",
+          "columnDescription": "Timestamp when the deal/tranche was priced. NOTE: the only event dates in this view are PRICING_TS and SETTLEMENT_TS - there is NO announced/created/launch date column; never substitute PRICING_TS for an 'announced on' ask (say it isn't tracked; offer DEAL_STATUS='Announced' or a pricing window).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -171,7 +171,7 @@
         {
           "columnName": "ORDER_ID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Unique identifier for an individual investor order. DCM ONLY - not usable on ECM rows (ECM grain is DEAL_ID+INVESTOR_NAME). ECM order counts = COUNT(DISTINCT INVESTOR_NAME) per deal, never COUNT(DISTINCT ORDER_ID).",
+          "columnDescription": "Unique identifier for an individual investor order - present on BOTH products (ECM carries ORDER_ID too; confirmed 2026-07-28). Order counts = COUNT(DISTINCT ORDER_ID). If ECM counts look implausibly low (older rows may have NULL ids), fall back to DISTINCT DEAL_ID+INVESTOR_NAME pairs and say so.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -231,7 +231,7 @@
         {
           "columnName": "USE_OF_PROCEEDS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Purpose of the raise. Values: Acquisitions, Capital Expenses, Capital Restructure, Debt Repayment, Future Acquisitions, General Corporate Purposes, Growth Capital, Investments, Legal Redemptions, 'M & A' (with spaces), No Proceeds to Issuer, Project Finance, Recapitalization, Refinance, Research and Development, Share Repurchase, Shareholder Dividends, Working Capital Requirement. Match with LIKE on the closest value.",
+          "columnDescription": "Purpose of the raise. Users say shorthand, never exact values - map with UPPER(USE_OF_PROCEEDS) LIKE, OR-ing overlapping values. Known values (env lists vary; also 'N/A'): Acquisitions, Capital Expenses, Capital Restructure, Debt Repayment, Future Acquisitions, General Corporate Purposes, Growth Capital, Investments, Legal Redemptions, 'M & A' (WITH spaces - exact '=' on M&A fails), No Proceeds to Issuer, Project Finance, Recapitalization, Refinance, Research and Development, Share Repurchase, Shareholder Dividends, Working Capital Requirement. Map: m&a/merger/acquisition -> '%M & A%' OR '%ACQUISITION%'; capex -> '%CAPITAL EXPENSE%'; refi/debt repayment -> '%REFINANC%' OR '%DEBT REPAY%'; buyback -> '%SHARE REPURCHASE%'; redemption -> '%REDEMPTION%'; GCP -> '%GENERAL CORPORATE%'. 'N/A' and 'No Proceeds to Issuer' mean purpose NOT STATED - exclude from purpose breakdowns and say so.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
