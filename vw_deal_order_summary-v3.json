@@ -39,7 +39,7 @@
         {
           "columnName": "TRANCHE_SIZE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Total size of the tranche offering, STORED AS TEXT (VARCHAR2). Always wrap in TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) before comparing, ranking, or summing. For ECM, deal size in shares; for DCM, total Nominal/Principal of the tranche.",
+          "columnDescription": "Size of the tranche offering, STORED AS TEXT (VARCHAR2) - always wrap as TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) before comparing/ranking/summing. UNIT DEPENDS ON PRODUCT: ECM = SHARES (present as 'N shares'); DCM = notional MONEY in CURRENCY. Never aggregate across both products; DCM sums need currency scoping.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -81,7 +81,7 @@
         {
           "columnName": "ALLOCATION",
           "dataType": "NUMBER",
-          "columnDescription": "Final allocation to the investor. This is the ECM investor-side metric (a SHARE count on ECM). On DCM it is currently mapped from order-amount fields (a money value). 'How much did investor X get/invest' on ECM -> SUM(ALLOCATION). Because the unit differs by product (ECM shares vs DCM money), never SUM ALLOCATION across both products together - GROUP BY PRODUCT or scope to one.",
+          "columnDescription": "Final allocation to the investor - the ECM investor-side metric. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = MONEY (prefer AMT for DCM money asks). Never aggregate across both products; label the unit in answers.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -135,7 +135,7 @@
         {
           "columnName": "EXCHANGE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Stock exchange where the securities are listed - holds FULL venue names (e.g. 'New York Stock Exchange'), never tickers like NYSE, and may hold multiple venues. Primarily populated for ECM records. Never filter with '=' or an abbreviation (returns zero rows) - use a broad token instead: UPPER(EXCHANGE) LIKE '%NEW YORK%'.",
+          "columnDescription": "Stock exchange(s) where listed - mostly ECM; may hold multiple venues; stored literals unverified. Users say abbreviations (NYSE, TSX, LSE) - NEVER filter with '=' (zero rows). Expand the abbreviation and OR both tokens: (UPPER(EXCHANGE) LIKE '%NYSE%' OR UPPER(EXCHANGE) LIKE '%NEW YORK%'); TSX->TORONTO, LSE->LONDON, HKEX->HONG KONG, SSE->SHANGHAI.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -147,7 +147,7 @@
         {
           "columnName": "DEAL_SIZE",
           "dataType": "NUMBER",
-          "columnDescription": "Total size of the deal across all tranches. For ECM, expressed in shares or monetary value at deal level; for DCM, total Principal/Nominal amount across tranches. See TRANCHE_SIZE for tranche-level size.",
+          "columnDescription": "Total deal size. UNIT DEPENDS ON PRODUCT: ECM = total SHARES offered (a share count - present as 'N shares', NEVER as money; a money 'deal value' is not derivable, no price column exists); DCM = total notional/principal MONEY in CURRENCY. Never aggregate across both products (shares+cash mix); DCM money sums need one CURRENCY or GROUP BY CURRENCY. Deal-level: dedupe DEAL_ID; never rebuild it as SUM(TRANCHE_SIZE).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -189,7 +189,7 @@
         {
           "columnName": "DEMAND_QTY",
           "dataType": "NUMBER",
-          "columnDescription": "Demand quantity - shares/amount the investor asked for (indication), before allocation. ECM and DCM. 'Demand'/'indication in shares' -> DEMAND_QTY (never ALLOCATION or AMT). Compare with ALLOCATION for the final approved amount.",
+          "columnDescription": "Demand (indication) the investor asked for, before allocation. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = notional MONEY in CURRENCY - label the unit in answers. 'Demand'/'indication in shares' -> DEMAND_QTY (never ALLOCATION). Never aggregate across both products.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {

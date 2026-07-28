@@ -204,9 +204,9 @@ rules:
 
   - name: "Monetary aggregate requires currency scoping"
     type: "regex"
-    value: '(?is)(?=.*\bfrom\s+["]?dgstream["]?\.["]?vw_deal_order_summary["]?)(?=.*\b(?:sum|avg)\s*\(\s*(?:to_number\s*\(\s*)?(?:deal_size|tranche_size|amt)\b)(?!.*\bcurrency\s*(?:=|\bin\b))(?!.*\bgroup\s+by\b[^;]*\bcurrency\b).+'
+    value: '(?is)(?=.*\bfrom\s+["]?dgstream["]?\.["]?vw_deal_order_summary["]?)(?=.*''\s*dcm\s*'')(?=.*\b(?:sum|avg)\s*\(\s*(?:to_number\s*\(\s*)?(?:deal_size|tranche_size|amt|demand_qty|allocation)\b)(?!.*\bcurrency\s*(?:=|\bin\b))(?!.*\bgroup\s+by\b[^;]*\bcurrency\b).+'
     match_should_fail: true
-    error_message: "Totalling money across mixed currencies is meaningless — there is no FX conversion in this view. Either filter a single currency (WHERE CURRENCY = 'USD') or add CURRENCY to the GROUP BY so each currency is totalled separately."
+    error_message: "This sum includes DCM rows, where sizes/amounts are MONEY - and totalling money across mixed currencies is meaningless (no FX in this view). Filter one currency (WHERE CURRENCY = 'USD') or add CURRENCY to the GROUP BY. (ECM-only share sums need no currency scope.)"
     # description: "Blocks SUM/AVG of DEAL_SIZE/TRANCHE_SIZE/AMT without a CURRENCY filter or GROUP BY CURRENCY."
 
   - name: "AMT is the DCM metric — use ALLOCATION for ECM"
@@ -216,11 +216,11 @@ rules:
     error_message: "AMT is the DCM investor-side money metric and is empty on ECM rows. For an ECM investor amount ('how much did X invest/order/get'), use SUM(ALLOCATION), not SUM(AMT)."
     # description: "Blocks SUM/AVG(AMT) on ECM-scoped queries where ALLOCATION is the correct metric."
 
-  - name: "ALLOCATION must not be summed across both products"
+  - name: "Quantity metrics must not be aggregated across both products"
     type: "regex"
-    value: '(?is)(?=.*\bfrom\s+["]?dgstream["]?\.["]?vw_deal_order_summary["]?)(?=.*\bsum\s*\(\s*allocation\s*\))(?=.*\bproduct\s+in\s*\(\s*''(?:ecm|dcm)''\s*,\s*''(?:ecm|dcm)''\s*\))(?!.*\bgroup\s+by\b[^;]*\bproduct\b).+'
+    value: '(?is)(?=.*\bfrom\s+["]?dgstream["]?\.["]?vw_deal_order_summary["]?)(?=.*\b(?:sum|avg)\s*\(\s*(?:to_number\s*\(\s*)?(?:allocation|deal_size|tranche_size|demand_qty)\b)(?=.*\bproduct\s+in\s*\(\s*''(?:ecm|dcm)''\s*,\s*''(?:ecm|dcm)''\s*\))(?!.*\bgroup\s+by\b[^;]*\bproduct\b).+'
     match_should_fail: true
-    error_message: "ALLOCATION is a SHARE count on ECM but a MONEY amount on DCM, so summing it across both products mixes units. Add PRODUCT to the GROUP BY, or scope the query to one product (ECM uses ALLOCATION, DCM uses AMT)."
+    error_message: "DEAL_SIZE/TRANCHE_SIZE/ALLOCATION/DEMAND_QTY are SHARE counts on ECM but MONEY on DCM - aggregating across both products mixes shares with cash. Add PRODUCT to the GROUP BY, or scope one product (ECM money asks use ALLOCATION shares; DCM money uses AMT)."
     # description: "Blocks unit-mixing when ALLOCATION is aggregated across ECM and DCM together."
 
   - name: "Ratio must guard against divide-by-zero"
@@ -258,11 +258,11 @@ rules:
     error_message: "The (true) B&D flag belongs INSIDE the same member token - a pattern like LIKE '%<bank>% (TRUE)' matches whichever bank is LAST in the list, not <bank>. Use REGEXP_LIKE(SYNDICATE_MEMBER_NAME, '<bank>[^|]*\\(true\\)', 'i') for ECM, or SYNDICATE_MEMBER_NAME LIKE for DCM (the DCM member IS the B&D bank)."
     description: "Blocks the malformed trailing-(true) LIKE pattern that mis-attributes the B&D flag."
 
-  - name: "EXCHANGE needs a broad LIKE - never equality or the NYSE ticker"
+  - name: "EXCHANGE filters use UPPER LIKE - never equality"
     type: "regex"
-    value: '(?is)(?:\bexchange["]?\s*=\s*''[^'']*''|\bexchange["]?\s*\)?\s*like\s*''[^'']*nyse[^'']*'')'
+    value: '(?is)\bexchange["]?\s*=\s*''[^'']*'''
     match_should_fail: true
-    error_message: "EXCHANGE holds FULL venue names (e.g. 'New York Stock Exchange'), never tickers like NYSE, and can hold several venues - '=' or '%NYSE%' returns zero rows. Rewrite with a broad token: UPPER(EXCHANGE) LIKE '%NEW YORK%'."
+    error_message: "Exact '=' on EXCHANGE returns zero rows (stored values are venue names, possibly multiple). Users say abbreviations - expand them and OR both tokens: (UPPER(EXCHANGE) LIKE '%NYSE%' OR UPPER(EXCHANGE) LIKE '%NEW YORK%'), TSX->TORONTO, LSE->LONDON, HKEX->HONG KONG."
     description: "Catches equality or NYSE-ticker filters on EXCHANGE (a full-name, possibly multi-valued column)."
 
   - name: "TRANCHE_STATUS is NULL for ECM - use DEAL_STATUS"

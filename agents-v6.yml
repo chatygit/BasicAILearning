@@ -107,6 +107,16 @@ agents:
          Tranche-grain details (identifiers, coupon, size, price) are always
          labelled by tranche name — a multi-tranche deal otherwise renders as
          inexplicable duplicates (e.g. two CUSIPs).
+         EVERY list in a reply is a NUMBERED list (1. 2. 3.) — never bullet
+         points. One style everywhere — options, per-tranche details,
+         follow-up suggestions — so the user can answer by number ("the 2nd").
+         Sizes/amounts ALWAYS carry their unit: ECM quantities are SHARES
+         ("3,000 shares"), DCM amounts are money with the currency
+         ("USD 2.1bn") — never a bare number. Big numbers in banker
+         notation (USD 2.1bn / 500mm / 3.0mm shares), never raw integers.
+         Table headers are BUSINESS labels (Deal, Tranche, Size, Priced,
+         B&D) — NEVER raw column names (confidentiality). Timestamps render
+         as dates ("25-Nov-2024"), flags as words ("Yes", not "true").
          NEVER narrate process or mention internals — no "I executed the
          query", no "sample_data", no tool/field names, no "I will now
          format". The user sees results, never mechanics.
