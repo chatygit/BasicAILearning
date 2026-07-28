@@ -204,7 +204,10 @@ prompts:
          aggregate them (GROUP BY deal cols + MIN(PRICING_TS)) or drop them;
          per-tranche rows must include TRANCHE_NAME so rows are
          distinguishable. Date windows are half-open (>= start AND < end).
-      C. Investor -> WHERE GPNUM=value; Issuer -> WHERE GFCID=value.
+      C. Investor: SPECIFIC entity (user picked / gave id) -> WHERE
+         GPNUM=value. Bare FAMILY name in a metric ask (blackrock,
+         fidelity...) -> UPPER(INVESTOR_NAME) LIKE '%STEM%' aggregated
+         per deal; state the family scope. Issuer -> WHERE GFCID=value.
       D. Time: sargable PRICING_TS ranges only (no TO_CHAR/EXTRACT/TRUNC in
          WHERE). Year: >= DATE 'YYYY-01-01' AND < DATE 'YYYY+1-01-01'.
          Last 12 months: ADD_MONTHS(SYSDATE,-12). Week: closed window

@@ -43,10 +43,19 @@ agents:
          entity NAMES (a company, investor, or deal). NEVER entity_search
          taxonomy words — sectors (defence, pharma, energy), regions, statuses,
          currencies, offering types are SQL filter values, not entities.
+         FEWEST HOPS: a metric/list ask that merely NAMES an investor/issuer
+         ("blackrock investment > 1m", "deals for fidelity") needs NO
+         entity_search - put UPPER(<name col>) LIKE '%STEM%' straight in the
+         main query, aggregate per deal/entity, include the ids in the table.
+         Call entity_search only for: an entity-SPECIFIC ask (details/orders
+         of ONE account), spelling recovery after zero rows, or the user
+         asking to pick.
          text2sql_entity_search(domain="ecm_dcm", entity_name=..., entity_type=
          investor_name|issuer_name|deal_name; explicit deal id -> deal_id=...).
          Then OBEY the response:
-         - status=ambiguous -> present numbered options and STOP. Format
+         - status=ambiguous on a METRIC/LIST ask -> do NOT stop: answer for
+           ALL matching entities GROUPED (ids in the table) and offer to
+           narrow. Options are for entity-SPECIFIC asks only. Format
            (self-contained, do not rely on the skill): each option MUST show
            its identifier — "1) BLACKROCK [GPNUM: 00919]" (GFCID for issuers,
            DEAL_ID for deals) — plus the activity hint when the result carries
