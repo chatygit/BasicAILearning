@@ -93,7 +93,7 @@
         {
           "columnName": "INVESTOR_CATEGORY",
           "dataType": "VARCHAR2",
-          "columnDescription": "Classification of the investor. Exact DB values: Outright, Long Only, Hedge Fund, Long/Hedge, Outright/Hedge, Central Bank, Official Institution, Insurance/Pension, Asset Manager, Corporate Treasury, Bank Treasury, Private Bank, Co-lead Retention, Co-lead Trading, Co-lead Order, Co-lead Pot, Other Trading, Broker, Syndicate, JLM Trading, Other. Not valid: Strategic, Family Office, Retail, SWF, DSP, Index, Quant.",
+          "columnDescription": "Classification of the investor. Exact DB values: Outright, Long Only, Hedge Fund, Long/Hedge, Outright/Hedge, Central Bank, Official Institution, Insurance/Pension, Asset Manager, Corporate Treasury, Bank Treasury, Private Bank, Co-lead Retention, Co-lead Trading, Co-lead Order, Co-lead Pot, Other Trading, Broker, Syndicate, JLM Trading, Other. Not valid: Strategic, Family Office, Retail, SWF, DSP, Index, Quant. Book context: common-stock books use Long Only/Hedge Fund; convertible books use Outright/Hedge Fund - 'outright' asks usually concern convertible deals, but never auto-add a product-type filter unless asked.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -105,7 +105,7 @@
         {
           "columnName": "MEETING_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Human-readable meeting type between the issuer/syndicate and the investor (e.g., 'No Meeting', 'One-to-One', 'Conference Call', 'Small Group', 'Group Meeting'). Display counterpart of MEETING_TYPE_KEY.",
+          "columnDescription": "Meeting type between issuer/syndicate and the investor. EXACT display values: 'No Meeting', '1x1', 'Conference Call', 'Small Group', 'Group Meeting'. The 1x1 value is the literal '1x1' - NOT 'One-to-One' (that spelling returns zero rows). \"Other than 1x1\" asks -> MEETING_TYPE NOT IN ('1x1','No Meeting') and state that no-meeting orders were excluded.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -177,7 +177,7 @@
         {
           "columnName": "ORDER_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Order HANDLING type. Values include OTT, AWAY, REGULAR (and others; list not exhaustive). 'away orders' / 'orders from other banks' -> ORDER_TYPE LIKE '%AWAY%'. NOTE: LIMIT / MARKET / SCALED are the INDICATION type and now live in IOI_TYPE, not here.",
+          "columnDescription": "Order HANDLING type. Confirmed values: 'OTT', 'Regular' (mixed case as stored - always compare via UPPER). 'AWAY' is unverified legacy - if an away-orders ask returns zero rows, say away-order handling isn't tracked. LIMIT/MARKET/SCALED belong to IOI_TYPE, not this column.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -328,6 +328,24 @@
           "columnName": "GPNUM",
           "dataType": "VARCHAR2",
           "columnDescription": "Global Participant Number - identifies the INVESTOR (the buyer / allocatee / order-placer) on the deal. Use this for ALL investor-side filters, e.g. `WHERE GPNUM = '<investor-gpnum>'` or `WHERE GPNUM IN ('<gp1>', '<gp2>')`.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
+        },
+        {
+          "columnName": "TRANCHE_STATUS",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Lifecycle status of the TRANCHE (tranche level). DCM ONLY - ALWAYS NULL on ECM rows: never filter an ECM-scoped query by TRANCHE_STATUS (returns zero rows) - ECM status lives in DEAL_STATUS. Observed values (mixed case - ALWAYS UPPER both sides): draft, announced, allocated, archived, freeToTrade, Settled, cancelled, priced, subject, postponed. 'free to trade' -> UPPER(TRANCHE_STATUS)='FREETOTRADE'.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
+        },
+        {
+          "columnName": "SETTLEMENT_CURRENCY",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Currency the tranche SETTLES in - distinct from CURRENCY (denomination/pricing currency). Settlement-vs-denomination mismatch asks are SUPPORTED: SETTLEMENT_CURRENCY IS NOT NULL AND SETTLEMENT_CURRENCY <> CURRENCY. May be NULL where not captured - say so rather than silently dropping rows.",
+          "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
+        },
+        {
+          "columnName": "DEAL_SHARING_TYPE",
+          "dataType": "VARCHAR2",
+          "columnDescription": "Whether the deal is sole-managed or a shared syndicate. Values e.g. 'SOLO','SHARED' (UPPER compare). PRIMARY route for 'solo' asks on BOTH products: UPPER(DEAL_SHARING_TYPE)='SOLO' AND the bank filter (makes DCM solo answerable). NEW column with edge-case logic not fully implemented upstream: on ECM corroborate or fall back to REGEXP_COUNT(BROKER_CODE,'|')=0 + the bank token; if one route returns zero rows try the other before answering 'none'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         }
       ],

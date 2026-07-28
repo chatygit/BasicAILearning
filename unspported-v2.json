@@ -14,20 +14,6 @@
       "user_message": "I'm unable to answer questions about peer companies \u2014 this domain does not have a peer company relationship graph. I can search for investors in a specific sector or named company instead. Would you like that?"
     },
     {
-      "id": "settlement_currency_mismatch",
-      "patterns": [
-        "settlement currency differs from",
-        "settlement currency different",
-        "settlement currency vs deal currency",
-        "currency mismatch between settlement",
-        "different settlement currency",
-        "settlement currency",
-        "settled in currency",
-        "settlement ccy"
-      ],
-      "user_message": "I can't filter by settlement currency \u2014 it isn't available in this dataset. I can filter by the deal's pricing currency instead. Would that work?"
-    },
-    {
       "id": "issuer_country_domicile",
       "patterns": [
         "country of domicile",

@@ -214,17 +214,22 @@ prompts:
          'United States','Germany','EU'); "US investors"/"investors based in X"
          -> INVESTOR_REGION LIKE. Keep it DISTINCT from the deal's region.
          IOI type (LIMIT/MARKET/SCALED) -> IOI_TYPE; order handling
-         (OTT/AWAY/REGULAR) -> ORDER_TYPE.
+         -> ORDER_TYPE (confirmed values: 'OTT', 'Regular'; UPPER compare).
       E. Region: TRANCHE_REGION default (NAM/EMEA/APAC); DEAL_REGION
          (values NAM/EMEA/APAC) only for explicit deal-level asks; the old
          REGION column was removed — never emit REGION.
       F. Broker/syndicate: branch-aware per DOMAIN_VIEW_BUILD_NOTES and
-         DOMAIN_BROKER_ALIASES_JSON. Solo = ECM only
-         (REGEXP_COUNT(BROKER_CODE,'\|')=0 + Citi token). Roles = ECM only,
+         DOMAIN_BROKER_ALIASES_JSON. Solo asks -> UPPER(DEAL_SHARING_TYPE)='SOLO'
+         + bank filter (BOTH products); ECM fallback if zero rows:
+         REGEXP_COUNT(BROKER_CODE,'\|')=0 + Citi token. Roles = ECM only,
          REGEXP_LIKE with expanded role patterns (never the user's literal
          phrase).
       G. SQL efficiency: minimal SELECT (no SELECT *), FETCH FIRST N ROWS
          ONLY on broad listings, push PRODUCT+date+entity filters first.
+      H. SQL style (Oracle): NEVER double-quote identifiers - bare UPPERCASE
+         names only. Quoting the dotted view name ("DGSTREAM.VW_DEAL...")
+         makes it ONE invalid identifier -> ORA-00942. Date literals ALWAYS
+         carry the DATE keyword (DATE 'YYYY-MM-DD'), never a bare string.
     DOMAIN_SPECIFIC_AGGREGATION_RULES: |
       demand -> DEMAND_QTY (ECM+DCM; authoritative — overrides any stale
       mapping). allocation -> ALLOCATION. order size/amount -> ECM=ALLOCATION,
@@ -401,15 +406,15 @@ entity_search:
 
     deal_name: >-
       SELECT DEAL_ID, DEAL_NAME, NULL AS INVESTOR_NAME, NULL AS GPNUM,
-             D_ISSUER AS ISSUER_NAME, NULL AS GFCID, DEAL_COUNT, LAST_ACTIVE, D_ISSUER, STATUS, PRODUCTS
+             D_ISSUER AS ISSUER_NAME, NULL AS GFCID, TRANCHE_COUNT, LAST_ACTIVE, STATUS, PRODUCTS
       FROM (
-        SELECT DEAL_NAME, DEAL_ID, DEAL_COUNT, LAST_ACTIVE, D_ISSUER, STATUS, PRODUCTS,
+        SELECT DEAL_NAME, DEAL_ID, TRANCHE_COUNT, LAST_ACTIVE, D_ISSUER, STATUS, PRODUCTS,
                is_exact, is_sub,
                MAX(is_exact) OVER () AS any_exact,
                MAX(is_sub) OVER () AS any_sub
         FROM (
           SELECT DEAL_NAME, DEAL_ID,
-                 COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
+                 COUNT(DISTINCT TRANCHE_ID) AS TRANCHE_COUNT,
                  MAX(PRICING_TS) AS LAST_ACTIVE,
                  MAX(ISSUER_NAME) AS D_ISSUER,
                  MAX(DEAL_STATUS) AS STATUS,
@@ -486,6 +491,9 @@ entity_search:
       index: 0
     - target: deal_count
       sources: [DEAL_COUNT]
+      index: 0
+    - target: tranche_count
+      sources: [TRANCHE_COUNT]
       index: 0
     - target: last_active
       sources: [LAST_ACTIVE]
