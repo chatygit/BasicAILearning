@@ -251,13 +251,12 @@ rules:
     error_message: "PRODUCT only ever holds 'ECM' or 'DCM' (which market). A security type like ADR/GDR/Common Stock belongs in PRODUCT_TYPE; a bond class like Investment Grade/High Yield belongs in PRODUCT_CLASS. Rewrite using the correct column."
     description: "Catches PRODUCT filtered with a non-market value (wrong-column confusion with PRODUCT_TYPE/PRODUCT_CLASS)."
 
-  - name: "B&D (true) flag must be matched inside the member token"
+  - name: "Inline (true) member-suffix matching is DEPRECATED - use the BND_BROKER index"
     type: "regex"
-    value: '(?is)like\s*''%[^'']*%\s*\(true\)\s*'''
+    value: '(?is)(?:\\\(|\()\s*true\s*(?:\\\)|\))'
     match_should_fail: true
-    error_message: "The (true) B&D flag belongs INSIDE the same member token - a pattern like LIKE '%<bank>% (TRUE)' matches whichever bank is LAST in the list, not <bank>. Use REGEXP_LIKE(SYNDICATE_MEMBER_NAME, '<bank>[^|]*\\(true\\)', 'i') for ECM, or SYNDICATE_MEMBER_NAME LIKE for DCM (the DCM member IS the B&D bank)."
-    description: "Blocks the malformed trailing-(true) LIKE pattern that mis-attributes the B&D flag."
-
+    error_message: "The inline (true)/(false) suffixes inside SYNDICATE_MEMBER_NAME are duplicate data being REMOVED - filters on them will silently return zero rows. Use the position-aligned BND_BROKER list instead: the B&D bank = the member token at the 'true' index - INSTR(BND_BROKER,'true') > 0 AND UPPER(TRIM(REGEXP_SUBSTR(SYNDICATE_MEMBER_NAME,'[^|]+',1, REGEXP_COUNT(SUBSTR(BND_BROKER,1,INSTR(BND_BROKER,'true')),'\\|')+1))) LIKE '%<BANK>%'. INSTR = 0 means no B&D designated on that row."
+    description: "Deprecates inline-suffix B&D matching in favor of the BND_BROKER positional index."
   - name: "EXCHANGE filters use UPPER LIKE - never equality"
     type: "regex"
     value: '(?is)\bexchange["]?\s*=\s*''[^'']*'''
@@ -265,11 +264,11 @@ rules:
     error_message: "Exact '=' on EXCHANGE returns zero rows (stored values are venue names, possibly multiple). Users say abbreviations - expand them and OR both tokens: (UPPER(EXCHANGE) LIKE '%NYSE%' OR UPPER(EXCHANGE) LIKE '%NEW YORK%'), TSX->TORONTO, LSE->LONDON, HKEX->HONG KONG."
     description: "Catches equality or NYSE-ticker filters on EXCHANGE (a full-name, possibly multi-valued column)."
 
-  - name: "TRANCHE_STATUS is NULL for ECM - use DEAL_STATUS"
+  - name: "DCM-only columns filtered in an ECM-scoped query"
     type: "regex"
-    value: '(?is)(?=.*\btranche_status["]?\s*\)?\s*(?:=|!=|<>|like|in\s*\(|is\s+not\s+null))(?=.*\bproduct["]?\s*=\s*''\s*ecm\s*'')(?!.*''\s*dcm\s*'').+'
+    value: '(?is)(?=.*\b(?:tranche_status|coupon_type|coupon_freq|tenors|seniority|esg_bond)["]?\s*\)?\s*(?:>=|<=|<>|!=|=|>|<|like|in\s*\(|is\s+not\s+null))(?=.*\bproduct["]?\s*=\s*''\s*ecm\s*'')(?!.*''\s*dcm\s*'').+'
     match_should_fail: true
-    error_message: "TRANCHE_STATUS is populated for DCM only - it is NULL on every ECM row, so this ECM-scoped filter returns zero rows. For ECM lifecycle status use UPPER(DEAL_STATUS); keep TRANCHE_STATUS filters for DCM-scoped queries."
+    error_message: "That column is a DCM/bond concept (TRANCHE_STATUS confirmed NULL on ECM; coupon/tenor/seniority/ESG are bond-side) - an ECM-scoped filter on it returns zero rows. Scope the query to DCM, or use the ECM equivalents (status -> DEAL_STATUS; type -> EQUITY_TYPE/PRODUCT_TYPE)."
     description: "Catches an ECM-only-scoped query filtering TRANCHE_STATUS (always-NULL column for ECM)."
 
   - name: "Never double-quote the view name as one identifier"
@@ -300,11 +299,11 @@ rules:
     error_message: "EQUITY_TYPE (classification: Common Stock, Convertible Bonds/Preferred, Warrants, Equity Units, Exchangable Notes, American/Global Depository) and PRODUCT_TYPE (labels: ADR/ADS/GDR/GDS, 144A, Class A, Rights, Conv. Bond/Pfd...) must not be OR-combined - pick the ONE axis the user's wording names. Same-column alternatives use IN (...), not OR chains."
     description: "Rejects hedged OR filters across the two security-type taxonomy columns."
 
-  - name: "EQUITY_TYPE/PRODUCT_TYPE are ECM-only - NULL on DCM"
+  - name: "ECM-only columns filtered in a DCM-scoped query"
     type: "regex"
-    value: '(?is)(?=.*\b(?:equity_type|product_type)[\"]?\s*\)?\s*(?:=|!=|<>|like|in\s*\(|is\s+not\s+null))(?=.*\bproduct[\"]?\s*=\s*''\s*dcm\s*'')(?!.*''\s*ecm\s*'').+'
+    value: '(?is)(?=.*\b(?:equity_type|product_type)[\"]?\s*\)?\s*(?:>=|<=|<>|!=|=|>|<|like|in\s*\(|is\s+not\s+null))(?=.*\bproduct[\"]?\s*=\s*''\s*dcm\s*'')(?!.*''\s*ecm\s*'').+'
     match_should_fail: true
-    error_message: "EQUITY_TYPE and PRODUCT_TYPE are populated for ECM only - NULL on every DCM row, so this DCM-scoped filter returns zero rows. Security-type asks imply PRODUCT = 'ECM'; DCM instrument types live in PRODUCT_CLASS (Investment Grade/High Yield), COUPON_TYPE, or ESG_BOND."
+    error_message: "EQUITY_TYPE and PRODUCT_TYPE are ECM-only (confirmed: DCM rows do not carry equity/product type) - a DCM-scoped filter on them returns zero rows. Security-type asks imply PRODUCT = 'ECM'; DCM instrument types live in PRODUCT_CLASS/COUPON_TYPE/ESG_BOND."
     description: "Catches a DCM-only-scoped query filtering the ECM-only security-type columns."
 
   - name: "Identifier columns need LIKE - never equality (pipe-delimited lists)"
@@ -313,6 +312,34 @@ rules:
     match_should_fail: true
     error_message: "IDENTIFIER_TYPE/IDENTIFIER_VALUE hold PIPE-DELIMITED lists on many rows ('CUSIP | FIGI | ISIN...') - equality only matches single-identifier rows and silently misses the rest. Use LIKE: IDENTIFIER_TYPE LIKE '%CUSIP%' AND IDENTIFIER_VALUE LIKE '%<id>%'."
     description: "Catches equality comparisons on the pipe-delimited identifier columns."
+
+  - name: "Fabricated columns - CUSIP/ISIN/EXEC_DATE/PRICE/COUPON do not exist"
+    type: "regex"
+    value: '(?is)(?<!as )\b(?:cusip|isin|exec_date|execution_date|announce_date|announced_date|issue_date|maturity_date|offer_price|price|coupon|order_status)\b\s*(?:=|!=|<>|>=|<=|like\b|,|\s+from\b|\s+desc\b|\s+asc\b)'
+    match_should_fail: true
+    error_message: "That column does not exist in this view. Identifiers: IDENTIFIER_TYPE LIKE '%CUSIP%' AND IDENTIFIER_VALUE LIKE '%<id>%' (never a CUSIP/ISIN column). Event dates: PRICING_TS / SETTLEMENT_TS only (no EXEC_DATE/ISSUE_DATE/MATURITY_DATE). Coupon: COUPON_TYPE / COUPON_FREQ (no bare COUPON or PRICE column). Order status does not exist - deal lifecycle lives in DEAL_STATUS. Use ONLY columns from query_context schema_context - if query_context was not called this conversation, call it FIRST and rebuild."
+    description: "Backstop against schema hallucination when the model skipped query_context (finance-plausible invented columns)."
+
+  - name: "NOT LIKE on a pipe-list syndicate column excludes the whole syndicate"
+    type: "regex"
+    value: '(?is)(?=.*''\s*ecm\s*'')(?=.*(?:\b(?:syndicate_member_name|broker_code)[\"]?\s*\)?\s*not\s+like\b|\bnot\s*\(\s*(?:upper\s*\(\s*)?[\"]?(?:syndicate_member_name|broker_code)\b.{0,40}?\blike\b)).+'
+    match_should_fail: true
+    error_message: "On ECM rows SYNDICATE_MEMBER_NAME/BROKER_CODE are PIPE LISTS of the whole syndicate - NOT LIKE excludes every deal where that bank appears ANYWHERE (structural zero rows). Extract the single B&D token by INDEX first, then negate THAT: INSTR(BND_BROKER,'true') > 0 AND UPPER(TRIM(REGEXP_SUBSTR(SYNDICATE_MEMBER_NAME,'[^|]+',1, REGEXP_COUNT(SUBSTR(BND_BROKER,1,INSTR(BND_BROKER,'true')),'\\|')+1))) NOT LIKE '%CITI%'. Plain NOT LIKE is valid only in DCM-only scope (single-value column)."
+    description: "Catches whole-list negation on pipe-delimited syndicate columns in ECM-involving queries."
+
+  - name: "Negation phrases are predicates, not stored values"
+    type: "regex"
+    value: '(?is)\b(?:investor_region|tranche_region|deal_region|investor_category|meeting_type|sector|currency)[\"]?\s*\)?\s*(?:=|like)\s*''%?\s*(?:non|not)[\s_-]'
+    match_should_fail: true
+    error_message: "'Non X' / 'Not X' is the USER'S negation, not a stored value - no column holds literals like 'Non USA'. Rewrite as a negation predicate: UPPER(INVESTOR_REGION) NOT LIKE '%UNITED STATES%' (etc). NOT-predicates exclude NULL rows - report the excluded no-value count in the answer (unknown is not non-X)."
+    description: "Catches user negation phrases pasted into equality/LIKE literals."
+
+  - name: "Id columns are TEXT - quote the literal"
+    type: "regex"
+    value: '(?is)\b(?:deal_id|tranche_id|order_id|parent_id|root_id|gpnum|gfcid)[\"]?\s*(?:=|!=|<>|in\s*\()\s*\d'
+    match_should_fail: true
+    error_message: "DEAL_ID/TRANCHE_ID/ORDER_ID/GPNUM/GFCID are TEXT columns - an unquoted numeric literal forces TO_NUMBER over every row, and DCM ids contain letters ('I-241121-...') so the query dies with ORA-01722. Quote the id: DEAL_ID = '25248935'. (Unquoted GPNUM also silently drops leading zeros.)"
+    description: "Catches unquoted numeric comparisons on text id columns (ORA-01722 class)."
 
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that

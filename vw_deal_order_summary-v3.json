@@ -15,7 +15,7 @@
         {
           "columnName": "DEAL_ID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Unique identifier for the deal/transaction. Primary key for linking deals to orders and tranches. Corresponds to dealId in the UI.",
+          "columnDescription": "TEXT id - compare to ALWAYS a QUOTED literal ('25248935'); an unquoted number forces TO_NUMBER on every row and alphanumeric ids (DCM: 'I-241121-...') raise ORA-01722. Unique identifier for the deal/transaction. Primary key for linking deals to orders and tranches. Corresponds to dealId in the UI.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -27,7 +27,7 @@
         {
           "columnName": "TRANCHE_ID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Unique identifier for a tranche within a deal. A deal can have multiple tranches. Used as a foreign key to link orders to specific tranches. Populated for both ECM (O.TRANCHE_ID) and DCM (O.PARENT_ID).",
+          "columnDescription": "TEXT id - compare to ALWAYS a QUOTED literal ('25248935'); an unquoted number forces TO_NUMBER on every row and alphanumeric ids (DCM: 'I-241121-...') raise ORA-01722. Unique identifier for a tranche within a deal. A deal can have multiple tranches. Used as a foreign key to link orders to specific tranches. Populated for both ECM (O.TRANCHE_ID) and DCM (O.PARENT_ID).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -39,7 +39,7 @@
         {
           "columnName": "TRANCHE_SIZE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Size of the tranche offering, STORED AS TEXT (VARCHAR2) - always wrap as TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) before comparing/ranking/summing. UNIT DEPENDS ON PRODUCT: ECM = SHARES (present as 'N shares'); DCM = notional MONEY in CURRENCY. Never aggregate across both products; DCM sums need currency scoping.",
+          "columnDescription": "Size of the tranche offering, STORED AS TEXT (VARCHAR2) - always wrap as TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) before comparing/ranking/summing. UNIT DEPENDS ON PRODUCT: ECM = SHARES (label per deal class: 'shares' (non-convertible) / 'bonds' (convertible-class EQUITY_TYPE)); DCM = notional MONEY in CURRENCY. Never aggregate across both products; DCM sums need currency scoping.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -51,7 +51,7 @@
         {
           "columnName": "INVESTOR_REGION",
           "dataType": "VARCHAR2",
-          "columnDescription": "Geographic region/country of the INVESTOR (where the investor is based) - e.g. 'Germany', 'United States', 'EU'. DISTINCT from TRANCHE_REGION/DEAL_REGION (the deal's target region NAM/EMEA/APAC). Literals: us/usa/american -> UPPER(INVESTOR_REGION) LIKE '%UNITED STATES%' (NEVER bare '%US%' - matches RUSSIA/AUSTRIA); german -> '%GERMANY%'; eu/european -> = 'EU'. Values unverified - prefer full words with LIKE.",
+          "columnDescription": "Investor's own geography. Vocab MIXES full names, short codes and typos (observed DISTINCTs: United States, US, UK, JP, EU, AP, LA, CA, AZ, Germany, France, Belgium, Sweden, Brazil, Mexico, Canada, 'Columbia' [sic - Colombia], CEEMEA and 'CEEMA' [sic]; NULL common). Recipe: name-LIKE OR code-EQUALITY - US ask -> (UPPER(INVESTOR_REGION) LIKE '%UNITED STATES%' OR UPPER(INVESTOR_REGION) = 'US'); NEVER bare LIKE '%US%' (matches RUSSIA/AUSTRIA/AUSTRALIA). Non-USA -> NOT LIKE '%UNITED STATES%' AND <> 'US', and REPORT the excluded NULL-region count (unknown is not non-USA). CEEMEA asks -> LIKE 'CEEM%' (typo variant). Display codes expanded (AP -> Asia Pacific). Distinct from TRANCHE_REGION (deal target NAM/EMEA/APAC).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -69,7 +69,7 @@
         {
           "columnName": "SETTLEMENT_TS",
           "dataType": "TIMESTAMP",
-          "columnDescription": "Settlement date. Date on which the transaction is completed, with investors making the payment and issuer delivering the securities. Note: often NULL for DCM rows, but kept available for both products.",
+          "columnDescription": "Reference dictionary (secondary, unverified) says NULL on DCM (earlier doctrine: often NULL) - on DCM settlement-window zero rows, say settlement dates may not be tracked for DCM and offer SECURITIES_MATURITY. Settlement date. Date on which the transaction is completed, with investors making the payment and issuer delivering the securities.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -81,7 +81,7 @@
         {
           "columnName": "ALLOCATION",
           "dataType": "NUMBER",
-          "columnDescription": "Final allocation to the investor - the ECM investor-side metric. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = MONEY (prefer AMT for DCM money asks). Never aggregate across both products; label the unit in answers.",
+          "columnDescription": "Final allocation to the investor - the ECM investor-side metric. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = MONEY (prefer AMT for DCM money asks). Never aggregate across both products; label the unit in answers. ECM display label: 'shares' for non-convertible deals, 'bonds' for convertible-class (EQUITY_TYPE convertible/exchangeable).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -93,7 +93,7 @@
         {
           "columnName": "INVESTOR_CATEGORY",
           "dataType": "VARCHAR2",
-          "columnDescription": "Classification of the investor. Exact DB values: Outright, Long Only, Hedge Fund, Long/Hedge, Outright/Hedge, Central Bank, Official Institution, Insurance/Pension, Asset Manager, Corporate Treasury, Bank Treasury, Private Bank, Co-lead Retention, Co-lead Trading, Co-lead Order, Co-lead Pot, Other Trading, Broker, Syndicate, JLM Trading, Other. Not valid: Strategic, Family Office, Retail, SWF, DSP, Index, Quant. Book context: common-stock books use Long Only/Hedge Fund; convertible books use Outright/Hedge Fund - 'outright' asks usually concern convertible deals, but never auto-add a product-type filter unless asked.",
+          "columnDescription": "Reference dictionary (secondary, unverified) marks this ECM-only; category is an ECM order-book concept - prefer ECM scope. Classification of the investor. Exact DB values: Outright, Long Only, Hedge Fund, Long/Hedge, Outright/Hedge, Central Bank, Official Institution, Insurance/Pension, Asset Manager, Corporate Treasury, Bank Treasury, Private Bank, Co-lead Retention, Co-lead Trading, Co-lead Order, Co-lead Pot, Other Trading, Broker, Syndicate, JLM Trading, Other. Not valid: Strategic, Family Office, Retail, SWF, DSP, Index, Quant. Book context: common-stock books use Long Only/Hedge Fund; convertible books use Outright/Hedge Fund - 'outright' asks usually concern convertible deals, but never auto-add a product-type filter unless asked.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -105,7 +105,7 @@
         {
           "columnName": "MEETING_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Meeting type between issuer/syndicate and the investor. EXACT display values: 'No Meeting', '1x1', 'Conference Call', 'Small Group', 'Group Meeting'. The 1x1 value is the literal '1x1' - NOT 'One-to-One' (that spelling returns zero rows). \"Other than 1x1\" asks -> MEETING_TYPE NOT IN ('1x1','No Meeting') and state that no-meeting orders were excluded.",
+          "columnDescription": "Reference dictionary (secondary, unverified) marks this ECM-only; meetings are an ECM roadshow concept. Meeting type between issuer/syndicate and the investor. EXACT display values: 'No Meeting', '1x1', 'Conference Call', 'Small Group', 'Group Meeting'. The 1x1 value is the literal '1x1' - NOT 'One-to-One' (that spelling returns zero rows). \"Other than 1x1\" asks -> MEETING_TYPE NOT IN ('1x1','No Meeting') and state that no-meeting orders were excluded.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -117,7 +117,7 @@
         {
           "columnName": "ISSUER_RATINGS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Credit ratings of the issuer from rating agencies (e.g., Moody's / S&P / Fitch). Primarily populated for DCM records but kept available for both products. Pipe-separated with NO agency key column - the notation identifies the agency (Moody's Aaa/Aa2 vs S&P/Fitch AAA/AA-).",
+          "columnDescription": "DCM ONLY - NULL on every ECM row. COMMA-separated (LISTAGG - NOT pipe-delimited: never apply pipe token-anchors here; match with plain LIKE, agency identified by notation e.g. Aaa=Moody's, AAA=S&P/Fitch). ",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -129,55 +129,55 @@
         {
           "columnName": "SECTOR",
           "dataType": "VARCHAR2",
-          "columnDescription": "Industry sector of the issuer. Exact values: Aero/Defense, Agriculture, Autos, Banks, Chemical, Consumer Goods, Energy, Financial Services, Government, Healthcare, Homebuilding, Industrials, Information Technology, Insurance, Media, MLPS, Natural resources, Oil & Gas, Paper and Packaging, Pharmaceuticals, Pipelines, Real Estate, Retail, Services, Technology, Telecommunications, Transportation, Utilities. 'Information Technology' and 'Technology' are distinct; 'Oil & Gas' is distinct from 'Energy'.",
+          "columnDescription": "Reference dictionary (secondary, unverified) marks this ECM-only; if a DCM-scoped sector filter zero-rows, that is likely why - say so. Industry sector of the issuer. Exact values: Aero/Defense, Agriculture, Autos, Banks, Chemical, Consumer Goods, Energy, Financial Services, Government, Healthcare, Homebuilding, Industrials, Information Technology, Insurance, Media, MLPS, Natural resources, Oil & Gas, Paper and Packaging, Pharmaceuticals, Pipelines, Real Estate, Retail, Services, Technology, Telecommunications, Transportation, Utilities. 'Information Technology' and 'Technology' are distinct; 'Oil & Gas' is distinct from 'Energy'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "EXCHANGE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Stock exchange(s) where listed - mostly ECM; may hold multiple venues; stored literals unverified. Users say abbreviations (NYSE, TSX, LSE) - NEVER filter with '=' (zero rows). Expand the abbreviation and OR both tokens: (UPPER(EXCHANGE) LIKE '%NYSE%' OR UPPER(EXCHANGE) LIKE '%NEW YORK%'); TSX->TORONTO, LSE->LONDON, HKEX->HONG KONG, SSE->SHANGHAI.",
+          "columnDescription": "Stock exchange(s) where listed - primarily ECM (reference dict says NULL on DCM - unverified); may hold multiple venues; stored literals unverified. Users say abbreviations (NYSE, TSX, LSE) - NEVER filter with '=' (zero rows). Expand the abbreviation and OR both tokens: (UPPER(EXCHANGE) LIKE '%NYSE%' OR UPPER(EXCHANGE) LIKE '%NEW YORK%'); TSX->TORONTO, LSE->LONDON, HKEX->HONG KONG, SSE->SHANGHAI.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "DEAL_STATUS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Current lifecycle status of the deal (deal level only). Values seen include Settled, Final Settled, Live, Priced, Draft, Postponed, Announced, Cancelled, Confidential, Deleted, Allocated, Subject, Archived, FreeToTrade, Mandated, Private, Open, Closed. WARNING: casing is inconsistent in the data (both 'Open' and 'OPEN', 'Closed' and 'CLOSED') - always compare with UPPER() on BOTH sides.",
+          "columnDescription": "VOCAB DIFFERS PER PRODUCT (official dict): ECM e.g. Priced/Settled/OPEN/CLOSED; DCM Mandated/Private/Open/Closed/Archived/Cancelled. Current lifecycle status of the deal (deal level only). Values seen include Settled, Final Settled, Live, Priced, Draft, Postponed, Announced, Cancelled, Confidential, Deleted, Allocated, Subject, Archived, FreeToTrade, Mandated, Private, Open, Closed. WARNING: casing is inconsistent in the data (both 'Open' and 'OPEN', 'Closed' and 'CLOSED') - always compare with UPPER() on BOTH sides.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "DEAL_SIZE",
           "dataType": "NUMBER",
-          "columnDescription": "Total deal size. UNIT DEPENDS ON PRODUCT: ECM = total SHARES offered (a share count - present as 'N shares', NEVER as money; a money 'deal value' is not derivable, no price column exists); DCM = total notional/principal MONEY in CURRENCY. Never aggregate across both products (shares+cash mix); DCM money sums need one CURRENCY or GROUP BY CURRENCY. Deal-level: dedupe DEAL_ID; never rebuild it as SUM(TRANCHE_SIZE).",
+          "columnDescription": "Total deal size. UNIT DEPENDS ON PRODUCT: ECM = total SHARES offered (a share count - label per deal class: 'shares' (non-convertible) / 'bonds' (convertible-class EQUITY_TYPE), NEVER as money; a money 'deal value' is not derivable, no price column exists); DCM = total notional/principal MONEY in CURRENCY. Never aggregate across both products (shares+cash mix); DCM money sums need one CURRENCY or GROUP BY CURRENCY. Deal-level: dedupe DEAL_ID; never rebuild it as SUM(TRANCHE_SIZE).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "DEAL_REGION",
           "dataType": "VARCHAR2",
-          "columnDescription": "Deal-level geographic region. Values: NAM, EMEA, APAC (there is no 'AMER'). Populated for ECM; use TRANCHE_REGION for tranche-level or generic region asks.",
+          "columnDescription": "Reference dictionary (secondary, unverified) marks this ECM-only - for DCM branches prefer TRANCHE_REGION. Deal-level geographic region. Values: NAM, EMEA, APAC (there is no 'AMER'). Populated for ECM; use TRANCHE_REGION for tranche-level or generic region asks.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "ROOT_ID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Legacy lineage key (order -> its deal). All deal/tranche/order facts are already flattened onto every row - NEVER join or self-join this view; filter DEAL_ID directly.",
+          "columnDescription": "TEXT id - compare to ALWAYS a QUOTED literal ('25248935'); an unquoted number forces TO_NUMBER on every row and alphanumeric ids (DCM: 'I-241121-...') raise ORA-01722. Legacy lineage key (order -> its deal). All deal/tranche/order facts are already flattened onto every row - NEVER join or self-join this view; filter DEAL_ID directly.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "PARENT_ID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Legacy lineage key (order -> its tranche, DCM). Facts are already flattened onto every row - NEVER join; filter TRANCHE_ID directly.",
+          "columnDescription": "TEXT id - compare to ALWAYS a QUOTED literal ('25248935'); an unquoted number forces TO_NUMBER on every row and alphanumeric ids (DCM: 'I-241121-...') raise ORA-01722. Legacy lineage key (order -> its tranche, DCM). Facts are already flattened onto every row - NEVER join; filter TRANCHE_ID directly.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "ORDER_ID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Unique identifier for an individual investor order - present on BOTH products (ECM carries ORDER_ID too; confirmed 2026-07-28). Order counts = COUNT(DISTINCT ORDER_ID). If ECM counts look implausibly low (older rows may have NULL ids), fall back to DISTINCT DEAL_ID+INVESTOR_NAME pairs and say so.",
+          "columnDescription": "TEXT id - compare to ALWAYS a QUOTED literal ('25248935'); an unquoted number forces TO_NUMBER on every row and alphanumeric ids (DCM: 'I-241121-...') raise ORA-01722. Unique identifier for an individual investor order - present on BOTH products (ECM carries ORDER_ID too; confirmed 2026-07-28). Order counts = COUNT(DISTINCT ORDER_ID). If ECM counts look implausibly low (older rows may have NULL ids), fall back to DISTINCT DEAL_ID+INVESTOR_NAME pairs and say so.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "ORDER_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Order HANDLING type. Confirmed values: 'OTT', 'Regular' (mixed case as stored - always compare via UPPER). 'AWAY' is unverified legacy - if an away-orders ask returns zero rows, say away-order handling isn't tracked. LIMIT/MARKET/SCALED belong to IOI_TYPE, not this column.",
+          "columnDescription": "Reference dictionary (secondary, unverified) marks this ECM-only - prefer ECM scope for OTT/order-handling asks; on DCM zero rows say population may be product-limited. Order HANDLING type. Confirmed values: 'OTT', 'Regular' (mixed case as stored - always compare via UPPER). 'AWAY' is unverified legacy - if an away-orders ask returns zero rows, say away-order handling isn't tracked. LIMIT/MARKET/SCALED belong to IOI_TYPE, not this column.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -189,7 +189,7 @@
         {
           "columnName": "DEMAND_QTY",
           "dataType": "NUMBER",
-          "columnDescription": "Demand (indication) the investor asked for, before allocation. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = notional MONEY in CURRENCY - label the unit in answers. 'Demand'/'indication in shares' -> DEMAND_QTY (never ALLOCATION). Never aggregate across both products.",
+          "columnDescription": "DCM CAVEAT: sourced from the same column as AMT/ALLOCATION on DCM - demand=allocation=amount there, so coverage/fill ratios are ECM-only. Demand (indication) the investor asked for, before allocation. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = notional MONEY in CURRENCY - label the unit in answers. 'Demand'/'indication in shares' -> DEMAND_QTY (never ALLOCATION). Never aggregate across both products. ECM display label: 'shares' for non-convertible deals, 'bonds' for convertible-class (EQUITY_TYPE convertible/exchangeable).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -201,7 +201,7 @@
         {
           "columnName": "OFFERING_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of the offering. ECM values are ONLY 'IPO' and 'FO' (follow-on). 'Convertible', 'Block' and 'Rights Issue' are NOT offering types - convertibles live in EQUITY_TYPE. DCM: benchmark or tap issuance.",
+          "columnDescription": "Reference dictionary (secondary, unverified) marks this ECM-only; earlier config listed DCM values benchmark/tap - BOTH unverified: on zero rows, say so rather than asserting absence. Type of the offering. ECM values are ONLY 'IPO' and 'FO' (follow-on). 'Convertible', 'Block' and 'Rights Issue' are NOT offering types - convertibles live in EQUITY_TYPE. DCM has NO offering types (column NULL on DCM).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -213,31 +213,31 @@
         {
           "columnName": "PRODUCT_CLASS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Bond/product class. Exact DB values: Investment Grade, Preferred, Emerging Market, Covered Bond, High Yield, Agencies, CLO, LevFin Loan, Asset Backed, SSA, Taxable Muni, ABS, RMBS, CMBS, Municipals. Expand IG->'Investment Grade', HY->'High Yield', EM->'Emerging Market' (never the abbreviation itself). Mainly DCM.",
+          "columnDescription": "DCM ONLY - NULL on every ECM row. Bond/product class. Exact DB values: Investment Grade, Preferred, Emerging Market, Covered Bond, High Yield, Agencies, CLO, LevFin Loan, Asset Backed, SSA, Taxable Muni, ABS, RMBS, CMBS, Municipals. Expand IG->'Investment Grade', HY->'High Yield', EM->'Emerging Market' (never the abbreviation itself). ",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "EQUITY_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "ECM ONLY - NULL on every DCM row (a DCM-scoped filter on this column returns zero rows; security-type asks imply PRODUCT='ECM'; DCM types live in PRODUCT_CLASS/COUPON_TYPE/ESG_BOND). The CLASSIFICATION axis for security-class asks - route such asks to THIS COLUMN ALONE, never OR'd with PRODUCT_TYPE. Observed values (env lists vary): 'American Depository', 'Global Depository', 'Equity Units', 'Exchangable Notes' (sic - stored misspelled; match LIKE '%EXCHANG%'), 'Convertible Bonds', 'Common Stock', 'Convertible Preferred', 'Warrants'. Spelled-out 'American/Global Depositary' -> LIKE '%AMERICAN%'/'%GLOBAL%'; abbreviations ADR/ADS/GDR/GDS belong to PRODUCT_TYPE instead. Zero rows -> re-ask via PRODUCT_TYPE labels and say you widened. 'convertible(s)' -> LIKE '%Convertible%' unless the user says 'product type'.",
+          "columnDescription": "ECM ONLY - NULL on every DCM row (a DCM-scoped filter on this column returns zero rows; security-type asks imply PRODUCT='ECM'; DCM types live in PRODUCT_CLASS/COUPON_TYPE/ESG_BOND). The CLASSIFICATION axis for security-class asks - route such asks to THIS COLUMN ALONE, never OR'd with PRODUCT_TYPE. Observed values (env lists vary): 'American Depository', 'Global Depository', 'Equity Units', 'Exchangable Notes' (sic - stored misspelled; match LIKE '%EXCHANG%'), 'Convertible Bonds', 'Common Stock', 'Convertible Preferred', 'Warrants'. Spelled-out 'American/Global Depositary' -> LIKE '%AMERICAN%'/'%GLOBAL%'; abbreviations ADR/ADS/GDR/GDS belong to PRODUCT_TYPE instead. Zero rows -> re-ask via PRODUCT_TYPE labels and say you widened. 'convertible(s)' -> LIKE '%Convertible%' unless the user says 'product type'. ENRICHMENT: rankings/listings filtered on this class should also SELECT the PRODUCT_TYPE mix column - LISTAGG(DISTINCT PRODUCT_TYPE, ' - ') WITHIN GROUP (ORDER BY PRODUCT_TYPE) - filter on the class, display the sub-type composition for drill-down.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "ESG_BOND",
           "dataType": "VARCHAR2",
-          "columnDescription": "Indicates whether the bond is an ESG-labelled instrument (e.g., Green, Social, Sustainability, Sustainability-Linked). Only applies to DCM records.",
+          "columnDescription": "DCM ONLY. Values: GREEN, SUSTAINABILITY, SOCIAL (green bond asks -> UPPER LIKE '%GREEN%'). Indicates whether the bond is an ESG-labelled instrument (e.g., Green, Social, Sustainability, Sustainability-Linked). Only applies to DCM records.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "USE_OF_PROCEEDS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Purpose of the raise. Users say shorthand, never exact values - map with UPPER(USE_OF_PROCEEDS) LIKE, OR-ing overlapping values. Known values (env lists vary; also 'N/A'): Acquisitions, Capital Expenses, Capital Restructure, Debt Repayment, Future Acquisitions, General Corporate Purposes, Growth Capital, Investments, Legal Redemptions, 'M & A' (WITH spaces - exact '=' on M&A fails), No Proceeds to Issuer, Project Finance, Recapitalization, Refinance, Research and Development, Share Repurchase, Shareholder Dividends, Working Capital Requirement. Map: m&a/merger/acquisition -> '%M & A%' OR '%ACQUISITION%'; capex -> '%CAPITAL EXPENSE%'; refi/debt repayment -> '%REFINANC%' OR '%DEBT REPAY%'; buyback -> '%SHARE REPURCHASE%'; redemption -> '%REDEMPTION%'; GCP -> '%GENERAL CORPORATE%'. 'N/A' and 'No Proceeds to Issuer' mean purpose NOT STATED - exclude from purpose breakdowns and say so.",
+          "columnDescription": "Purpose of the raise. Users say shorthand, never exact values - map with UPPER(USE_OF_PROCEEDS) LIKE, OR-ing overlapping values. Known values (env lists vary; also 'N/A'): Acquisitions, Capital Expenses, Capital Restructure, Debt Repayment, Future Acquisitions, General Corporate Purposes, Growth Capital, Investments, Legal Redemptions, 'M & A' (WITH spaces - exact '=' on M&A fails), No Proceeds to Issuer, Project Finance, Recapitalization, Refinance, Research and Development, Share Repurchase, Shareholder Dividends, Working Capital Requirement. Map: m&a/merger/acquisition -> '%M & A%' OR '%ACQUISITION%'; capex -> '%CAPITAL EXPENSE%'; refi/debt repayment/repay borrowings -> '%REPAY%' OR '%REFINANC%' (DCM stores 'Repay Outstanding Borrowings' - '%DEBT REPAY%' misses it; DCM vocab is only GCP/Repay Outstanding Borrowings/Other); buyback -> '%SHARE REPURCHASE%'; redemption -> '%REDEMPTION%'; GCP -> '%GENERAL CORPORATE%'. 'N/A' and 'No Proceeds to Issuer' mean purpose NOT STATED - exclude from purpose breakdowns and say so.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "TENORS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Tenor(s) of the tranche - time to maturity labels. FORMAT DRIFTS: '2Y','2-Y','2M','2-M' (hyphen optional; Y=years, M=months). Pipe-delimited list, position-aligned with SECURITIES_MATURITY. Match format-insensitively with a digit boundary: REGEXP_LIKE(TENORS, '(^|[^0-9])2[- ]?Y', 'i') - never = '2Y' (misses 2-Y) and never bare LIKE '%2Y%' (false-matches 12Y). DCM rows.",
+          "columnDescription": "DCM ONLY. FORMAT: '<value>-<PERIOD>' e.g. '10-YEAR' (not '10Y') - tenor asks -> LIKE '%10-YEAR%'. Tenor(s) of the tranche - time to maturity labels. FORMAT DRIFTS: '2Y','2-Y','2M','2-M' (hyphen optional; Y=years, M=months). Pipe-delimited list, position-aligned with SECURITIES_MATURITY. Match format-insensitively with a digit boundary: REGEXP_LIKE(TENORS, '(^|[^0-9])2[- ]?Y', 'i') - never = '2Y' (misses 2-Y) and never bare LIKE '%2Y%' (false-matches 12Y). DCM rows.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -249,7 +249,7 @@
         {
           "columnName": "SENIORITY",
           "dataType": "VARCHAR2",
-          "columnDescription": "Ranking of the debt within the issuer's capital structure (e.g., Senior Unsecured, Senior Secured, Subordinated, Tier 2). Only applies to DCM records.",
+          "columnDescription": "DCM ONLY. Values: Senior Secured, Senior Unsecured, Junior Subordinated, Preferred, 1st/2nd/3rd Lien, ESOP, Senior Bank, Sub Bank, Senior holdco, Sub Holdco, Senior Preferred, Senior Non-Preferred, Senior Sub, FRCS, Subordinated. Ranking of the debt within the issuer's capital structure (e.g., Senior Unsecured, Senior Secured, Subordinated, Tier 2). Only applies to DCM records.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -261,19 +261,19 @@
         {
           "columnName": "COUPON_FREQ",
           "dataType": "VARCHAR2",
-          "columnDescription": "Frequency of coupon payments (e.g., Annual, Semi-Annual, Quarterly). Only applies to DCM records.",
+          "columnDescription": "DCM ONLY. Values: Annual, Semi Annual, Quarterly, Monthly, Weekly, Zero, At Maturity, Daily. Frequency of coupon payments (e.g., Annual, Semi-Annual, Quarterly). Only applies to DCM records.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "REG_CATEGORY",
           "dataType": "VARCHAR2",
-          "columnDescription": "Regulatory registration category. Values include 144A, Reg S, private placement, eurobond, domestic - match with LIKE. Bare '144A' / 'Reg S' / '3(a)(2)' asks -> THIS column; only '<x> delivery' wording -> DELIVERY_TYPE. DCM rows.",
+          "columnDescription": "DCM ONLY. Values: 'SEC Registered(Public)', 'Yankee CD', '3(A)(2) (SEC Exempt)', '144A', 'Reg S', 'Accredited Investors', 'Domestic', 'Eurobond', 'Private Placement'. 'SEC Registered' asks -> LIKE '%SEC Registered%'. Regulatory registration category. Values include 144A, Reg S, private placement, eurobond, domestic - match with LIKE. Bare '144A' / 'Reg S' / '3(a)(2)' asks -> THIS column; only '<x> delivery' wording -> DELIVERY_TYPE. DCM rows.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "SYNDICATE_MEMBER_NAME",
           "dataType": "VARCHAR2",
-          "columnDescription": "Name of the syndicate bank/member on the deal. ECM = pipe-delimited (' | ') aligned list of full bank names; DCM = a single bank string which IS the bill-and-deliver (B&D) bank. Match a bank by LIKE on its stem (e.g. '%Citigroup Global Markets%'), not exact equality. 'Citi' means ONLY the 5 Citigroup Global Markets subsidiaries (Inc./Ltd./Australia/Asia/Canada) - match UPPER LIKE '%CITIGROUP GLOBAL MARKETS%'; other names containing 'Citi' (e.g. test entities, CITIBANK) are NOT Citi for B&D purposes.",
+          "columnDescription": "B&D FILTERING: use the BND_BROKER INDEX approach (see BND_BROKER) - the inline '(true)/(false)' suffixes inside member tokens are DUPLICATE data slated for REMOVAL; never filter on them, and strip them when displaying names. Name of the syndicate bank/member on the deal. ECM = pipe-delimited (' | ') aligned list of full bank names; DCM = a single bank string which IS the bill-and-deliver (B&D) bank. Match a bank by LIKE on its stem (e.g. '%Citigroup Global Markets%'), not exact equality. 'Citi' means ONLY the 5 Citigroup Global Markets subsidiaries (Inc./Ltd./Australia/Asia/Canada) - match UPPER LIKE '%CITIGROUP GLOBAL MARKETS%'; other names containing 'Citi' (e.g. test entities, CITIBANK) are NOT Citi for B&D purposes.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -291,7 +291,7 @@
         {
           "columnName": "BND_BROKER",
           "dataType": "VARCHAR2",
-          "columnDescription": "Bill-and-Deliver (B&D) flag for the broker/syndicate member on the order. Populated for BOTH products but in different shapes: ECM = pipe-delimited list aligned position-by-position with BROKER_CODE/SYNDICATE_MEMBER_NAME (never compare the whole field with '='; use token-aware REGEXP with the ' | ' boundary); DCM = single scalar boolean-like value. TRUE tokens: true/t/yes/y/1. B&D filters must also include BROKER_CODE or SYNDICATE_MEMBER_NAME context.",
+          "columnDescription": "ECM: a pipe list of true/false POSITION-ALIGNED with SYNDICATE_MEMBER_NAME - the B&D bank is the member token at the 'true' index: TRIM(REGEXP_SUBSTR(SYNDICATE_MEMBER_NAME,'[^|]+',1, REGEXP_COUNT(SUBSTR(BND_BROKER,1,INSTR(BND_BROKER,'true')),'\\|')+1)). INSTR(BND_BROKER,'true')=0 means NO B&D designated (a real case - say so). At most one 'true' per row. DCM CAVEAT: scalar flag meaning 'is the single member Citi' (CASE WHEN BD_BANK LIKE '%Citigroup Global%') - for non-Citi B&D on DCM use SYNDICATE_MEMBER_NAME. Display: word-ify per zipped member (Yes/-).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -309,13 +309,13 @@
         {
           "columnName": "EXECUTION_STATUS",
           "dataType": "VARCHAR2",
-          "columnDescription": "Execution stage of the deal (Live/Priced/Executed/Closed/Cancelled). Overlaps DEAL_STATUS - use ONLY when the user explicitly says 'execution status'; any generic 'status / live / priced / closed deals' ask -> DEAL_STATUS.",
+          "columnDescription": "Reference dictionary (secondary, unverified) marks this ECM-only. Execution stage of the deal (Live/Priced/Executed/Closed/Cancelled). Overlaps DEAL_STATUS - use ONLY when the user explicitly says 'execution status'; any generic 'status / live / priced / closed deals' ask -> DEAL_STATUS.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "GFCID",
           "dataType": "VARCHAR2",
-          "columnDescription": "Global Financial Client ID - identifies the ISSUER (the company raising capital) on the deal. Use for ALL issuer-side filters, e.g. WHERE GFCID = '<issuer-gfcid>' after resolving the issuer name. NEVER use GFCID for investor filters - investors are filtered by GPNUM.",
+          "columnDescription": "TEXT id - compare to ALWAYS a QUOTED literal ('25248935'); an unquoted number forces TO_NUMBER on every row and alphanumeric ids (DCM: 'I-241121-...') raise ORA-01722. Global Financial Client ID - identifies the ISSUER (the company raising capital) on the deal. Use for ALL issuer-side filters, e.g. WHERE GFCID = '<issuer-gfcid>' after resolving the issuer name. NEVER use GFCID for investor filters - investors are filtered by GPNUM.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -327,7 +327,7 @@
         {
           "columnName": "GPNUM",
           "dataType": "VARCHAR2",
-          "columnDescription": "Global Participant Number - identifies the INVESTOR (the buyer / allocatee / order-placer) on the deal. Use this for ALL investor-side filters, e.g. `WHERE GPNUM = '<investor-gpnum>'` or `WHERE GPNUM IN ('<gp1>', '<gp2>')`.",
+          "columnDescription": "TEXT id - compare to ALWAYS a QUOTED literal ('25248935'); an unquoted number forces TO_NUMBER on every row and alphanumeric ids (DCM: 'I-241121-...') raise ORA-01722. Global Participant Number - identifies the INVESTOR (the buyer / allocatee / order-placer) on the deal. Use this for ALL investor-side filters, e.g. `WHERE GPNUM = '<investor-gpnum>'` or `WHERE GPNUM IN ('<gp1>', '<gp2>')`.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {

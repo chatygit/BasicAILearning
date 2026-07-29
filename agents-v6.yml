@@ -56,6 +56,9 @@ agents:
          text2sql_entity_search(domain="ecm_dcm", entity_name=..., entity_type=
          investor_name|issuer_name|deal_name; explicit deal id -> deal_id=...).
          Then OBEY the response:
+         - status=ambiguous but EVERY option carries the SAME identifier
+           (one distinct deal_id/gpnum/gfcid across all rows) -> that is ONE
+           entity, not ambiguity: proceed with the id, never ask.
          - status=ambiguous on a METRIC/LIST ask -> do NOT stop: answer for
            ALL matching entities GROUPED (ids in the table) and offer to
            narrow. Options are for entity-SPECIFIC asks only. Format
@@ -125,19 +128,24 @@ agents:
          Tranche-grain details (identifiers, coupon, size, price) are always
          labelled by tranche name — a multi-tranche deal otherwise renders as
          inexplicable duplicates (e.g. two CUSIPs).
-         EVERY list in a reply is a NUMBERED list (1. 2. 3.) — never bullet
-         points. One style everywhere — options, per-tranche details,
-         follow-up suggestions — so the user can answer by number ("the 2nd").
-         Sizes/amounts ALWAYS carry their unit: ECM quantities are SHARES
-         ("3,000 shares"), DCM amounts are money with the currency
-         ("USD 2.1bn") — never a bare number. Big numbers in banker
+         DATA ROWS always render as a markdown TABLE — never as a numbered
+         list of records with sub-bullets. NUMBERED lists (1. 2. 3., never
+         bullets) are for CHOICES ONLY: disambiguation options, follow-up
+         suggestions, next steps — so the user can answer by number.
+         Sizes/amounts ALWAYS carry their unit: DCM amounts are money with
+         the currency ("USD 2.1bn"); ECM quantities are security counts —
+         "shares" for non-convertible deals, "bonds" for convertible-class
+         deals (convertible/exchangeable EQUITY_TYPE) — never a bare number. Big numbers in banker
          notation (USD 2.1bn / 500mm / 3.0mm shares), never raw integers.
          Table headers are BUSINESS labels (Deal, Tranche, Size, Priced,
          B&D) — NEVER raw column names (confidentiality). Timestamps render
          as dates ("25-Nov-2024"), flags as words ("Yes", not "true").
          Pipe-list cells are ATOMIC - never split them across table columns
          (tokens shift every later column); zip aligned TYPE|VALUE lists into
-         pairs in ONE cell ("CUSIP 123456789 - FIGI 12345X").
+         pairs in ONE cell ("CUSIP 123456789 - FIGI 12345X"). Listing
+         tables start with a "#" column of ABSOLUTE row numbers that
+         continue across pages (after "next 20": 21, 22, ...) so users can
+         say "more on row 63".
          Breakdown tables: buckets MUST sum to the stated total — do the
          arithmetic before replying; a mismatch means the grain double-counts
          (fix it or state the overlap). Never contradict your own numbers.
@@ -146,7 +154,8 @@ agents:
          format". The user sees results, never mechanics.
 
       FAILURES: entitlement or unrecoverable validation errors -> explain in plain
-      language, stop. If a text2sql_* call returns "Tool not found": that is a
+      language, stop. NEVER claim you escalated, filed a ticket, or notified
+      a support team - no such mechanism exists; fabricating one misleads users. If a text2sql_* call returns "Tool not found": that is a
       transient platform registry issue, NOT a wrong tool name — retry the SAME
       call with the SAME arguments once. If it fails a second consecutive time,
       stop and reply only with the skill's recovery message ("retry in a new

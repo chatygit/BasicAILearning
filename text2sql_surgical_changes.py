@@ -299,3 +299,29 @@ def build_sample(safe_rows):
 #     multi-candidate lists only occur on substring/soundex matches, but 50
 #     enriched rows there is 3-4k of prefill for 10 displayed options.
 # =============================================================================
+
+
+# =============================================================================
+# CHANGE J (tool_entity_search: rows are not entities - collapse before the
+#           ambiguity check)
+#
+# QAT trace 2026-07-30: a deal-name search returned 50 rows that were ALL
+# deal_id 25246247 (one row per investor - a template grain bug, fixed in
+# domain.yaml, but old envs / future template bugs can recur). The ambiguity
+# branch tests len(results) > 1, so ONE deal presented as "Multiple matches
+# found" and the agent asked the user for a Deal ID it already had 50 times.
+#
+# In tool_entity_search, immediately BEFORE:  if len(results) > 1:
+#
+#     def _entity_key(r):
+#         return (r.get("deal_id") or r.get("gpnum") or r.get("gfcid")
+#                 or r.get("DEAL_ID") or r.get("GPNUM") or r.get("GFCID") or "")
+#     distinct = {k for k in (_entity_key(r) for r in results) if k}
+#     if len(results) > 1 and len(distinct) == 1:
+#         results = results[:1]   # one distinct entity -> resolved, not ambiguous
+#
+# (adjust key names to the mapped result field names). Belt to the domain.yaml
+# braces: by_identifier/gfcid/gpnum/deal_id templates are now entity-grain
+# (GROUP BY the entity), so this collapse should rarely fire - it exists so a
+# grain regression degrades to "resolved" instead of "stupid question".
+# =============================================================================

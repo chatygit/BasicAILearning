@@ -218,13 +218,25 @@ prompts:
          recent PRICING_TS OR (PRICING_TS IS NULL AND active DEAL_STATUS);
          no creation-date column exists.
       E0. Investor geography IS supported via INVESTOR_REGION (values like
-         'United States','Germany','EU'); "US investors"/"investors based in X"
-         -> INVESTOR_REGION LIKE. Keep it DISTINCT from the deal's region.
+         'United States','Germany','EU'); "US investors" -> (UPPER(INVESTOR_REGION) LIKE '%UNITED STATES%'
+         OR UPPER(INVESTOR_REGION) = 'US') - BOTH forms are stored; the code
+         needs EQUALITY (never LIKE '%US%'). "NON-USA" -> UPPER(...)
+         NOT LIKE '%UNITED STATES%' AND UPPER(...) <> 'US' (negation
+         predicate - 'Non USA' is not a value); NOT-predicates drop NULL
+         regions - report the excluded no-region count (unknown != non-USA).
+         Region vocab MIXES names and codes (US/UK/JP/EU/AP/LA + typo
+         variants CEEMEA/CEEMA, 'Columbia' for Colombia) - match name LIKE
+         OR code equality; display codes expanded (AP -> Asia Pacific). Keep it DISTINCT from the deal's region.
          IOI type (LIMIT/MARKET/SCALED) -> IOI_TYPE; order handling
-         -> ORDER_TYPE (confirmed values: 'OTT', 'Regular'; UPPER compare).
-      E. Region: TRANCHE_REGION default (NAM/EMEA/APAC); DEAL_REGION
-         (values NAM/EMEA/APAC) only for explicit deal-level asks; the old
-         REGION column was removed — never emit REGION.
+         -> ORDER_TYPE (ECM ONLY - NULL on DCM; confirmed values: 'OTT',
+         'Regular'; UPPER compare). OTT/order-handling asks are ECM asks.
+      E. Region: TRANCHE_REGION default (NAM/EMEA/APAC) for tranches,
+         orders, bare region mentions. When the region word attaches to
+         DEALS ("EMEA deals", "European deals") -> DEAL_REGION - but
+         DEAL_REGION is ECM-ONLY (NULL on DCM): DCM branch keeps
+         TRANCHE_REGION; REGION duplicates
+         TRANCHE_REGION (same source) — never emit REGION; use
+         TRANCHE_REGION (or DEAL_REGION for explicit ECM deal-level asks).
       F. Broker/syndicate: branch-aware per DOMAIN_VIEW_BUILD_NOTES and
          DOMAIN_BROKER_ALIASES_JSON. Solo asks -> UPPER(DEAL_SHARING_TYPE)='SOLO'
          + bank filter (BOTH products); ECM fallback if zero rows:
@@ -256,16 +268,20 @@ prompts:
       tranche + order facts are already on one row); "investors in both deals"
       = GROUP BY GPNUM HAVING COUNT(DISTINCT DEAL_ID)=2.
 
-      MONEY INTEGRITY (both are silent-wrong-answer traps):
-      - No FX column exists. Any SUM/AVG of DEAL_SIZE / TRANCHE_SIZE / AMT must
-        filter a single CURRENCY or GROUP BY CURRENCY — never total across
-        mixed currencies.
+      MONEY INTEGRITY (silent-wrong-answer traps; UNITS ARE PER PRODUCT):
+      - ECM sizes/quantities are SHARES (no currency scoping needed); DCM
+        sizes are notional MONEY. No FX column exists: any DCM-involving
+        SUM/AVG of DEAL_SIZE / TRANCHE_SIZE / AMT must filter a single
+        CURRENCY or GROUP BY CURRENCY — never total money across mixed
+        currencies, and never total shares+money across both products.
       - ALLOCATION is SHARES on ECM but a MONEY amount on DCM. Never SUM it
         across PRODUCT IN ('ECM','DCM'); split with GROUP BY PRODUCT or use the
         per-product metric (ECM=ALLOCATION, DCM=AMT).
 
       Derived metrics (always divide with NULLIF(x,0)):
-      coverage/oversubscription = SUM(DEMAND_QTY) / NULLIF(TO_NUMBER(
+      coverage/oversubscription (NOTE: if DCM ratios compute ~1x uniformly,
+      demand=allocation at source there - say the metric isn't meaningful
+      for DCM) = SUM(DEMAND_QTY) / NULLIF(TO_NUMBER(
         TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR),0) at tranche grain |
       fill/hit rate = SUM(ALLOCATION)/NULLIF(SUM(DEMAND_QTY),0) per GPNUM |
       share of book = SUM(CASE WHEN GPNUM=<x> THEN metric END) /
@@ -447,35 +463,37 @@ entity_search:
 
     by_identifier:
       gfcid: >-
-        SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID
+        SELECT NULL AS DEAL_ID, NULL AS DEAL_NAME, NULL AS INVESTOR_NAME,
+               NULL AS GPNUM, ISSUER_NAME, GFCID,
+               COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
+               MAX(PRICING_TS) AS LAST_ACTIVE
         FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
         WHERE PRODUCT IN ('ECM', 'DCM') AND GFCID = :gfcid
-        ORDER BY GPNUM, DEAL_ID
-        FETCH FIRST 200 ROWS ONLY
+        GROUP BY ISSUER_NAME, GFCID
       gpnum: >-
-        SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID
+        SELECT NULL AS DEAL_ID, NULL AS DEAL_NAME, INVESTOR_NAME, GPNUM,
+               NULL AS ISSUER_NAME, NULL AS GFCID,
+               COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
+               MAX(PRICING_TS) AS LAST_ACTIVE
         FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
         WHERE PRODUCT IN ('ECM', 'DCM') AND GPNUM = :gpnum
-        ORDER BY DEAL_ID
-        FETCH FIRST 200 ROWS ONLY
+        GROUP BY INVESTOR_NAME, GPNUM
       deal_id: >-
-        SELECT DISTINCT
-          DEAL_ID,
-          DEAL_NAME,
-          NULL AS INVESTOR_NAME,
-          NULL AS GPNUM,
-          NULL AS ISSUER_NAME,
-          NULL AS GFCID
+        SELECT DEAL_ID, DEAL_NAME, NULL AS INVESTOR_NAME, NULL AS GPNUM,
+               MAX(ISSUER_NAME) AS ISSUER_NAME, NULL AS GFCID,
+               COUNT(DISTINCT TRANCHE_ID) AS TRANCHE_COUNT,
+               MAX(PRICING_TS) AS LAST_ACTIVE, MAX(DEAL_STATUS) AS STATUS
         FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
         WHERE PRODUCT IN ('ECM', 'DCM') AND DEAL_ID = :deal_id
-        FETCH FIRST 200 ROWS ONLY
+        GROUP BY DEAL_ID, DEAL_NAME
 
   by_gfcid_template: >-
-    SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID
+    SELECT NULL AS DEAL_ID, NULL AS DEAL_NAME, NULL AS INVESTOR_NAME,
+           NULL AS GPNUM, ISSUER_NAME, GFCID,
+           COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT, MAX(PRICING_TS) AS LAST_ACTIVE
     FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
     WHERE PRODUCT IN ('ECM', 'DCM') AND GFCID = :gfcid
-    ORDER BY GPNUM, DEAL_ID
-    FETCH FIRST 200 ROWS ONLY
+    GROUP BY ISSUER_NAME, GFCID
 
   field_mapping:
     - target: deal_id
