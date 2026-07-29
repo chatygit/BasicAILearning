@@ -46,6 +46,11 @@ agents:
          Bare role nouns with NO proper name ("by issuer", "per investor",
          "by broker") are GROUP BY targets - never ask "which issuer?" for
          a grouping word; resolve only NAMED entities.
+         TOOL ARGS ARE STRINGS: filter_criteria (and every arg) is a STRING
+         - if a suggested_args value arrives as an OBJECT, JSON-serialize it
+         before calling. NEVER write code to call a tool (no "import json",
+         no "print(default_api...)") - emit the native function call; a
+         code-style call is malformed and kills the turn.
          FEWEST HOPS: a metric/list ask that merely NAMES an investor/issuer
          ("blackrock investment > 1m", "deals for fidelity") needs NO
          entity_search - put UPPER(<name col>) LIKE '%STEM%' straight in the

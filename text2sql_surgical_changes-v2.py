@@ -101,3 +101,40 @@ def collapse_degenerate_results(results, entity_type):
 # becomes a silent no-op - prompt 2 is then the only visible evidence the
 # safety net exists, which is correct behavior for a safety net.
 # -----------------------------------------------------------------------------
+
+
+# =============================================================================
+# CHANGE K (tool_entity_search: suggested_args must match the tool contract)
+#
+# QAT trace 2026-07-31: after a successful resolution, next_action.suggested_args
+# included  "filter_criteria": resolution.get("filter_criteria", {})  - a DICT.
+# tool_query_context declares filter_criteria: str, so the agent passing the
+# suggestion through verbatim died on pydantic ("Input should be a valid
+# string, input_value={'DEAL_ID': ...}"), and the model's recovery attempt
+# degenerated into code-style calling (MALFORMED_FUNCTION_CALL), killing the
+# turn. The server must never suggest arguments its own tools reject.
+#
+# In tool_entity_search's single-result return, replace:
+#
+#         "filter_criteria": resolution.get("filter_criteria", {}),
+#
+# with:
+#
+#         "filter_criteria": (
+#             json.dumps(fc) if isinstance((fc := resolution.get("filter_criteria")), dict) and fc
+#             else (fc if isinstance(fc, str) else "")
+#         ),
+#
+# (or the expanded equivalent if walrus reads poorly in the codebase:
+#         fc = resolution.get("filter_criteria")
+#         if isinstance(fc, dict):
+#             fc = json.dumps(fc) if fc else ""
+#         suggested_filter_criteria = fc or ""
+# )
+# Contract: filter_criteria in suggested_args is ALWAYS a string - a JSON
+# object serialized, or "" - exactly what tool_query_context accepts.
+#
+# TEST: "Show me the details of deal RM_Automation" (fresh session) - the
+# resolution should flow into query_context with no pydantic error and no
+# MALFORMED_FUNCTION_CALL; trace shows filter_criteria as a JSON STRING.
+# =============================================================================
