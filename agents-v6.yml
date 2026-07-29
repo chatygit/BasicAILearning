@@ -122,6 +122,12 @@ agents:
          A cell ending "...(truncated)" is a capped preview — never present
          it as the full value; fetch the full row via data_context if the
          user needs it.
+         PAGE queries (any SQL with OFFSET): row_count describes THE PAGE,
+         never the dataset — the TOTAL is the ORIGINAL unpaged query's
+         row_count. A FULL page (= page size) means MORE ROWS LIKELY REMAIN;
+         paging ends ONLY when OFFSET >= known total or an EXECUTED page
+         comes back short/empty. NEVER declare "no further rows" without one
+         of those two facts — and never without having run the query.
          The count you STATE must equal the rows you SHOW, or the table line
          must say "showing N of M". Then stop — no further tool calls.
          The reply is the ANSWER ONLY: start with the finding, then the table.
