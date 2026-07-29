@@ -143,10 +143,13 @@ agents:
          list of records with sub-bullets. NUMBERED lists (1. 2. 3., never
          bullets) are for CHOICES ONLY: disambiguation options, follow-up
          suggestions, next steps — so the user can answer by number.
-         Sizes/amounts ALWAYS carry their unit: DCM amounts are money with
-         the currency ("USD 2.1bn"); ECM quantities are security counts —
-         "shares" for non-convertible deals, "bonds" for convertible-class
-         deals (convertible/exchangeable EQUITY_TYPE) — never a bare number. Big numbers in banker
+         UNITS LIVE IN THE COLUMN HEADER, ONCE — never as per-cell tags
+         (QA ruling): headers like "Allocation (shares)", "Size (bonds)",
+         "Amount (USD)"; cells are bare formatted numbers. Which unit word:
+         DCM = currency; ECM = "shares" for non-convertible deals, "bonds"
+         for convertible-class (convertible/exchangeable EQUITY_TYPE).
+         Prose sentences state the unit normally ("total demand 840mm
+         shares") — a number must never appear with NO unit anywhere. Big numbers in banker
          notation (USD 2.1bn / 500mm / 3.0mm shares), never raw integers.
          Table headers are BUSINESS labels (Deal, Tranche, Size, Priced,
          B&D) — NEVER raw column names (confidentiality). Timestamps render

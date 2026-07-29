@@ -39,7 +39,7 @@
         {
           "columnName": "TRANCHE_SIZE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Size of the tranche offering, STORED AS TEXT (VARCHAR2) - always wrap as TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) before comparing/ranking/summing. UNIT DEPENDS ON PRODUCT: ECM = SHARES (label per deal class: 'shares' (non-convertible) / 'bonds' (convertible-class EQUITY_TYPE)); DCM = notional MONEY in CURRENCY. Never aggregate across both products; DCM sums need currency scoping.",
+          "columnDescription": "Size of the tranche offering, STORED AS TEXT (VARCHAR2) - always wrap as TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) before comparing/ranking/summing. UNIT DEPENDS ON PRODUCT: ECM = SHARES (unit goes in the column HEADER once ('(shares)' non-convertible / '(bonds)' convertible-class), cells bare); DCM = notional MONEY in CURRENCY. Never aggregate across both products; DCM sums need currency scoping.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -81,7 +81,7 @@
         {
           "columnName": "ALLOCATION",
           "dataType": "NUMBER",
-          "columnDescription": "Final allocation to the investor - the ECM investor-side metric. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = MONEY (prefer AMT for DCM money asks). Never aggregate across both products; label the unit in answers. ECM display label: 'shares' for non-convertible deals, 'bonds' for convertible-class (EQUITY_TYPE convertible/exchangeable).",
+          "columnDescription": "Final allocation to the investor - the ECM investor-side metric. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = MONEY (prefer AMT for DCM money asks). Never aggregate across both products; label the unit in answers. ECM display: unit in the column HEADER once ('(shares)' non-convertible / '(bonds)' convertible-class), cells bare numbers.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -147,7 +147,7 @@
         {
           "columnName": "DEAL_SIZE",
           "dataType": "NUMBER",
-          "columnDescription": "Total deal size. UNIT DEPENDS ON PRODUCT: ECM = total SHARES offered (a share count - label per deal class: 'shares' (non-convertible) / 'bonds' (convertible-class EQUITY_TYPE), NEVER as money; a money 'deal value' is not derivable, no price column exists); DCM = total notional/principal MONEY in CURRENCY. Never aggregate across both products (shares+cash mix); DCM money sums need one CURRENCY or GROUP BY CURRENCY. Deal-level: dedupe DEAL_ID; never rebuild it as SUM(TRANCHE_SIZE).",
+          "columnDescription": "Total deal size. UNIT DEPENDS ON PRODUCT: ECM = total SHARES offered (a share count - unit goes in the column HEADER once ('(shares)' non-convertible / '(bonds)' convertible-class), cells bare, NEVER as money; a money 'deal value' is not derivable, no price column exists); DCM = total notional/principal MONEY in CURRENCY. Never aggregate across both products (shares+cash mix); DCM money sums need one CURRENCY or GROUP BY CURRENCY. Deal-level: dedupe DEAL_ID; never rebuild it as SUM(TRANCHE_SIZE).",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -189,7 +189,7 @@
         {
           "columnName": "DEMAND_QTY",
           "dataType": "NUMBER",
-          "columnDescription": "DCM CAVEAT: sourced from the same column as AMT/ALLOCATION on DCM - demand=allocation=amount there, so coverage/fill ratios are ECM-only. Demand (indication) the investor asked for, before allocation. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = notional MONEY in CURRENCY - label the unit in answers. 'Demand'/'indication in shares' -> DEMAND_QTY (never ALLOCATION). Never aggregate across both products. ECM display label: 'shares' for non-convertible deals, 'bonds' for convertible-class (EQUITY_TYPE convertible/exchangeable).",
+          "columnDescription": "DCM CAVEAT: sourced from the same column as AMT/ALLOCATION on DCM - demand=allocation=amount there, so coverage/fill ratios are ECM-only. Demand (indication) the investor asked for, before allocation. UNIT DEPENDS ON PRODUCT: ECM = SHARES; DCM = notional MONEY in CURRENCY - label the unit in answers. 'Demand'/'indication in shares' -> DEMAND_QTY (never ALLOCATION). Never aggregate across both products. ECM display: unit in the column HEADER once ('(shares)' non-convertible / '(bonds)' convertible-class), cells bare numbers.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
