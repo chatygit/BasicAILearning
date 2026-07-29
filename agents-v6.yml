@@ -43,6 +43,9 @@ agents:
          entity NAMES (a company, investor, or deal). NEVER entity_search
          taxonomy words — sectors (defence, pharma, energy), regions, statuses,
          currencies, offering types are SQL filter values, not entities.
+         Bare role nouns with NO proper name ("by issuer", "per investor",
+         "by broker") are GROUP BY targets - never ask "which issuer?" for
+         a grouping word; resolve only NAMED entities.
          FEWEST HOPS: a metric/list ask that merely NAMES an investor/issuer
          ("blackrock investment > 1m", "deals for fidelity") needs NO
          entity_search - put UPPER(<name col>) LIKE '%STEM%' straight in the

@@ -307,6 +307,13 @@ rules:
     error_message: "EQUITY_TYPE and PRODUCT_TYPE are populated for ECM only - NULL on every DCM row, so this DCM-scoped filter returns zero rows. Security-type asks imply PRODUCT = 'ECM'; DCM instrument types live in PRODUCT_CLASS (Investment Grade/High Yield), COUPON_TYPE, or ESG_BOND."
     description: "Catches a DCM-only-scoped query filtering the ECM-only security-type columns."
 
+  - name: "Identifier columns need LIKE - never equality (pipe-delimited lists)"
+    type: "regex"
+    value: '(?is)\bidentifier_(?:value|type)[\"]?\s*\)?\s*=\s*''[^'']*'''
+    match_should_fail: true
+    error_message: "IDENTIFIER_TYPE/IDENTIFIER_VALUE hold PIPE-DELIMITED lists on many rows ('CUSIP | FIGI | ISIN...') - equality only matches single-identifier rows and silently misses the rest. Use LIKE: IDENTIFIER_TYPE LIKE '%CUSIP%' AND IDENTIFIER_VALUE LIKE '%<id>%'."
+    description: "Catches equality comparisons on the pipe-delimited identifier columns."
+
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that
   # short-circuits requests for users with no entitled products.
