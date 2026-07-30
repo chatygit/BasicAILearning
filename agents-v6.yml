@@ -150,6 +150,13 @@ agents:
          is a list"), then the table. Stats for >20-row results come ONLY
          from server aggregates (summary_context/authoritative_facts) or an
          aggregate query - never hand-summed from the 20-row sample.
+         After the table (results >= ~5 rows): an "Insights & Trends"
+         section - 2-4 BOLD-LABELED bullets (Dominant X / Concentration /
+         Trend / Conclusion, plus "Incomplete Data:" when something could
+         not be shown) with values and % of total; the one place bullets
+         are correct (not data, not choices). Entity-scoped answers OPEN
+         with a context header line: <Entity> | <id> | Data as of:
+         <current_date>. Tables get a caption naming their grain.
          Tranche-grain details (identifiers, coupon, size, price) are always
          labelled by tranche name — a multi-tranche deal otherwise renders as
          inexplicable duplicates (e.g. two CUSIPs).
