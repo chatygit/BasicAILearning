@@ -213,8 +213,12 @@ prompts:
          WHERE). Year: >= DATE 'YYYY-01-01' AND < DATE 'YYYY+1-01-01'.
          Last 12 months: ADD_MONTHS(SYSDATE,-12). Week: closed window
          >= TRUNC(ref,'IW') AND < TRUNC(ref,'IW')+7. To-now windows
-         ("past N days") have NO upper bound — an upper bound at
-         current_date (midnight) excludes today's rows. "New deals" =
+         ("past N days", "last 12 months") take upper bound
+         AND PRICING_TS < TRUNC(SYSDATE) + 1 — tomorrow-midnight: includes
+         ALL of today's rows AND excludes FUTURE-dated rows (test data
+         carries future PRICING_TS; a 2028 pricing is not "last 12
+         months"). Never midnight-today (drops today), never unbounded
+         (admits the future). "New deals" =
          recent PRICING_TS OR (PRICING_TS IS NULL AND active DEAL_STATUS);
          no creation-date column exists.
       E0. Investor geography IS supported via INVESTOR_REGION (values like
@@ -238,9 +242,10 @@ prompts:
          TRANCHE_REGION (same source) — never emit REGION; use
          TRANCHE_REGION (or DEAL_REGION for explicit ECM deal-level asks).
       F. Broker/syndicate: branch-aware per DOMAIN_VIEW_BUILD_NOTES and
-         DOMAIN_BROKER_ALIASES_JSON. Solo asks -> UPPER(DEAL_SHARING_TYPE)='SOLO'
-         + bank filter (BOTH products); ECM fallback if zero rows:
-         REGEXP_COUNT(BROKER_CODE,'\|')=0 + Citi token. Roles = ECM only,
+         DOMAIN_BROKER_ALIASES_JSON. Solo asks -> UPPER(DEAL_SHARING_TYPE)='SOLO' ALONE (this is
+         Citi's own book - every deal is Citi-involved, SOLO = Citi solo
+         by construction; no member filter). ECM fallback if zero rows:
+         REGEXP_COUNT(BROKER_CODE,'\|')=0. Roles = ECM only,
          REGEXP_LIKE with expanded role patterns (never the user's literal
          phrase).
       G. SQL efficiency: minimal SELECT (no SELECT *), FETCH FIRST N ROWS
@@ -249,6 +254,28 @@ prompts:
          names only. Quoting the dotted view name ("DGSTREAM.VW_DEAL...")
          makes it ONE invalid identifier -> ORA-00942. Date literals ALWAYS
          carry the DATE keyword (DATE 'YYYY-MM-DD'), never a bare string.
+    DOMAIN_QUERY_LIBRARY: |
+      PRE-VERIFIED QUERIES - when the ask matches one, COPY IT VERBATIM and
+      substitute ONLY the <YEAR>/<YEAR+1>/<STATUS>/<DEAL_ID> placeholders
+      (ids stay QUOTED). Do NOT compose these from scratch. Queries are the
+      ECM branch; DCM adaptation: B&D = SYNDICATE_MEMBER_NAME itself (single
+      member IS the B&D bank); entitlement prunes branches as always.
+      -- L1 Citi B&D deals/tranches in <YEAR>
+      SELECT DISTINCT DEAL_ID, DEAL_NAME, TRANCHE_ID, TRANCHE_NAME, PRICING_TS, TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) AS TRANCHE_SIZE FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY WHERE PRODUCT = 'ECM' AND PRICING_TS >= DATE '<YEAR>-01-01' AND PRICING_TS < DATE '<YEAR+1>-01-01' AND INSTR(BND_BROKER,'true') > 0 AND UPPER(TRIM(REGEXP_SUBSTR(SYNDICATE_MEMBER_NAME,'[^|]+',1,REGEXP_COUNT(SUBSTR(BND_BROKER,1,INSTR(BND_BROKER,'true')),'\|')+1))) LIKE '%CITIGROUP GLOBAL MARKETS%' ORDER BY PRICING_TS DESC, DEAL_ID, TRANCHE_ID FETCH FIRST 20 ROWS ONLY
+      -- L2 Citi NON-B&D (participated, not billing) in <YEAR>
+      SELECT DISTINCT DEAL_ID, DEAL_NAME, TRANCHE_ID, TRANCHE_NAME, PRICING_TS, TRIM(REGEXP_SUBSTR(SYNDICATE_MEMBER_NAME,'[^|]+',1,REGEXP_COUNT(SUBSTR(BND_BROKER,1,INSTR(BND_BROKER,'true')),'\|')+1)) AS BD_BANK FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY WHERE PRODUCT = 'ECM' AND PRICING_TS >= DATE '<YEAR>-01-01' AND PRICING_TS < DATE '<YEAR+1>-01-01' AND UPPER(SYNDICATE_MEMBER_NAME) LIKE '%CITIGROUP GLOBAL MARKETS%' AND (INSTR(BND_BROKER,'true') = 0 OR UPPER(TRIM(REGEXP_SUBSTR(SYNDICATE_MEMBER_NAME,'[^|]+',1,REGEXP_COUNT(SUBSTR(BND_BROKER,1,INSTR(BND_BROKER,'true')),'\|')+1))) NOT LIKE '%CITI%') ORDER BY PRICING_TS DESC, DEAL_ID, TRANCHE_ID FETCH FIRST 20 ROWS ONLY
+      -- L3 billed by NON-Citi (any other bank) in <YEAR>
+      SELECT DISTINCT DEAL_ID, DEAL_NAME, TRANCHE_ID, TRANCHE_NAME, PRICING_TS, TRIM(REGEXP_SUBSTR(SYNDICATE_MEMBER_NAME,'[^|]+',1,REGEXP_COUNT(SUBSTR(BND_BROKER,1,INSTR(BND_BROKER,'true')),'\|')+1)) AS BD_BANK FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY WHERE PRODUCT = 'ECM' AND PRICING_TS >= DATE '<YEAR>-01-01' AND PRICING_TS < DATE '<YEAR+1>-01-01' AND INSTR(BND_BROKER,'true') > 0 AND UPPER(TRIM(REGEXP_SUBSTR(SYNDICATE_MEMBER_NAME,'[^|]+',1,REGEXP_COUNT(SUBSTR(BND_BROKER,1,INSTR(BND_BROKER,'true')),'\|')+1))) NOT LIKE '%CITI%' ORDER BY PRICING_TS DESC, DEAL_ID, TRANCHE_ID FETCH FIRST 20 ROWS ONLY
+      -- L4 Citi SOLO deals/tranches in <YEAR>
+      SELECT DISTINCT DEAL_ID, DEAL_NAME, TRANCHE_ID, TRANCHE_NAME, PRICING_TS FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY WHERE PRODUCT = 'ECM' AND PRICING_TS >= DATE '<YEAR>-01-01' AND PRICING_TS < DATE '<YEAR+1>-01-01' AND UPPER(DEAL_SHARING_TYPE) = 'SOLO' ORDER BY PRICING_TS DESC, DEAL_ID, TRANCHE_ID FETCH FIRST 20 ROWS ONLY
+      -- L5 deals in <STATUS> state in <YEAR>
+      SELECT DISTINCT DEAL_ID, DEAL_NAME, MAX(ISSUER_NAME) AS ISSUER_NAME, MAX(DEAL_STATUS) AS STATUS, MIN(PRICING_TS) AS FIRST_PRICED FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY WHERE PRODUCT = 'ECM' AND UPPER(DEAL_STATUS) = UPPER('<STATUS>') AND PRICING_TS >= DATE '<YEAR>-01-01' AND PRICING_TS < DATE '<YEAR+1>-01-01' GROUP BY DEAL_ID, DEAL_NAME ORDER BY FIRST_PRICED DESC, DEAL_ID FETCH FIRST 20 ROWS ONLY
+      -- L6 top 10 deals by tranche size in <YEAR>
+      SELECT DEAL_ID, DEAL_NAME, TRANCHE_ID, TRANCHE_NAME, TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) AS TRANCHE_SIZE, PRICING_TS FROM (SELECT DISTINCT DEAL_ID, DEAL_NAME, TRANCHE_ID, TRANCHE_NAME, TRANCHE_SIZE, PRICING_TS FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY WHERE PRODUCT = 'ECM' AND PRICING_TS >= DATE '<YEAR>-01-01' AND PRICING_TS < DATE '<YEAR+1>-01-01') ORDER BY TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR) DESC NULLS LAST, PRICING_TS DESC, DEAL_ID FETCH FIRST 10 ROWS ONLY
+      -- L7 all orders for deal <DEAL_ID> (page 1)
+      SELECT DISTINCT ORDER_ID, INVESTOR_NAME, GPNUM, TRANCHE_NAME, ALLOCATION, DEMAND_QTY, ORDER_TYPE, IOI_TYPE, PRICING_TS FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY WHERE PRODUCT = 'ECM' AND DEAL_ID = '<DEAL_ID>' ORDER BY PRICING_TS DESC, ORDER_ID FETCH FIRST 20 ROWS ONLY
+      -- L8 identifiers per tranche for deal <DEAL_ID>
+      SELECT DISTINCT TRANCHE_ID, TRANCHE_NAME, IDENTIFIER_TYPE, IDENTIFIER_VALUE, TICKER FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY WHERE PRODUCT = 'ECM' AND DEAL_ID = '<DEAL_ID>' ORDER BY TRANCHE_ID FETCH FIRST 20 ROWS ONLY
     DOMAIN_SPECIFIC_AGGREGATION_RULES: |
       demand -> DEMAND_QTY (ECM+DCM; authoritative — overrides any stale
       mapping). allocation -> ALLOCATION. order size/amount -> ECM=ALLOCATION,

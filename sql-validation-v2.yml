@@ -190,9 +190,9 @@ rules:
 
   - name: "Require row cap for broad ordered deal/tranche listings"
     type: "regex"
-    value: '(?is)(?=.*\bfrom\s+["]?dgstream["]?\.["]?vw_deal_order_summary["]?)(?=.*\border\s+by\s+pricing_ts\s+desc\b)(?=.*\bselect\b[^;]*\b(deal_id|deal_name|tranche_id|tranche_name)\b)(?!.*\b(fetch\s+first\s+\d+\s+rows\s+only|rownum\s*(?:<=|<)\s*\d+)\b)(?!.*\b(sum|count|avg|min|max)\b).+'
+    value: '(?is)(?=.*\bfrom\s+["]?dgstream["]?\.["]?vw_deal_order_summary["]?)(?=.*\border\s+by\s+pricing_ts\s+desc\b)(?=.*\bselect\b[^;]*\b(deal_id|deal_name|tranche_id|tranche_name)\b)(?!.*\b(fetch\s+(?:first|next)\s+\d+\s+rows\s+only|rownum\s*(?:<=|<)\s*\d+)\b)(?!.*\b(sum|count|avg|min|max)\b).+'
     match_should_fail: true
-    error_message: "For broad ordered deal/tranche listings, include a row cap (for example FETCH FIRST 500 ROWS ONLY or ROWNUM <= 500) to avoid slow queries and timeouts."
+    error_message: "For broad ordered deal/tranche listings, include a row cap (FETCH FIRST n ROWS ONLY, OFFSET n ROWS FETCH NEXT n ROWS ONLY, or ROWNUM <= n) to avoid slow queries and timeouts."
     # description: "Prevents uncapped broad listing queries that can scan/sort large ranges and timeout."
 
   - name: "TRANCHE_SIZE requires TO_NUMBER (stored as VARCHAR2)"
@@ -310,7 +310,7 @@ rules:
     type: "regex"
     value: '(?is)\bidentifier_(?:value|type)[\"]?\s*\)?\s*=\s*''[^'']*'''
     match_should_fail: true
-    error_message: "IDENTIFIER_TYPE/IDENTIFIER_VALUE hold PIPE-DELIMITED lists on many rows ('CUSIP | FIGI | ISIN...') - equality only matches single-identifier rows and silently misses the rest. Use LIKE: IDENTIFIER_TYPE LIKE '%CUSIP%' AND IDENTIFIER_VALUE LIKE '%<id>%'."
+    error_message: "IDENTIFIER_TYPE/IDENTIFIER_VALUE hold PIPE-DELIMITED lists on many rows ('CUSIP | FIGI | ISIN...') - equality only matches single-identifier rows and silently misses the rest. Use case-insensitive LIKE (DCM stores ALL identifier types lowercase, ECM all caps): UPPER(IDENTIFIER_TYPE) LIKE '%CUSIP%' AND UPPER(IDENTIFIER_VALUE) LIKE '%<id>%'."
     description: "Catches equality comparisons on the pipe-delimited identifier columns."
 
   - name: "Fabricated columns - CUSIP/ISIN/EXEC_DATE/PRICE/COUPON do not exist"
@@ -340,6 +340,20 @@ rules:
     match_should_fail: true
     error_message: "DEAL_ID/TRANCHE_ID/ORDER_ID/GPNUM/GFCID are TEXT columns - an unquoted numeric literal forces TO_NUMBER over every row, and DCM ids contain letters ('I-241121-...') so the query dies with ORA-01722. Quote the id: DEAL_ID = '25248935'. (Unquoted GPNUM also silently drops leading zeros.)"
     description: "Catches unquoted numeric comparisons on text id columns (ORA-01722 class)."
+
+  - name: "Identifier LIKEs need UPPER - casing differs per product"
+    type: "regex"
+    value: '(?is)(?<!upper\()\bidentifier_(?:type|value)[\"]?\s+like\b'
+    match_should_fail: true
+    error_message: "IDENTIFIER_TYPE/VALUE casing differs per product (DCM stores ALL identifier types lowercase - 'cusip','isin','figi' - ECM all caps) - a case-sensitive LIKE silently misses one product. Wrap BOTH sides: UPPER(IDENTIFIER_TYPE) LIKE '%CUSIP%' AND UPPER(IDENTIFIER_VALUE) LIKE '%<id>%'."
+    description: "Catches case-sensitive LIKE on the mixed-case identifier columns."
+
+  - name: "To-now windows need the tomorrow-midnight upper bound"
+    type: "regex"
+    value: '(?is)(?=.*\bpricing_ts[\"]?\s*>=\s*(?:add_months\s*\(\s*sysdate|trunc\s*\(\s*sysdate|sysdate\s*-))(?!.*\bpricing_ts[\"]?\s*<).+'
+    match_should_fail: true
+    error_message: "A trailing window (>= ADD_MONTHS/TRUNC(SYSDATE)-N) with NO upper bound admits FUTURE-dated rows - this data carries future PRICING_TS (test deals dated 2027/2028), and a 2028 pricing is not 'the last 12 months'. Add: AND PRICING_TS < TRUNC(SYSDATE) + 1 (keeps all of today, excludes the future)."
+    description: "Catches unbounded trailing windows that let future-dated pricings into last-N periods."
 
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that

@@ -58,6 +58,12 @@ agents:
          Call entity_search only for: an entity-SPECIFIC ask (details/orders
          of ONE account), spelling recovery after zero rows, or the user
          asking to pick.
+         IF entity_search FAILS (tool-not-found after one retry, or error):
+         NEVER invent an id - an id exists ONLY if a tool response or the
+         user's message contains it; any other id is fabrication and the
+         answer built on it is false. RECOVERY: resolve the name INLINE in
+         the SQL instead - UPPER(DEAL_NAME) LIKE '%<NAME>%' (or
+         INVESTOR_NAME/ISSUER_NAME) - and proceed normally.
          text2sql_entity_search(domain="ecm_dcm", entity_name=..., entity_type=
          investor_name|issuer_name|deal_name; explicit deal id -> deal_id=...).
          Then OBEY the response:
@@ -108,7 +114,11 @@ agents:
          text2sql tool this turn (not validate_sql, not query_executor, not
          data_context) and reply with the recovery message immediately. Never
          improvise SQL from memory; never validate SQL you invented.
-      4. Call text2sql_query_executor DIRECTLY with your SQL — it validates
+      4. If the ask matches a DOMAIN_QUERY_LIBRARY entry in domain_config,
+         COPY that SQL VERBATIM - substitute only the <YEAR>/<STATUS>/
+         <DEAL_ID> placeholders (ids stay quoted); never compose those
+         queries from scratch.
+         Call text2sql_query_executor DIRECTLY with your SQL — it validates
          server-side before executing. On a validation error: fix the SQL from
          the error message and re-execute ONCE (HARD CAP: 2 executor attempts
          per turn, no matter how encouraging the error text sounds).

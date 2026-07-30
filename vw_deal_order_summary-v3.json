@@ -297,13 +297,13 @@
         {
           "columnName": "IDENTIFIER_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Type of security identifier in IDENTIFIER_VALUE. Values: CUSIP, FIGI, Valoren, ISIN, RIC, 'SMCP ID', 'DirectBooks Id'. On some rows pipe-delimited aligned lists (position-aligned with IDENTIFIER_VALUE) - filter with LIKE '%CUSIP%'. NOTE: identifiers are TRANCHE-grain (one set per tranche) - always SELECT TRANCHE_NAME alongside identifiers so each set can be labelled per tranche; otherwise a multi-tranche deal reads as duplicate CUSIPs/ISINs.",
+          "columnDescription": "CASING DIFFERS PER PRODUCT (DCM stores ALL identifier types lowercase - 'cusip','isin','figi','ric' - ECM all caps; values may follow the same split) - ALWAYS UPPER() both sides: UPPER(IDENTIFIER_TYPE) LIKE '%CUSIP%' AND UPPER(IDENTIFIER_VALUE) LIKE '%<id>%'. Type of security identifier in IDENTIFIER_VALUE. Values: CUSIP, FIGI, Valoren, ISIN, RIC, 'SMCP ID', 'DirectBooks Id'. On some rows pipe-delimited aligned lists (position-aligned with IDENTIFIER_VALUE) - filter with LIKE '%CUSIP%'. NOTE: identifiers are TRANCHE-grain (one set per tranche) - always SELECT TRANCHE_NAME alongside identifiers so each set can be labelled per tranche; otherwise a multi-tranche deal reads as duplicate CUSIPs/ISINs.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
           "columnName": "IDENTIFIER_VALUE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Security identifier value(s); pipe-delimited aligned with IDENTIFIER_TYPE on some rows. Can be UUIDs (DirectBooks). An ISIN embeds the CUSIP (US+cusip+check digit), so IDENTIFIER_VALUE LIKE '%<cusip>%' matches both. Filter by id: IDENTIFIER_TYPE LIKE '%CUSIP%' AND IDENTIFIER_VALUE LIKE '%<value>%'. NEVER use a security id as deal_id or in entity search. NOTE: identifiers are TRANCHE-grain (one set per tranche) - always SELECT TRANCHE_NAME alongside identifiers so each set can be labelled per tranche; otherwise a multi-tranche deal reads as duplicate CUSIPs/ISINs.",
+          "columnDescription": "CASING DIFFERS PER PRODUCT (DCM stores ALL identifier types lowercase - 'cusip','isin','figi','ric' - ECM all caps; values may follow the same split) - ALWAYS UPPER() both sides: UPPER(IDENTIFIER_TYPE) LIKE '%CUSIP%' AND UPPER(IDENTIFIER_VALUE) LIKE '%<id>%'. Security identifier value(s); pipe-delimited aligned with IDENTIFIER_TYPE on some rows. Can be UUIDs (DirectBooks). An ISIN embeds the CUSIP (US+cusip+check digit), so IDENTIFIER_VALUE LIKE '%<cusip>%' matches both. Filter by id: IDENTIFIER_TYPE LIKE '%CUSIP%' AND IDENTIFIER_VALUE LIKE '%<value>%'. NEVER use a security id as deal_id or in entity search. NOTE: identifiers are TRANCHE-grain (one set per tranche) - always SELECT TRANCHE_NAME alongside identifiers so each set can be labelled per tranche; otherwise a multi-tranche deal reads as duplicate CUSIPs/ISINs.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
@@ -345,7 +345,7 @@
         {
           "columnName": "DEAL_SHARING_TYPE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Whether the deal is sole-managed or a shared syndicate. Values e.g. 'SOLO','SHARED' (UPPER compare). PRIMARY route for 'solo' asks on BOTH products: UPPER(DEAL_SHARING_TYPE)='SOLO' AND the bank filter (makes DCM solo answerable). NEW column with edge-case logic not fully implemented upstream: on ECM corroborate or fall back to REGEXP_COUNT(BROKER_CODE,'|')=0 + the bank token; if one route returns zero rows try the other before answering 'none'.",
+          "columnDescription": "Whether the deal is sole-managed or a shared syndicate. Values e.g. 'SOLO','SHARED' (UPPER compare). PRIMARY route for 'solo' asks on BOTH products: UPPER(DEAL_SHARING_TYPE)='SOLO' ALONE - this view is Citi's own book, every deal is Citi-involved, so SOLO already means Citi-solo (no member filter; makes DCM solo answerable). NEW column with edge-case logic not fully implemented upstream: on ECM corroborate or fall back to REGEXP_COUNT(BROKER_CODE,'|')=0 + the bank token; if one route returns zero rows try the other before answering 'none'.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         }
       ],
