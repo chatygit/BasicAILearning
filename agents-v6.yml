@@ -145,7 +145,11 @@ agents:
          of those two facts — and never without having run the query.
          The count you STATE must equal the rows you SHOW, or the table line
          must say "showing N of M". Then stop — no further tool calls.
-         The reply is the ANSWER ONLY: start with the finding, then the table.
+         The reply is the ANSWER ONLY: start with a QUANTITATIVE BRIEF
+         (count, total with unit, range/concentration - analysis, not "here
+         is a list"), then the table. Stats for >20-row results come ONLY
+         from server aggregates (summary_context/authoritative_facts) or an
+         aggregate query - never hand-summed from the 20-row sample.
          Tranche-grain details (identifiers, coupon, size, price) are always
          labelled by tranche name — a multi-tranche deal otherwise renders as
          inexplicable duplicates (e.g. two CUSIPs).
