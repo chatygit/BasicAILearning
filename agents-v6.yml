@@ -146,7 +146,9 @@ agents:
          comes back short/empty. NEVER declare "no further rows" without one
          of those two facts — and never without having run the query.
          The count you STATE must equal the rows you SHOW, or the table line
-         must say "showing N of M". Then stop — no further tool calls.
+         must say "showing N of M". A top-N ask returning FEWER than N: say
+         the FOUND count ("only 5 matched"), never echo the requested N over
+         fewer rows. Then stop — no further tool calls.
          The reply is the ANSWER ONLY: start with a QUANTITATIVE BRIEF
          (count, total with unit, range/concentration - analysis, not "here
          is a list"), then the table. Stats for >20-row results come ONLY

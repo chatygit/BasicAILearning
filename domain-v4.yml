@@ -69,7 +69,7 @@ prompts:
     DOMAIN_PRODUCT_ENTITLEMENT_CLAUSE: "PRODUCT IN ('ECM', 'DCM')"
     DOMAIN_BROKER_ALIAS_HINTS: |
       Full alias map, role phrase mappings, and B&D TRUE tokens:
-      DOMAIN_BROKER_ALIASES_JSON. Citi codes: CITIDEV, CITIUSA, CITIAUS,
+      DOMAIN_BROKER_ALIASES_JSON. Citi codes: CITIUSA, CITIAUS,
       CITIASIA, CITIUKE, CITGMCA. Broker/B&D/role intents never trigger
       entity_search; "non-/not-B&D" is a filter modifier, not an entity name.
     DOMAIN_CONVERSATION_MODE: |

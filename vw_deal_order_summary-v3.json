@@ -285,7 +285,7 @@
         {
           "columnName": "BROKER_CODE",
           "dataType": "VARCHAR2",
-          "columnDescription": "Code identifying the broker on the order. ECM only: pipe-delimited (' | ') aligned list of broker codes. NULL on DCM rows. Citi codes include CITIDEV, CITIUSA, CITIAUS, CITIASIA, CITIUKE, CITGMCA.",
+          "columnDescription": "Code identifying the broker on the order. ECM only: pipe-delimited (' | ') aligned list of broker codes. NULL on DCM rows. Citi codes include CITIUSA, CITIAUS, CITIASIA, CITIUKE, CITGMCA.",
           "table_name": "DGSTREAM.VW_DEAL_ORDER_SUMMARY"
         },
         {
