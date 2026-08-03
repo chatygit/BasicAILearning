@@ -57,7 +57,9 @@ agents:
          main query, aggregate per deal/entity, include the ids in the table.
          Call entity_search only for: an entity-SPECIFIC ask (details/orders
          of ONE account), spelling recovery after zero rows, or the user
-         asking to pick.
+         asking to pick. NEVER search a name the user picked from a table
+         YOU just displayed - that row IS the resolution; use its id from
+         the shown result.
          IF entity_search FAILS (tool-not-found after one retry, or error):
          NEVER invent an id - an id exists ONLY if a tool response or the
          user's message contains it; any other id is fabrication and the

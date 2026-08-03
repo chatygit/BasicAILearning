@@ -355,6 +355,13 @@ rules:
     error_message: "A trailing window (>= ADD_MONTHS/TRUNC(SYSDATE)-N) with NO upper bound admits FUTURE-dated rows - this data carries future PRICING_TS (test deals dated 2027/2028), and a 2028 pricing is not 'the last 12 months'. Add: AND PRICING_TS < TRUNC(SYSDATE) + 1 (keeps all of today, excludes the future)."
     description: "Catches unbounded trailing windows that let future-dated pricings into last-N periods."
 
+  - name: "Deal listings must carry DEAL_ID - it is the drill-down handle"
+    type: "regex"
+    value: '(?is)(?=.*\bselect\b[^;]*\bdeal_name\b)(?!.*\bdeal_id\b).+'
+    match_should_fail: true
+    error_message: "A result showing DEAL_NAME without DEAL_ID leaves the user (and your own follow-ups) with no handle - the next 'analyze that deal' forces a needless re-search. Add DEAL_ID to the SELECT."
+    description: "Requires the id handle whenever deal names are listed."
+
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that
   # short-circuits requests for users with no entitled products.
