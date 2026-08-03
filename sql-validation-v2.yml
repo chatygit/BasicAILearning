@@ -362,6 +362,27 @@ rules:
     error_message: "A result showing DEAL_NAME without DEAL_ID leaves the user (and your own follow-ups) with no handle - the next 'analyze that deal' forces a needless re-search. Add DEAL_ID to the SELECT."
     description: "Requires the id handle whenever deal names are listed."
 
+  - name: "Missing DGSTREAM schema prefix"
+    type: "regex"
+    value: '(?is)\bfrom\s+[\"]?vw_deal_order_summary\b'
+    match_should_fail: true
+    error_message: "The table name is RIGHT but the schema prefix is missing - bare VW_DEAL_ORDER_SUMMARY does not resolve. Write FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY and change NOTHING else."
+    description: "Precise diagnosis for the missing-schema-prefix case (the generic product-scope message misleads here)."
+
+  - name: "PRODUCT_TYPE is never exact equality - and class words belong to EQUITY_TYPE"
+    type: "regex"
+    value: '(?is)\bproduct_type[\"]?\s*\)?\s*=\s*'''
+    match_should_fail: true
+    error_message: "PRODUCT_TYPE values are messy label variants ('Common Shares', '144A Common Stock', 'ADR') - exact '=' under-matches. If the ask used a CLASS word (common stock/shares, convertible, warrants, equity units, depositary): use UPPER(EQUITY_TYPE) = '<CLASS>' instead - that is the classification axis. If the ask truly named a product-type label: use UPPER(PRODUCT_TYPE) LIKE '%<stem>%'."
+    description: "Blocks exact equality on the messy PRODUCT_TYPE labels; steers class words to EQUITY_TYPE."
+
+  - name: "Deal listing must be ONE ROW PER DEAL - collapse tranche-varying columns"
+    type: "regex"
+    value: '(?is)(?=.*\bfrom\s+["]?dgstream["]?\.["]?vw_deal_order_summary)(?=.*\bselect\b(?:(?!\bfrom\b).)*\bdeal_name\b)(?=.*\bselect\b(?:(?!\bfrom\b).)*\b(?:pricing_ts|currency|tranche_size|coupon_type|coupon_freq|tenors|securities_maturity|seniority|reg_category|esg_bond|settlement_currency|tranche_status|identifier_type|identifier_value|delivery_type)\b)(?!.*\b(?:tranche_id|tranche_name)\b)(?!.*\b(?:order_id|investor_name|gpnum|allocation|demand_qty|ioi_type|order_type)\b)(?!.*\bgroup\s+by\b)(?!.*(?:min|max|sum|count)\s*\(\s*(?:distinct\s+)?(?:pricing_ts|currency|tranche_size|coupon_type|coupon_freq|tenors|securities_maturity|seniority|reg_category|esg_bond|settlement_currency|tranche_status|identifier_type|identifier_value|delivery_type)).+'
+    match_should_fail: true
+    error_message: "This is a DEAL listing but the SELECT carries a TRANCHE-varying column (PRICING_TS / CURRENCY / TRANCHE_SIZE / coupon / tenor / identifier), so a multi-tranche deal repeats once per tranche and looks like duplicate rows. Either (a) collapse to deal grain: GROUP BY DEAL_ID, DEAL_NAME with MIN(PRICING_TS) AS FIRST_PRICED, SUM(TO_NUMBER(TRANCHE_SIZE DEFAULT NULL ON CONVERSION ERROR)) and COUNT(DISTINCT TRANCHE_ID) AS TRANCHE_COUNT; or (b) make it an explicit TRANCHE listing by adding TRANCHE_ID and TRANCHE_NAME so each row is identifiably a different tranche."
+    description: "Catches deal listings that silently render one row per tranche (duplicate-looking rows)."
+
   # -- PRODUCT-filter defense-in-depth ----------------------------------
   # Primary access control is the upstream entitlement gate that
   # short-circuits requests for users with no entitled products.

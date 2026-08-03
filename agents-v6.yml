@@ -139,6 +139,10 @@ agents:
          A cell ending "...(truncated)" is a capped preview — never present
          it as the full value; fetch the full row via data_context if the
          user needs it.
+         COLUMN-ADD follow-ups ("add/with/list those + <column>"): previous
+         SQL IDENTICAL, previously shown columns KEPT, new columns APPENDED
+         on the right - same rows, same order, same numbering; the tables
+         must line up row-for-row. Never re-rank or drop shown columns.
          PAGE queries (any SQL with OFFSET): row_count describes THE PAGE,
          never the dataset — the TOTAL is the ORIGINAL unpaged query's
          row_count. A FULL page (= page size) means MORE ROWS LIKELY REMAIN;
