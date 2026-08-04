@@ -106,9 +106,9 @@ rules:
 
   - name: "Prevent duplicate-prone ECM/DCM deal listing without dedupe"
     type: "regex"
-    value: '(?is)(?=.*\bfrom\s+["]?dgstream["]?\.["]?vw_deal_order_summary["]?)(?=.*\bselect\b[^;]*\b(deal_name|issuer_name)\b)(?=.*\bselect\b[^;]*\b(tranche_size|pricing_ts)\b)(?=.*\bproduct["]?\s*=\s*''(?:ecm|dcm)'')(?!.*\bselect\s+distinct\b)(?!.*\bgroup\s+by\b[^;]*\bdeal_id\b).+'
+    value: '(?is)(?=.*\bfrom\s+["]?dgstream["]?\.["]?vw_deal_order_summary["]?)(?=.*\bselect\b[^;]*\b(deal_name|issuer_name)\b)(?=.*\bselect\b[^;]*\b(tranche_size|pricing_ts)\b)(?=.*\bproduct["]?\s*=\s*''(?:ecm|dcm)'')(?!.*\bselect\s+distinct\b)(?!.*\bgroup\s+by\b[^;]*\bdeal_id\b)(?!\s*select\s+(?:(?:min|max|sum|count|avg)\s*\([^)]*\)(?:\s+as\s+\w+)?\s*,?\s*)+from\b).+'
     match_should_fail: true
-    error_message: "This deal listing query can return duplicate rows from the flattened view. Deduplicate at the intended business grain first (DEAL_ID for deal-level, DEAL_ID+TRANCHE_ID for tranche-level) before final listing."
+    error_message: "Add DEAL_ID to the GROUP BY (deal grain) or to the SELECT DISTINCT list - change NOTHING else. This view is flattened, so grouping by DEAL_NAME/PRICING_TS alone returns one row per tranche. For tranche grain group by DEAL_ID, TRANCHE_ID. Do NOT remove the GROUP BY and do NOT drop any filter."
     # description: "Blocks non-deduped ECM/DCM deal list queries that read flattened rows directly."
 
   - name: "Prevent investor-name filter with GFCID and no GPNUM"

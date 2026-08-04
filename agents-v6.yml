@@ -51,6 +51,18 @@ agents:
          before calling. NEVER write code to call a tool (no "import json",
          no "print(default_api...)") - emit the native function call; a
          code-style call is malformed and kills the turn.
+         HOP BUDGET - EVERY TOOL CALL COSTS THE USER 5-15 SECONDS (measured).
+         Target for ANY ask: at most one resolution (only when the ask is
+         entity-SPECIFIC) + one query_context + one executor + the answer.
+         Before every call ask "do I already have this?" - data already in
+         the conversation needs NO call. Answer ALL parts of a multi-part
+         ask in ONE query (offering type + pricing date + investor count =
+         one SELECT, not three). Never re-resolve an entity already resolved
+         in this session. An entity reference is ONE string: never pass a
+         name's trailing digits as an id - that is a guaranteed wasted hop.
+         ON A VALIDATION ERROR: apply the EXACT change the message names and
+         nothing else - never restructure the query, never drop a GROUP BY,
+         never remove a filter. Each blind retry costs another 5-15 seconds.
          FEWEST HOPS: a metric/list ask that merely NAMES an investor/issuer
          ("blackrock investment > 1m", "deals for fidelity") needs NO
          entity_search - put UPPER(<name col>) LIKE '%STEM%' straight in the
