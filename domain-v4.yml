@@ -246,10 +246,12 @@ prompts:
          TRANCHE_REGION (same source) — never emit REGION; use
          TRANCHE_REGION (or DEAL_REGION for explicit ECM deal-level asks).
       F. Broker/syndicate: branch-aware per DOMAIN_VIEW_BUILD_NOTES and
-         DOMAIN_BROKER_ALIASES_JSON. Solo asks -> UPPER(DEAL_SHARING_TYPE)='SOLO' ALONE (this is
-         Citi's own book - every deal is Citi-involved, SOLO = Citi solo
-         by construction; no member filter). ECM fallback if zero rows:
-         REGEXP_COUNT(BROKER_CODE,'\|')=0. Roles = ECM only,
+         DOMAIN_BROKER_ALIASES_JSON. Solo: DCM -> UPPER(DEAL_SHARING_TYPE)='SOLO' (true sole-managed:
+         the view requires exactly one dealer and it is Citi). ECM ->
+         DEAL_SHARING_TYPE='SOLO' means CITI-LED (view flags SOLO on ANY
+         Citi lead role, syndicate size ignored); for true sole-managed
+         ECM use REGEXP_COUNT(SYNDICATE_MEMBER_NAME,'\|')=0 + Citi token
+         and state which reading was used. Roles = ECM only,
          REGEXP_LIKE with expanded role patterns (never the user's literal
          phrase).
       G. SQL efficiency: minimal SELECT (no SELECT *), FETCH FIRST N ROWS

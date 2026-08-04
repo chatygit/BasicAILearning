@@ -1,198 +1,170 @@
 -- =====================================================================
--- ENTITY-SEARCH PERFORMANCE DIAGNOSTICS  (SQL Developer)
+-- ENTITY-SEARCH TUNING  v3 — everything here runs against THE VIEW ONLY.
+--
+-- Our job is to query VW_DEAL_ORDER_SUMMARY well. We do not own the view,
+-- so this script does not touch its base tables; it measures the levers we
+-- actually control in domain.yaml:
+--     1. dropping SOUNDEX out of the main pass
+--     2. scoping PRODUCT to the user's entitlement (prunes a UNION ALL branch)
+--     3. how wide the SELECT list is
+--     4. exact / prefix / substring matching
+--     5. splitting "find names" from "count their deals"
 --
 -- HOW TO RUN
---   1. Find/replace  BLACKROCK  with a real, reasonably common investor name
---      (keep the quotes and the % signs as they are).
---   2. Run STEP BY STEP, not all at once: select a step's statements and
---      press F5 (Run Script) so timings and full fetches are captured.
---      Ctrl+Enter (Run Statement) fetches only the first 50 rows and will
---      UNDER-report the real cost.
---   3. Copy the Script Output pane after each step and send it over.
---
--- Steps 1 and 6 read the whole view — if the view is large they may take
--- minutes. Run them when the box is quiet, and don't cancel step 6: its
--- runtime IS the answer to "is a materialized dimension viable?".
+--   • find/replace  BLACKROCK  with a real, reasonably common investor name
+--   • run ONE block at a time with F5 (Run Script) — Ctrl+Enter fetches only
+--     50 rows and under-reports cost
+--   • send the Elapsed line under each block; the row counts matter less
+--   • run V0 twice and use the SECOND timing as your baseline (the first
+--     pass warms the buffer cache and would flatter everything after it)
 -- =====================================================================
-
--- ---------------------------------------------------------------------
--- STEP 0 — session setup + privilege check (fast). Run this first.
--- ---------------------------------------------------------------------
 SET DEFINE OFF
-SET LONG 200000
-SET LONGCHUNKSIZE 200000
 SET PAGESIZE 200
 SET LINESIZE 300
 SET TIMING ON
-SET SERVEROUTPUT ON
 
--- Can we read real execution stats? 1 = yes (use STEP 5), 0 = no (skip it,
--- STEP 4's EXPLAIN PLAN still works for everyone).
-SELECT COUNT(*) AS can_use_display_cursor
-  FROM all_tab_privs
- WHERE table_name IN ('V_$SQL','V_$SQL_PLAN','V_$SESSION')
-   AND grantee IN (USER, 'PUBLIC');
+-- =====================================================================
+-- PART 1 — WHICH TEMPLATE SHAPE SHOULD WE SHIP?  (our job)
+-- Each block returns the same kind of answer; only the shape differs.
+-- =====================================================================
 
--- ---------------------------------------------------------------------
--- STEP 1 — cardinality profile.  The rows : distinct-names ratio IS the
--- amplification we pay on every entity search.
--- Run 1a first (fast); if 1b is slow, that slowness is itself a finding.
--- ---------------------------------------------------------------------
--- 1a
-SELECT COUNT(*) AS view_rows FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY;
-
--- 1b
-SELECT COUNT(DISTINCT DEAL_ID)       AS deals,
-       COUNT(DISTINCT TRANCHE_ID)    AS tranches,
-       COUNT(DISTINCT ORDER_ID)      AS orders,
-       COUNT(DISTINCT INVESTOR_NAME) AS investor_names,
-       COUNT(DISTINCT GPNUM)         AS investor_ids,
-       COUNT(DISTINCT ISSUER_NAME)   AS issuer_names,
-       COUNT(DISTINCT DEAL_NAME)     AS deal_names
-  FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY;
-
--- ---------------------------------------------------------------------
--- STEP 2 — what IS the view? A plain view re-joins its base tables on
--- every search; a materialized view does not.
--- ---------------------------------------------------------------------
-SELECT object_type, status, last_ddl_time
-  FROM all_objects
- WHERE owner = 'DGSTREAM' AND object_name = 'VW_DEAL_ORDER_SUMMARY';
-
--- the join underneath (needs the SET LONG above, else it truncates)
-SELECT text FROM all_views
- WHERE owner = 'DGSTREAM' AND view_name = 'VW_DEAL_ORDER_SUMMARY';
-
--- ---------------------------------------------------------------------
--- STEP 3 — index inventory on the base tables, incl. function-based.
--- Tells us whether UPPER(name) can ever be seeked instead of scanned.
--- ---------------------------------------------------------------------
-SELECT i.table_name, i.index_name, i.index_type, i.uniqueness,
-       LISTAGG(c.column_name, ', ') WITHIN GROUP (ORDER BY c.column_position) AS cols
-  FROM all_indexes i
-  JOIN all_ind_columns c
-    ON c.index_owner = i.owner AND c.index_name = i.index_name
- WHERE i.table_owner = 'DGSTREAM'
- GROUP BY i.table_name, i.index_name, i.index_type, i.uniqueness
- ORDER BY i.table_name, i.index_name;
-
-SELECT table_name, index_name, column_expression
-  FROM all_ind_expressions
- WHERE index_owner = 'DGSTREAM';
-
--- ---------------------------------------------------------------------
--- STEP 4 — TIMINGS + PLAN SHAPES.
--- Each query is wrapped in COUNT(*) so it FULLY executes (no partial
--- fetch) and "Elapsed" in the Script Output is the true cost.
--- EXPLAIN PLAN needs no special privileges.
--- ---------------------------------------------------------------------
-
--- 4A. the TYPED template we ship (investor_name) -----------------------
-SELECT COUNT(*) AS typed_template_rows FROM (
-  SELECT INVESTOR_NAME, GPNUM, DEAL_COUNT, LAST_ACTIVE, CATEGORY, REGION, PRODUCTS,
-         is_exact, is_sub,
-         MAX(is_exact) OVER () AS any_exact,
-         MAX(is_sub)   OVER () AS any_sub
-    FROM (
-      SELECT INVESTOR_NAME, GPNUM,
-             COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
-             MAX(PRICING_TS)         AS LAST_ACTIVE,
-             MAX(INVESTOR_CATEGORY)  AS CATEGORY,
-             MAX(INVESTOR_REGION)    AS REGION,
-             CASE WHEN COUNT(DISTINCT PRODUCT) = 2 THEN 'ECM+DCM' ELSE MAX(PRODUCT) END AS PRODUCTS,
-             MAX(CASE WHEN UPPER(INVESTOR_NAME) = 'BLACKROCK' THEN 1 ELSE 0 END) AS is_exact,
-             MAX(CASE WHEN UPPER(INVESTOR_NAME) LIKE '%BLACKROCK%' THEN 1 ELSE 0 END) AS is_sub
-        FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
-       WHERE PRODUCT IN ('ECM', 'DCM')
-         AND ( UPPER(INVESTOR_NAME) LIKE '%BLACKROCK%'
-            OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX('BLACKROCK') )
-       GROUP BY INVESTOR_NAME, GPNUM
-    )
-);
-
-EXPLAIN PLAN SET STATEMENT_ID = 'TYPED' FOR
-  SELECT INVESTOR_NAME, GPNUM, COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT, MAX(PRICING_TS) AS LAST_ACTIVE
+-- V0. BASELINE — exactly what we ship today: LIKE **OR SOUNDEX**, both products.
+SELECT COUNT(*) AS v0_today FROM (
+  SELECT INVESTOR_NAME, GPNUM,
+         COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
+         MAX(PRICING_TS)         AS LAST_ACTIVE,
+         MAX(INVESTOR_CATEGORY)  AS CATEGORY,
+         MAX(INVESTOR_REGION)    AS REGION
     FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
-   WHERE PRODUCT IN ('ECM', 'DCM')
+   WHERE PRODUCT IN ('ECM','DCM')
      AND ( UPPER(INVESTOR_NAME) LIKE '%BLACKROCK%'
         OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX('BLACKROCK') )
-   GROUP BY INVESTOR_NAME, GPNUM;
-SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY(NULL, 'TYPED', 'ALL'));
-
--- 4B. the (now REMOVED) untyped default template — run it anyway: it is the
---     baseline that shows what deleting it saved us.
-SELECT COUNT(*) AS default_template_rows FROM (
-  SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID
-    FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
-   WHERE PRODUCT IN ('ECM', 'DCM')
-     AND ( UPPER(DEAL_NAME)     LIKE '%BLACKROCK%'
-        OR UPPER(INVESTOR_NAME) LIKE '%BLACKROCK%'
-        OR UPPER(ISSUER_NAME)   LIKE '%BLACKROCK%'
-        OR SOUNDEX(UPPER(DEAL_NAME))     = SOUNDEX('BLACKROCK')
-        OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX('BLACKROCK')
-        OR SOUNDEX(UPPER(ISSUER_NAME))   = SOUNDEX('BLACKROCK') )
+   GROUP BY INVESTOR_NAME, GPNUM
 );
 
--- 4C. LIKE only — how much of the cost is SOUNDEX?
-SELECT COUNT(*) AS like_only_rows FROM (
-  SELECT INVESTOR_NAME, GPNUM, COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT
+-- V1. SAME, minus SOUNDEX  →  how much does SOUNDEX cost us on every search?
+SELECT COUNT(*) AS v1_no_soundex FROM (
+  SELECT INVESTOR_NAME, GPNUM,
+         COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
+         MAX(PRICING_TS)         AS LAST_ACTIVE,
+         MAX(INVESTOR_CATEGORY)  AS CATEGORY,
+         MAX(INVESTOR_REGION)    AS REGION
     FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
-   WHERE PRODUCT IN ('ECM', 'DCM')
+   WHERE PRODUCT IN ('ECM','DCM')
      AND UPPER(INVESTOR_NAME) LIKE '%BLACKROCK%'
    GROUP BY INVESTOR_NAME, GPNUM
 );
 
--- 4D. EXACT probe — the cheap first tier (config-only fix)
-SELECT COUNT(*) AS exact_rows FROM (
-  SELECT INVESTOR_NAME, GPNUM, COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT
-    FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
-   WHERE PRODUCT IN ('ECM', 'DCM')
-     AND UPPER(INVESTOR_NAME) = 'BLACKROCK'
-   GROUP BY INVESTOR_NAME, GPNUM
-);
-
--- 4E. PREFIX probe — the only name predicate an index can seek
-SELECT COUNT(*) AS prefix_rows FROM (
-  SELECT INVESTOR_NAME, GPNUM, COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT
-    FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
-   WHERE PRODUCT IN ('ECM', 'DCM')
-     AND UPPER(INVESTOR_NAME) LIKE 'BLACKROCK%'
-   GROUP BY INVESTOR_NAME, GPNUM
-);
-
--- 4F. single-product scope (what CHANGE L buys a single-product user)
-SELECT COUNT(*) AS ecm_only_rows FROM (
-  SELECT INVESTOR_NAME, GPNUM, COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT
+-- V2. SINGLE PRODUCT  →  what CHANGE L buys an ECM-only user.
+--     The view is a UNION ALL of an ECM branch and a DCM branch, each with a
+--     literal PRODUCT, so this should let Oracle skip one branch entirely.
+SELECT COUNT(*) AS v2_ecm_only FROM (
+  SELECT INVESTOR_NAME, GPNUM,
+         COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
+         MAX(PRICING_TS)         AS LAST_ACTIVE,
+         MAX(INVESTOR_CATEGORY)  AS CATEGORY,
+         MAX(INVESTOR_REGION)    AS REGION
     FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
    WHERE PRODUCT = 'ECM'
      AND UPPER(INVESTOR_NAME) LIKE '%BLACKROCK%'
    GROUP BY INVESTOR_NAME, GPNUM
 );
 
--- ---------------------------------------------------------------------
--- STEP 5 — REAL execution stats (only if STEP 0 returned 1).
--- Run this IMMEDIATELY after 4A in the same session.
--- A-Rows vs E-Rows shows where the optimizer guesses wrong;
--- A-Time per step shows whether the cost is scan, SOUNDEX, or aggregation.
--- ---------------------------------------------------------------------
-SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY_CURSOR(NULL, NULL, 'ALLSTATS LAST +COST +BYTES'));
+-- V3. NARROW SELECT — name + id only, no enrichment columns, no aggregates.
+--     Tests whether asking for less lets the optimizer do less.
+SELECT COUNT(*) AS v3_names_only FROM (
+  SELECT DISTINCT INVESTOR_NAME, GPNUM
+    FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+   WHERE PRODUCT = 'ECM'
+     AND UPPER(INVESTOR_NAME) LIKE '%BLACKROCK%'
+);
 
--- ---------------------------------------------------------------------
--- STEP 6 — would a MATERIALIZED ENTITY DIMENSION work?
--- This builds the ENTIRE investor dimension. Its runtime is the answer:
--- if it completes in seconds-to-a-minute, an MV refreshed on a schedule
--- makes every entity search a sub-second lookup on a few thousand rows.
--- ---------------------------------------------------------------------
-SELECT COUNT(*) AS investor_dimension_rows FROM (
+-- V4. EXACT match (the first tier of our gated template)
+SELECT COUNT(*) AS v4_exact FROM (
+  SELECT DISTINCT INVESTOR_NAME, GPNUM
+    FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+   WHERE PRODUCT = 'ECM'
+     AND UPPER(INVESTOR_NAME) = 'BLACKROCK'
+);
+
+-- V5. PREFIX match (cheapest possible name predicate)
+SELECT COUNT(*) AS v5_prefix FROM (
+  SELECT DISTINCT INVESTOR_NAME, GPNUM
+    FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+   WHERE PRODUCT = 'ECM'
+     AND UPPER(INVESTOR_NAME) LIKE 'BLACKROCK%'
+);
+
+-- V6. TWO-STEP shape: step 1 finds the names (V3 above); step 2 enriches ONLY
+--     the shortlist. Time this as "step 2" and compare V3 + V6 against V2.
+--     Replace the IN-list with a few real names from V3's output.
+SELECT COUNT(*) AS v6_enrich_shortlist FROM (
   SELECT INVESTOR_NAME, GPNUM,
          COUNT(DISTINCT DEAL_ID) AS DEAL_COUNT,
          MAX(PRICING_TS)         AS LAST_ACTIVE,
          MAX(INVESTOR_CATEGORY)  AS CATEGORY,
-         MAX(INVESTOR_REGION)    AS REGION,
-         CASE WHEN COUNT(DISTINCT PRODUCT) = 2 THEN 'ECM+DCM' ELSE MAX(PRODUCT) END AS PRODUCTS
+         MAX(INVESTOR_REGION)    AS REGION
     FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
-   WHERE PRODUCT IN ('ECM','DCM')
+   WHERE PRODUCT = 'ECM'
+     AND UPPER(INVESTOR_NAME) IN ('BLACKROCK','BLACKROCK INC')   -- <- from V3
    GROUP BY INVESTOR_NAME, GPNUM
 );
+
+-- V7. Is the cost the NAME PREDICATE or just the view? A trivially-filtered
+--     query with the same shape. If V7 ≈ V2, the view dominates and no
+--     predicate tuning of ours will matter much.
+SELECT COUNT(*) AS v7_floor FROM (
+  SELECT DISTINCT INVESTOR_NAME, GPNUM
+    FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
+   WHERE PRODUCT = 'ECM'
+     AND GPNUM = '00000000'
+);
+
+-- =====================================================================
+-- HOW I WILL READ PART 1
+--   V0 - V1  = the price of SOUNDEX on every search    → if large, gate it
+--   V1 - V2  = the price of not scoping the product    → CHANGE L's value
+--   V2 vs V3 = does a narrower SELECT help             → shrink the template
+--   V4 / V5  = value of tiering exact/prefix first     → tier as separate queries
+--   V3 + V6 vs V2 = is two-step cheaper than one-shot  → split the template
+--   V7       ≈ V2 means the VIEW is the floor          → tuning ours is capped,
+--                                                        and Part 2 is the story
+-- =====================================================================
+
+
+-- =====================================================================
+-- PART 2 — FINDINGS FOR QA TO PASS TO THE DATA TEAM (not our fix)
+-- =====================================================================
+
+-- P1. The ECM DEAL_SHARING_TYPE = 'SOLO' definition flags any Citi LEAD ROLE
+--     without checking syndicate size (DCM correctly requires one dealer).
+--     This quantifies it: how many "SOLO" ECM tranches have several banks?
+SELECT COUNT(*)                                            AS citi_led_tranches,
+       SUM(CASE WHEN member_count = 1 THEN 1 ELSE 0 END)   AS truly_sole_managed,
+       SUM(CASE WHEN member_count > 1 THEN 1 ELSE 0 END)   AS mislabelled_solo,
+       ROUND(100 * SUM(CASE WHEN member_count > 1 THEN 1 ELSE 0 END)
+             / NULLIF(COUNT(*),0), 1)                      AS pct_wrong
+  FROM (
+    SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID,
+           COUNT(DISTINCT SYNDICATE_MEMBER_NAME) AS member_count,
+           MAX(CASE WHEN SYNDICATE_ROLE IN ('Sole Bookrunner','Lead Manager/Bookrunner',
+                                            'Global Coordinator and Bookrunner','Global Coordinator')
+                     AND SYNDICATE_MEMBER_NAME LIKE '%Citigroup Global%'
+                    THEN 1 ELSE 0 END) AS citi_led
+      FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE
+     GROUP BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID
+  )
+ WHERE citi_led = 1;
+
+-- P2. Snapshot for the performance conversation: are stats fresh, and does any
+--     index exist on the name columns? (Stale stats alone cause bad plans.)
+SELECT table_name, num_rows, last_analyzed
+  FROM all_tables
+ WHERE owner = 'DGSTREAM'
+ ORDER BY num_rows DESC NULLS LAST
+ FETCH FIRST 20 ROWS ONLY;
+
+SELECT table_name, index_name, column_expression
+  FROM all_ind_expressions WHERE index_owner = 'DGSTREAM';
 
 SET TIMING OFF

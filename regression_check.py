@@ -193,7 +193,6 @@ INVARIANTS = [
     (DOMAIN, "DOMAIN_PRODUCT_ENTITLEMENT_CLAUSE", "Verified live at domain-v4.yml:69; template variable the preflight hook injects entitled p"),
     (SKILL, "PRICING_TS and CURRENCY VARY PER TRANCHE", "VERIFIED present 1x (skill-v7.md:51). Trace 94b25ec2: Dare-Beer deal appeared twice in a d"),
     (SKILL, "REGEXP_COUNT(SUBSTR(BND_BROKER, 1, INSTR", "The position-index recipe that identifies the actual B&D bank on ECM; without it 'billed b"),
-    (SKILL, "UPPER(DEAL_SHARING_TYPE)='SOLO' ALONE", "User ruling 2026-07-30: view is Citi's own book, so adding a syndicate-member filter to 's"),
     (SKILL, "TO_NUMBER(TRANCHE_SIZE DEFAULT NULL", "TRANCHE_SIZE is TEXT; the ON CONVERSION ERROR form is the only safe cast for ranking/summi"),
     (INSTR, "you MUST call text2sql_data_context", "Without it the agent presents the 5-20 row sample_data as the full result set \u2014 the silent"),
     (INSTR, "transient platform registry issue", "Verified live at agents-v6.yml:202; without it the agent treats 'Tool not found' as a wron"),
@@ -233,6 +232,8 @@ INVARIANTS = [
     (DOMAIN, "investor_name:", "typed entity templates must exist"),
     (DOMAIN, "issuer_name:", "typed entity templates must exist"),
     (DOMAIN, "deal_name:", "typed entity templates must exist"),
+    (SKILL, "means CITI-LED", "ECM DEAL_SHARING_TYPE is Citi-led, not sole (view DDL 2026-08-04)"),
+    (SKILL, "ORDER BY BND_BROKER DESC", "B&D bank is the first pipe token on ECM"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -254,6 +255,7 @@ RETIRED = [
     (SKILL, "SOURCE='ECM'", "PRODUCT-to-SOURCE rename was CANCELLED (2026-07-27); live file uses PRODUCT='ECM' unspaced"),
     (DOMAIN, "default: >-", "untyped 6-predicate entity template removed 2026-08-04 (typed templates legitimately keep per-column SOUNDEX, so key on the KEY not the predicate)"),
     (DOMAIN, "query_template: >-", "legacy duplicate entity template removed"),
+    (SKILL, "SOLO' ALONE (both products)", "OVERTURNED 2026-08-04 by the view DDL: ECM SOLO means Citi-LED, not sole-managed"),
 ]
 
 # ---------------------------------------------------------------------------
