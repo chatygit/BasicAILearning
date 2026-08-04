@@ -319,6 +319,29 @@ def library_queries() -> list[tuple[str, str]]:
     return out
 
 
+def entity_template_scope() -> list[str]:
+    """Every entity-search template must carry a substitutable PRODUCT clause.
+
+    The templates are rendered server-side with no LLM in the loop, so an
+    unscoped one leaks cross-product candidates to a single-product user
+    (CHANGE L). Guard: each FROM in the entity-template region must have a
+    product-clause site near it - the literal both-product form or the
+    __PRODUCT_CLAUSE__ token, either of which the server substitutes.
+    """
+    text = DOMAIN.read_text()
+    start = text.find("entity_search")
+    end = text.find("field_mapping", start)
+    region = text[start:end if end > start else len(text)]
+    clause = re.compile(r"(?i)__PRODUCT_CLAUSE__|\bPRODUCT\s+IN\s*\(\s*'(?:ECM|DCM)'\s*,\s*'(?:ECM|DCM)'\s*\)|\bPRODUCT\s*=\s*'(?:ECM|DCM)'")
+    bad = []
+    for m in re.finditer(r"(?i)FROM\s+DGSTREAM\.VW_DEAL_ORDER_SUMMARY", region):
+        window = region[m.end(): m.end() + 400]
+        if not clause.search(window):
+            line = region[:m.start()].count("\n") + text[:start].count("\n") + 1
+            bad.append(f"domain-v4.yml:{line}")
+    return bad
+
+
 class Report:
     def __init__(self) -> None:
         self.failures: list[str] = []
@@ -395,6 +418,10 @@ def main() -> int:
     print("\n   retired doctrines still absent")
     for path, phrase, why in RETIRED:
         rep.check(not has(path, phrase), f"{path.name}: NOT {phrase[:38]!r}", why)
+
+    unscoped = entity_template_scope()
+    rep.check(not unscoped, "entity templates all carry a PRODUCT scope clause",
+              f"unscoped FROM at {unscoped}")
 
     print("\n4. CROSS-LAYER — doctrine present in every layer that needs it")
     for label, layers in CROSS_LAYER:
