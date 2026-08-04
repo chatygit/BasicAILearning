@@ -358,16 +358,12 @@ entity_search:
                           THEN 1 ELSE 0 END) AS is_sub
           FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
           WHERE PRODUCT IN ('ECM', 'DCM')
-            AND (
-              UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
-              OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX(UPPER(:entity_name))
-            )
+            AND UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
           GROUP BY INVESTOR_NAME, GPNUM
         )
       )
       WHERE is_exact = 1
-         OR (any_exact = 0 AND is_sub = 1)
-         OR (any_exact = 0 AND any_sub = 0)
+         OR any_exact = 0
       ORDER BY is_exact DESC, is_sub DESC, DEAL_COUNT DESC, LAST_ACTIVE DESC
       FETCH FIRST 50 ROWS ONLY
 
@@ -393,16 +389,12 @@ entity_search:
                           THEN 1 ELSE 0 END) AS is_sub
           FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
           WHERE PRODUCT IN ('ECM', 'DCM')
-            AND (
-              UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
-              OR SOUNDEX(UPPER(ISSUER_NAME)) = SOUNDEX(UPPER(:entity_name))
-            )
+            AND UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
           GROUP BY ISSUER_NAME, GFCID
         )
       )
       WHERE is_exact = 1
-         OR (any_exact = 0 AND is_sub = 1)
-         OR (any_exact = 0 AND any_sub = 0)
+         OR any_exact = 0
       ORDER BY is_exact DESC, is_sub DESC, DEAL_COUNT DESC, LAST_ACTIVE DESC
       FETCH FIRST 50 ROWS ONLY
 
@@ -427,16 +419,12 @@ entity_search:
                           THEN 1 ELSE 0 END) AS is_sub
           FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
           WHERE PRODUCT IN ('ECM', 'DCM')
-            AND (
-              UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
-              OR SOUNDEX(UPPER(DEAL_NAME)) = SOUNDEX(UPPER(:entity_name))
-            )
+            AND UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
           GROUP BY DEAL_NAME, DEAL_ID
         )
       )
       WHERE is_exact = 1
-         OR (any_exact = 0 AND is_sub = 1)
-         OR (any_exact = 0 AND any_sub = 0)
+         OR any_exact = 0
       ORDER BY is_exact DESC, is_sub DESC, LAST_ACTIVE DESC
       FETCH FIRST 50 ROWS ONLY
 
