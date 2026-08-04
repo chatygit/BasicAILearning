@@ -332,62 +332,8 @@ prompts:
 entity_search:
   mode: sql
 
-  # Kept for backward-compatibility fallback (duplicate of query_templates.default;
-  # prune only after confirming domain_loader no longer requires the legacy key).
-  query_template: >-
-    SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID FROM (
-      SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID,
-             is_sub, MAX(is_sub) OVER () AS any_sub
-      FROM (
-        SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID,
-          CASE WHEN UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
-                 OR UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
-                 OR UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
-               THEN 1 ELSE 0 END AS is_sub
-        FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
-        WHERE PRODUCT IN ('ECM', 'DCM')
-          AND (
-            UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
-            OR UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
-            OR UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
-            OR SOUNDEX(UPPER(DEAL_NAME)) = SOUNDEX(UPPER(:entity_name))
-            OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX(UPPER(:entity_name))
-            OR SOUNDEX(UPPER(ISSUER_NAME)) = SOUNDEX(UPPER(:entity_name))
-          )
-      )
-    )
-    WHERE is_sub = 1 OR any_sub = 0
-    ORDER BY is_sub DESC, COALESCE(INVESTOR_NAME, ISSUER_NAME, DEAL_NAME)
-    FETCH FIRST 50 ROWS ONLY
-
   strategy: intent_sql
   query_templates:
-    default: >-
-      SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID FROM (
-        SELECT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID,
-               is_sub, MAX(is_sub) OVER () AS any_sub
-        FROM (
-          SELECT DISTINCT DEAL_ID, DEAL_NAME, INVESTOR_NAME, GPNUM, ISSUER_NAME, GFCID,
-            CASE WHEN UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
-                   OR UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
-                   OR UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
-                 THEN 1 ELSE 0 END AS is_sub
-          FROM DGSTREAM.VW_DEAL_ORDER_SUMMARY
-          WHERE PRODUCT IN ('ECM', 'DCM')
-            AND (
-              UPPER(DEAL_NAME) LIKE UPPER(:entity_name_pattern)
-              OR UPPER(INVESTOR_NAME) LIKE UPPER(:entity_name_pattern)
-              OR UPPER(ISSUER_NAME) LIKE UPPER(:entity_name_pattern)
-              OR SOUNDEX(UPPER(DEAL_NAME)) = SOUNDEX(UPPER(:entity_name))
-              OR SOUNDEX(UPPER(INVESTOR_NAME)) = SOUNDEX(UPPER(:entity_name))
-              OR SOUNDEX(UPPER(ISSUER_NAME)) = SOUNDEX(UPPER(:entity_name))
-            )
-        )
-      )
-      WHERE is_sub = 1 OR any_sub = 0
-      ORDER BY is_sub DESC, COALESCE(INVESTOR_NAME, ISSUER_NAME, DEAL_NAME)
-      FETCH FIRST 50 ROWS ONLY
-
     investor_name: >-
       SELECT NULL AS DEAL_ID, NULL AS DEAL_NAME, INVESTOR_NAME, GPNUM,
              NULL AS ISSUER_NAME, NULL AS GFCID, DEAL_COUNT, LAST_ACTIVE, CATEGORY, REGION, PRODUCTS

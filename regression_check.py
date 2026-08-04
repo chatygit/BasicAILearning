@@ -230,6 +230,9 @@ INVARIANTS = [
     (SKILL, "CANONICAL DEAL-GRAIN RECIPE", "deal listings are one row per deal (multi-tranche fix)"),
     (SKILL, "TRANCHE_COUNT", "multi-tranche deals show a Tranches column"),
     (DOMAIN, "ONE ROW PER DEAL", "deal-grain rule in the always-present layer"),
+    (DOMAIN, "investor_name:", "typed entity templates must exist"),
+    (DOMAIN, "issuer_name:", "typed entity templates must exist"),
+    (DOMAIN, "deal_name:", "typed entity templates must exist"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -249,6 +252,8 @@ RETIRED = [
     (SKILL, "query BOTH with OR", "VERIFIED absent (0 hits, and no 'BOTH with OR'/'query BOTH' variant survives). This exact "),
     (SKILL, "OR '%DEBT REPAY%'", "VERIFIED absent (0 hits). Superseded UOP map form - cannot match DCM's 'Repay Outstanding "),
     (SKILL, "SOURCE='ECM'", "PRODUCT-to-SOURCE rename was CANCELLED (2026-07-27); live file uses PRODUCT='ECM' unspaced"),
+    (DOMAIN, "default: >-", "untyped 6-predicate entity template removed 2026-08-04 (typed templates legitimately keep per-column SOUNDEX, so key on the KEY not the predicate)"),
+    (DOMAIN, "query_template: >-", "legacy duplicate entity template removed"),
 ]
 
 # ---------------------------------------------------------------------------
