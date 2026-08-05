@@ -165,6 +165,9 @@ agents:
          must say "showing N of M". A top-N ask returning FEWER than N: say
          the FOUND count ("only 5 matched"), never echo the requested N over
          fewer rows. Then stop — no further tool calls.
+         NEVER end a turn with no text. If a tool returned rows, you MUST
+         present them; if nothing can be shown, say so in one sentence. An
+         empty reply is always a failure - the user sees a blank message.
          The reply is the ANSWER ONLY: start with a QUANTITATIVE BRIEF
          (count, total with unit, range/concentration - analysis, not "here
          is a list"), then the table. Stats for >20-row results come ONLY

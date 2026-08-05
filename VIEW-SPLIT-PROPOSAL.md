@@ -15,7 +15,7 @@ carry:
 
 | | Today | After the split | Change |
 |---|---:|---:|---:|
-| Tokens per user question (model) | ~200k | ~85k | **−55%** |
+| Tokens per user question (model) | ~330k | ~120k | **−64%** |
 | Schema shipped per query | 57 columns / ~7.0k tokens | ~20 columns / ~2.3k tokens | **−67%** |
 | Agent rulebook devoted to grain repair | ~2.2k tokens | ~0 | **−100%** |
 | Tool round-trips for a typical ask | 6 | 3–4 | **−40%** |
@@ -411,12 +411,25 @@ tool call, so tokens are paid per hop, not per question.
 | Domain skill (rulebook) | 14.2k | measured |
 | `schema_context` — 57 columns | 7.0k | measured |
 | `domain_config` | 7.7k | measured |
-| Conversation + tool results so far | 5–15k | varies |
-| **Per-hop total** | **~35–45k** | |
+| Conversation + accumulated tool results | 5–60k | grows every hop |
+| **Per-hop total** | **35k → 92k** | **measured** |
 
-A typical ask today takes **6 tool calls** (measured, 8/4 trace: 2 entity searches,
-1 query_context, 3 executor attempts). At ~35k per hop that is **~200k tokens per
-question.**
+**Measured, not estimated:** a single model turn late in a session reported
+`promptTokenCount: 91,676` (Gemini 2.5 Pro, `usageMetadata`, 8/4). Context starts
+near 35k and grows with every tool result retained in the conversation, because
+each executor response (up to 20 sample rows) stays in context for the rest of the
+session.
+
+A typical ask takes **6 tool calls** (measured, 8/4 trace: 2 entity searches,
+1 query_context, 3 executor attempts). At an average ~55k per hop that is
+**~330k tokens per question** — and the tail hops are the expensive ones.
+
+**This is not only a cost problem.** In the same session, a turn with a 91,676-token
+prompt returned `finishReason: "STOP"` with `text: ""` — the model produced 446
+thinking tokens and then no answer at all, leaving the user with a blank reply and
+no error for the framework to retry on. Empty-candidate stops correlate with large
+contexts and large retained tool payloads. Cutting per-hop context is therefore a
+**reliability** fix as well as a cost one.
 
 ### 4.2 Where the split takes tokens out
 
@@ -471,11 +484,15 @@ Hops removed by the split:
 
 | | Today | After | Saving |
 |---|---:|---:|---:|
-| Per-hop context | ~35k | ~27k | −8k (−23%) |
+| Per-hop context (start of session) | ~35k | ~27k | −8k (−23%) |
+| Per-hop context (measured, late in session) | **91.7k** | ~60k | −32k (−35%) |
 | Hops per ask | 6 | 3.5 | −42% |
-| **Tokens per ask** | **~200k** | **~85k** | **≈ −55%** |
+| **Tokens per ask (avg ~55k/hop today)** | **~330k** | **~120k** | **≈ −64%** |
 
-At 1,000 questions/day that is **~115 million tokens/day** avoided. Because tokens are
+At 1,000 questions/day that is **~210 million tokens/day** avoided. The saving is
+larger than the per-hop percentage alone because context accumulates: every hop
+removed also removes the tool payload it would have added to every *subsequent*
+hop in the session. Because tokens are
 paid per hop, the two effects multiply rather than add — which is why the hop
 reduction matters more than the schema reduction.
 

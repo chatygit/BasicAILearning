@@ -241,6 +241,7 @@ INVARIANTS = [
     (INSTR, "HOP BUDGET", "every tool call costs 5-15s - budget them"),
     (INSTR, "apply the EXACT change the message names", "no blind retries/restructuring"),
     (RULES, "Add DEAL_ID to the GROUP BY", "dedupe rule names the one-token fix"),
+    (INSTR, "NEVER end a turn with no text", "silent empty-candidate turn guard (8/4 trace)"),
 ]
 
 # ---------------------------------------------------------------------------
