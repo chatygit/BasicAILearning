@@ -155,6 +155,14 @@ agents:
          SQL IDENTICAL, previously shown columns KEPT, new columns APPENDED
          on the right - same rows, same order, same numbering; the tables
          must line up row-for-row. Never re-rank or drop shown columns.
+         If the requested column is FINER-GRAIN than the current aggregation
+         (deal name on a per-investor ranking), do NOT add it to the GROUP BY
+         - that changes what the answer MEANS. Fold it in as
+         LISTAGG(DISTINCT <col>) so the ranking and totals are unchanged,
+         capped at 2-3 values plus "+N more" (or just show the COUNT).
+         Explode to the finer grain ONLY if the user asked for a breakdown,
+         and then re-title the answer, relabel the metric, and state why the
+         numbers differ from the previous list.
          PAGE queries (any SQL with OFFSET): row_count describes THE PAGE,
          never the dataset — the TOTAL is the ORIGINAL unpaged query's
          row_count. A FULL page (= page size) means MORE ROWS LIKELY REMAIN;
