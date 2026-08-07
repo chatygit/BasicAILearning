@@ -434,7 +434,20 @@ def _log_startup_summary() -> None:
 
 def create_http_app():
     """Create and configure the HTTP app once for import and runtime use."""
-    app = mcp.http_app(stateless_http=True)
+    # NOT stateless — this matches the v1 nl2sql server, which builds its app as
+    # `mcp.http_app(middleware=[...])` with no stateless flag.
+    #
+    # Streamable HTTP uses POST for JSON-RPC and GET to open the SSE stream.
+    # `stateless_http=True` has no sessions to stream into, so it drops GET at
+    # the routing layer: a client that opens its session with GET /mcp gets a
+    # bare `Method Not Allowed` and never reaches the MCP layer, which then
+    # surfaces to the agent as "Tool 'run_bqs_query' not found". v1 answers the
+    # same GET with a JSON-RPC 406 asking for `Accept: text/event-stream` —
+    # i.e. it negotiates instead of refusing.
+    #
+    # Stateful mode keeps per-session state in pod memory keyed by
+    # Mcp-Session-Id, so multi-replica deployments need session affinity.
+    app = mcp.http_app()
     app.add_route("/health", health_check, methods=["GET"])
     app.add_route("/actuator/health", actuator_health_check, methods=["GET"])
     # Extract the caller SOEID (x-user-id + fallbacks) from inbound requests into

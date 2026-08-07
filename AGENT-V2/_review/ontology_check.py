@@ -603,17 +603,17 @@ if tool_names:
     check(tname in text(SKILL),
           f"[toolset] SKILL.md does not use the toolset name '{tname}' that "
           f"agents.yaml attaches")
-    # Either tools.yaml defines it, or it says the registry provides it. What it
-    # must NEVER do is define it locally with a localhost-defaulting URL, which
-    # would shadow the registry entry and break a deployed pod.
-    defines = re.search(rf"^\s*-\s*name:\s*{re.escape(tname)}\s*$",
+    # tools.yaml MUST define it. This file is read only by the local `adk`
+    # runtime — higher environments use the onboarding registry and never load
+    # it — so it cannot shadow anything, and leaving it out means local has no
+    # MCP toolset at all. (A previous revision asserted the opposite and shipped
+    # `tools: []`, which is what broke the local run.)
+    defines = re.search(rf"^\s*-\s*name:\s*{re.escape(tname)}\s*(?:#.*)?$",
                         text(TOOLS), re.M) is not None
-    check(not defines or "${" not in text(TOOLS),
-          f"[toolset] tools.yaml defines '{tname}' locally with a "
-          f"${{VAR}} URL, shadowing the registry toolset of the same name")
-    check(defines or "registered" in text(TOOLS).lower(),
-          f"[toolset] tools.yaml neither defines '{tname}' nor explains that "
-          f"the registry provides it")
+    check(defines,
+          f"[toolset] tools.yaml does not define '{tname}' — the local runtime "
+          f"reads its only toolset from this file, so the agent will fail with "
+          f"Tool 'discover_business_terms' not found")
 
 # ---------------------------------------------------------------------------
 # 15. NO UNAPPLIED REVIEW MARKERS left in the shipped files
@@ -659,6 +659,20 @@ if SOEID_MW.exists():
 
 if MCPSERVER.exists():
     src = text(MCPSERVER)
+    # Transport parity with the v1 nl2sql server, which builds its app as
+    # mcp.http_app(middleware=[...]) with no stateless flag. Stateless mode
+    # drops GET /mcp with a bare 405 before the MCP layer sees it, so a client
+    # that opens its session over SSE never gets a tool list.
+    src_code = "\n".join(l for l in src.splitlines()
+                         if not l.lstrip().startswith("#"))
+    check("stateless_http=True" not in src_code,
+          "[python] mcpserver.py: stateless_http=True is back — GET /mcp then "
+          "returns a bare 405 Method Not Allowed and an SSE client resolves ZERO "
+          "tools (agent fails with Tool 'run_bqs_query' not found). v1 answers "
+          "the same GET with a JSON-RPC 406; match it.")
+    check("mcp.http_app(" in src,
+          "[python] mcpserver.py: the HTTP app is no longer built via "
+          "mcp.http_app()")
     # The fix: intersect requested with entitled.
     check("scope = [p for p in requested if p in entitled] or entitled" in src,
           "[python] mcpserver.py: the entitlement intersect (FIX 1) is gone — a "
