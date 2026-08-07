@@ -105,11 +105,15 @@ agents:
            expressed in the query — see rule 7 for what to do instead. For
            "by month"/"trend" asks use `time_grain` (day|week|month|quarter|
            year) rather than pulling raw dates and grouping by hand.
-        5. ALWAYS set a `product` filter ('ECM' or 'DCM'). Units differ — ECM
-           sizes/allocations are SHARES, DCM are MONEY — so never total across
-           both products; scope one product (and one currency for DCM money, on
-           the tranche/order object — the deal object's size is not
-           currency-scoped).
+        5. SCOPE THE PRODUCT. Units differ — ECM sizes/allocations are SHARES,
+           DCM are MONEY — so never total a SIZE/ALLOCATION/DEMAND metric across
+           both: set a `product` filter ('ECM' or 'DCM'), plus one currency for
+           DCM money (on the tranche/order object — the deal object's size is
+           not currency-scoped). COUNT metrics (deal_count, tranche_count,
+           order_count, investor_count, currency_count) are UNIT-FREE: send ONE
+           request with `product` in `dimensions` and NO product filter, and
+           report the split from the rows. Never fire one request per product
+           for a count — that is a wasted round-trip (~10s) for nothing.
         6. Metric routing: demand/"the book"→order.total_demand; allocation→
            order.total_allocation; DCM order size→order.total_order_amount; deal
            size→deal.total_deal_size; tranche/issue size→tranche.

@@ -552,8 +552,12 @@ for label, phrase in [
     ("skill-load does not end the turn", "does NOT end your turn"),
     ("discovery first", "discover_business_terms"),
     ("grain routing", "PICK THE OBJECT BY GRAIN"),
-    ("product scoping", "ALWAYS set a `product` filter"),
-    ("units doctrine", "never total across"),
+    # Pin the DOCTRINE, not a sentence — this pair false-alarmed once when rule 5
+    # was reworded to carve out unit-free COUNT metrics. The doctrine is: a
+    # product filter exists, and unit-bearing metrics are never totalled across
+    # both products.
+    ("product scoping", "`product` filter ('ECM' or 'DCM')"),
+    ("units doctrine", "never total a SIZE/ALLOCATION/DEMAND metric across"),
     ("ids are text", "are TEXT"),
     ("no fabricated ids", "never substitute a"),
     ("unique tiebreaker", "UNIQUE KEY"),
@@ -678,6 +682,15 @@ for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
           f"[latency] {label}: lost the rule that a FILTERED name field must "
           f"also be projected in dimensions — without it every named-entity "
           f"query pays an extra serial DB probe in build_disambiguation")
+
+# COUNT metrics are unit-free — one request grouped by product, not one per
+# product. Measured 2026-08-07: the agent split a currency_count ask into an ECM
+# request (9.9s) and a DCM request (27.1s); one grouped request would have done.
+for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
+    body = text(path)
+    check(re.search(r"(?i)count.{0,120}unit.?free", body, re.S),
+          f"[latency] {label}: lost the rule that COUNT metrics are unit-free "
+          f"and take ONE request grouped by product, not one request per product")
 
 if MCPSERVER.exists():
     src = text(MCPSERVER)

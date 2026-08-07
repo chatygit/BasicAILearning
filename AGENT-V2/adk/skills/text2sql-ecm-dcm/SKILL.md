@@ -227,6 +227,16 @@ currency; the deal object's size is NOT currency-scoped). Always label the unit
 ("USD 2.1bn" for DCM money, "3.0mm shares" for ECM). A number that mixes them —
 "1,000.0bn shares" — is not a large answer, it is a wrong one.
 
+**COUNT metrics are unit-free, so ONE request covers both products.** Counts
+(`deal_count`, `tranche_count`, `order_count`, `investor_count`,
+`currency_count`, `row_count`) have no unit to corrupt. For those, do NOT fire
+one request per product — send **one** request with `product` in `dimensions`
+and no `product` filter, then report the split from the returned rows. Two
+product-scoped requests where one would do is a whole extra round-trip
+(measured: ~10s each), and it buys nothing. The one-product-per-request rule
+applies to SIZE, ALLOCATION and DEMAND metrics, where the unit really does
+differ.
+
 ## 7. Brokers, syndicate & B&D → tranche object (never names)
 On `ecm_dcm_tranche`. **Use only names discovery returns for this source.** The
 four ECM/DCM objects currently declare NO `computed_filters`, so
