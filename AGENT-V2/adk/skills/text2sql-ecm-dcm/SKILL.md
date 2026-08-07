@@ -58,6 +58,13 @@ never restructure, never drop a filter.
   is a second request. (This is why coverage = demand ÷ size costs two.) Values
   you want *shown* rather than aggregated go in `dimensions`.
 - **`dimensions`** are the group-by keys and the projected columns.
+  **Whenever you FILTER on a name field (`issuer_name`, `investor_name`,
+  `deal_name`), put that same field in `dimensions`.** Two reasons, one of them
+  latency: the server checks whether your name matched several distinct
+  entities, and if the field is projected it counts them from the rows you
+  already got back — otherwise it runs a SECOND database round-trip to find
+  out, serially, after your answer was ready. Projecting it is free, removes
+  that hop, and the name belongs in the table anyway.
 - **`filters` are ANDed — there is no OR and no grouping.** So "NYSE or New York
   Stock Exchange" cannot be one filter; pick the token the view actually stores.
 - **Operators, and only these:** `eq ne gt gte lt lte in not_in between like

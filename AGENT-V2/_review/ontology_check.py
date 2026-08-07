@@ -657,6 +657,28 @@ if SOEID_MW.exists():
         check(f'"{alias}"' in src,
               f"[python] soeid_middleware.py: lost header alias {alias}")
 
+# LATENCY: measured 2026-08-07 — one ask = 59s, of which run_bqs_query was 36s.
+# build_disambiguation costs a SECOND serial DB round-trip whenever an
+# entity-name filter's field was not projected as a dimension; projecting it is
+# free. Both config layers must carry that, and the server must keep the phase
+# timings that let anyone re-measure.
+SERVICE = ROOT / "app" / "services" / "domain_query_service.py"
+if SERVICE.exists():
+    svc = text(SERVICE)
+    check("BQS timing source=" in svc,
+          "[latency] domain_query_service.py: the phase-timing log is gone — "
+          "build/execute/format/enrich is the only way to tell whether a slow "
+          "hop is Trino or us")
+    for phase in ("t_build", "t_exec", "t_format", "t_enrich"):
+        check(phase in svc,
+              f"[latency] domain_query_service.py: timer {phase} is gone")
+for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
+    check(re.search(r"(?i)(project|dimensions).{0,400}(round.?trip|second database)",
+                    text(path), re.S),
+          f"[latency] {label}: lost the rule that a FILTERED name field must "
+          f"also be projected in dimensions — without it every named-entity "
+          f"query pays an extra serial DB probe in build_disambiguation")
+
 if MCPSERVER.exists():
     src = text(MCPSERVER)
     # Transport parity with the v1 nl2sql server, which builds its app as

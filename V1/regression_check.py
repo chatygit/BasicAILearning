@@ -42,12 +42,12 @@ import sys
 from pathlib import Path
 
 DIR = Path(__file__).resolve().parent
-SKILL = DIR / "skill-v7.md"
-INSTR = DIR / "agents-v6.yml"
-DOMAIN = DIR / "domain-v4.yml"
-SCHEMA = DIR / "vw_deal_order_summary-v3.json"
-RULES = DIR / "sql-validation-v2.yml"
-UNSUPPORTED = DIR / "unspported-v2.json"
+SKILL = DIR / "agent" / "skill-v7.md"
+INSTR = DIR / "agent" / "agents-v6.yml"
+DOMAIN = DIR / "domain" / "domain-v4.yml"
+SCHEMA = DIR / "domain" / "vw_deal_order_summary-v3.json"
+RULES = DIR / "domain" / "sql-validation-v2.yml"
+UNSUPPORTED = DIR / "domain" / "criteria" / "unspported-v2.json"
 
 VERBOSE = "-v" in sys.argv or "--verbose" in sys.argv
 

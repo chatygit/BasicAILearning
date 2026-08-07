@@ -140,7 +140,11 @@ agents:
            last_priced; tranche/order: pricing_date). Trailing windows need BOTH
            bounds — gte the start AND lt TOMORROW-MIDNIGHT, so future-dated rows
            are excluded and today's are not. By company/investor name →
-           issuer_name/investor_name op 'like' value '%NAME%'.
+           issuer_name/investor_name op 'like' value '%NAME%' — and ALWAYS put
+           that same name field in `dimensions`. If you filter a name without
+           projecting it, the server spends an EXTRA database round-trip after
+           your answer is ready just to check whether the name matched several
+           entities; projecting it answers that from the rows you already have.
         9. Ids (deal, tranche, order, GP id, GFCID) are TEXT — quote them, keep
            leading zeros, and never invent one. An explicitly labelled id that
            returns 0 rows means NO DATA for that id; never substitute a

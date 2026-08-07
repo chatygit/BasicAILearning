@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 
 from pydantic import ValidationError
 
@@ -151,10 +152,16 @@ class DomainQueryService:
             if resolved_source == ENTITY_SOURCE:
                 return self._run_zen_entity(req, resolved_source)
 
+            # Phase timers. A single run_bqs_query call is one agent hop, and a
+            # hop is the unit users feel — so the split between "we built it",
+            # "the warehouse ran it" and "we enriched it" is what any latency
+            # work has to be argued from. Wall-clock only; no extra work done.
+            t0 = time.perf_counter()
             plan = plan_query(req, spec)
             dialect = get_dialect(spec.dialect)
             built = build_sql(plan, dialect)
             assert_read_only(built.sql)
+            t_build = time.perf_counter()
             logger.info(
                 "BQS accepted source=%s metric=%s sql=%s",
                 resolved_source,
@@ -162,6 +169,7 @@ class DomainQueryService:
                 built.sql,
             )
             columns, rows = execute(spec, built, dialect)
+            t_exec = time.perf_counter()
             result = format_result(
                 columns,
                 rows,
@@ -171,11 +179,31 @@ class DomainQueryService:
                 row_count=len(rows),
                 as_of_date=fetch_as_of_date(spec, dialect),
             )
+            t_format = time.perf_counter()
             # NOTE: `sql_audit` puts the generated SQL INTO the response the
             # agent sees. The skill's confidentiality rule ("never disclose the
             # generated SQL") is therefore a real, load-bearing instruction —
             # the SQL is right there in the payload, not merely conceptual.
             self._enrich_result(result, req, spec, dialect, len(rows))
+            t_enrich = time.perf_counter()
+            # enrich is NOT free: build_suggestions runs a DISTINCT probe per
+            # suggestable filter on 0 rows, and build_disambiguation runs one
+            # bounded DISTINCT probe whenever an entity-name filter's field was
+            # not projected as a dimension. Both are serial, after the answer is
+            # already in hand — so a large `enrich` here means an extra
+            # round-trip the agent could have avoided by projecting that field.
+            logger.info(
+                "BQS timing source=%s metric=%s rows=%d | build=%.2fs "
+                "execute=%.2fs format=%.2fs enrich=%.2fs total=%.2fs",
+                resolved_source,
+                req.metric,
+                len(rows),
+                t_build - t0,
+                t_exec - t_build,
+                t_format - t_exec,
+                t_enrich - t_format,
+                t_enrich - t0,
+            )
             return result
         except BQSError as e:
             logger.warning("BQS rejected: %s", e.message)
