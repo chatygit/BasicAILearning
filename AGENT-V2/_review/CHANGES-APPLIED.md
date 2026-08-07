@@ -7,7 +7,7 @@ they cannot silently come back.
 Run before handing anything back to the POC repo:
 
 ```
-python3 AGENT-V2/ontology_check.py     # 619 checks, exit 0 = safe
+python3 AGENT-V2/ontology_check.py     # 659 checks, exit 0 = safe
 ```
 
 Mutation-tested: 54 deliberate reintroductions of old bugs, 54 caught.
@@ -415,6 +415,46 @@ rapidfuzz `WRatio` with a **score floor of 60** and **top 5** returned; probes
 are capped at **200** distinct values and disambiguation lists at **25**;
 curated `values:` skip the probe entirely — which is the second reason a
 complete enum is worth declaring.
+
+## 20. POST-DEPLOY: two bugs the deployed config still had
+
+Both found after the copy-over, both now fixed in this tree.
+
+**(a) `usage_notes` item parsed as a MAPPING, killing the entity source.**
+`- ONE request: contains-match…` is *valid YAML* that loads as a `Hash`, so
+`usage_notes: list[str]` failed pydantic validation, `_refresh_file` logged and
+skipped, and **`ecm_dcm_entity` was never registered**. One missing pair of
+quotes removed a whole object. The gate missed it because it only checked that
+the YAML *parsed* — it did. Now checked structurally: any unquoted prose-list
+item containing `": "` fails. Swept all four; that was the only instance.
+
+**(b) The four objects declare NO `computed_filters`, but the config told the
+agent to use four of them.** `broker_participation` / `syndicate_member` /
+`bill_and_deliver` / `syndicate_role_lead` were referenced in SKILL §7, agent
+rule 7, the tranche `how_to_use` and a *worked example* — and
+`planner._resolve_computed_filter` raises `unknown_computed_filter` for every
+one. The four-view split dropped v1's `computed_filters` block; I then rewrote
+the non-B&D recipe *onto* those filters after `mcpserver.py` documented them as
+the governed path, which made the breakage worse.
+
+Rewritten to what actually runs today: filter participation with
+`syndicate_member_name like '%CITIGROUP%'`, **project `bnd_bank`**, split
+billed/not-billed in the answer. Both wrong turns are now explicitly prohibited
+in all three places — never negate participation (structural zero on a Citi
+book), never use `bnd_bank ne`/`not_in` (silently drops the *no B&D recorded*
+rows that a non-B&D answer is partly about).
+
+New referential-integrity check: no example may name an undeclared computed
+filter, and neither the skill nor the agent instruction may recommend one
+without stating it is unavailable.
+
+> **Port the `computed_filters` block from the v1 `ecm_dcm.yaml` into
+> `ecm_dcm_tranche.yaml`.** It is worth real effort: a computed filter is the
+> ONLY place this system can express an **OR** (an alias's codes are OR-joined
+> into one regex) and the only **NULL-safe negation**. That single block would
+> fix non-B&D properly *and* give us the clean form of the exchange, refi and
+> USA value traps. Port it rather than re-deriving — a wrong regex fails
+> silently by matching the wrong rows.
 
 ---
 

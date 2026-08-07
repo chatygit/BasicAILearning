@@ -24,7 +24,7 @@ skills:
       `text2sql-ecm-dcm` instead — it is self-contained and already includes
       this contract.
     tools:
-      - name: text_to_sql_mcp
+      - name: ecm_dcm_oracle_mcp
     tags:
       - "text-to-sql"
       - "ontology"
@@ -45,7 +45,7 @@ skills:
       (1x1, 'M & A', 'Oil & Gas', '10-YEAR', 'SEC Registered(Public)', US vs
       '%US%'), and the house answer style. Load it before calling run_bqs_query.
     tools:
-      - name: text_to_sql_mcp
+      - name: ecm_dcm_oracle_mcp
     tags:
       - "text-to-sql"
       - "ontology"

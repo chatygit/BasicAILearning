@@ -65,13 +65,15 @@ how_to_use:
   - "BILL & DELIVER: use the resolved 'bnd_bank' dimension — it names the B&D
      bank directly. Do NOT parse the pipe lists. ('Which deals did <bank> bill?'
      → filter bnd_bank like '%BANK%', metric deal_count.)"
-  - "NON-B&D is a two-part predicate, not a negated participation. There is no
-     not_like operator, so express it with governed computed_filters + negate,
-     exactly as the server documents it: 'non-B&D' = bill_and_deliver with
-     negate (NO token — this filter is token-less); 'Citi non-B&D' =
-     syndicate_member token 'citi' PLUS bill_and_deliver with negate. Negating
-     PARTICIPATION instead excludes almost every tranche on a Citi book — that
-     was a production zero-result bug."
+  - "NON-B&D is a two-part predicate: PARTICIPATED but did NOT bill. This source
+     declares no computed_filters yet, so express it with real filters — filter
+     syndicate_member_name like '%BANK%' (participated) and PROJECT bnd_bank,
+     then split billed vs not-billed in the answer. Do NOT negate
+     PARTICIPATION: on a Citi book that excludes almost every tranche, which was
+     a production zero-result bug. Do NOT use bnd_bank ne/not_in either — those
+     silently drop tranches with NO B&D recorded, which belong in a non-B&D
+     answer. (The clean form is a governed computed_filter with negate, which is
+     NULL-safe; see the note at the end of this file.)"
   - "SOLO: 'deal_sharing_type' = 'SOLO' means TRUE sole-managed on the new view
      (the old view labelled Citi-LED tranches SOLO — 25.1% of ECM tranches were
      mislabelled; fixed at source). Cross-check with syndicate_member_count = 1
@@ -497,18 +499,17 @@ examples:
     request:
       source: ecm_dcm_tranche
       metric: deal_count
+      # Project bnd_bank so the billed/not-billed split can be made in the
+      # answer. No computed_filters are declared on this source, and negating
+      # bnd_bank with ne/not_in would drop tranches with NO B&D recorded — which
+      # belong in a non-B&D answer.
       dimensions: [deal_name, deal_id, bnd_bank]
       filters:
         - {field: product, op: eq, value: ECM}
+        # Participated. NEVER negate this to mean "someone else led".
+        - {field: syndicate_member_name, op: like, value: "%CITIGROUP%"}
         - {field: pricing_date, op: gte, value: "2024-01-01"}
         - {field: pricing_date, op: lt, value: "2025-01-01"}
-      computed_filters:
-        # The server's own documented recipe for "Citi non-B&D":
-        # syndicate_member 'citi' PLUS bill_and_deliver with negate.
-        # bill_and_deliver is TOKEN-LESS. Negating PARTICIPATION instead
-        # returns near-zero on a Citi book.
-        - {name: syndicate_member, token: citi}
-        - {name: bill_and_deliver, negate: true}
       order: [{field: deal_count, direction: desc}, {field: deal_id, direction: asc}]
   - question: Top 10 DCM tranches by size in USD, 2025
     request:
@@ -561,3 +562,19 @@ examples:
         - {field: pricing_date, op: gte, value: "2025-01-01"}
         - {field: pricing_date, op: lt, value: "2026-01-01"}
       order: [{field: tranche_count, direction: desc}, {field: tranche_id, direction: asc}]
+
+# ---------------------------------------------------------------------------
+# GAP: this source declares NO computed_filters. The v1 single-source ontology
+# had them (broker_participation / syndicate_member / bill_and_deliver /
+# syndicate_role_lead); the four-view split did not carry them over. Until they
+# are ported, any request naming one fails with `unknown_computed_filter`.
+#
+# They are worth porting: a computed filter is the ONLY place this system can
+# express an OR (an alias's codes are OR-joined into one regex) and the only
+# NULL-safe negation (`negate` COALESCEs a missing value to a non-matching
+# sentinel, so a tranche with no B&D correctly counts as non-B&D).
+#
+# Port them from the v1 `ecm_dcm.yaml` rather than re-deriving: the bank codes
+# and the pattern_template anchor for pipe-delimited lists must match the data
+# exactly, and a wrong regex fails silently by matching the wrong rows.
+# ---------------------------------------------------------------------------

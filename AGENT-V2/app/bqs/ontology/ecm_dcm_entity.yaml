@@ -144,7 +144,7 @@ filters:
 usage_notes:
   - Resolve only when you need one entity, or the user must pick — otherwise
     filter the name inline on the data object (fewest hops).
-  - ONE request: contains-match, ranked, limit 10. Do not probe with eq first.
+  - "ONE request: contains-match, ranked, limit 10. Do not probe with eq first."
   - Always return entity_id; order by entity_activity_count desc, last_active
     desc, entity_id asc.
   - Label context_value_1/2 according to the entity_type queried.

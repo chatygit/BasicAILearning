@@ -87,6 +87,78 @@ def blocks(path, section):
 
 
 # ---------------------------------------------------------------------------
+# 0. YAML SHAPE — a prose list item containing ": " parses as a MAPPING, not a
+#    string, so `usage_notes: list[str]` fails validation and the WHOLE source
+#    silently fails to load. This is valid YAML, so a plain parse check misses
+#    it entirely; only the type matters. Cost us the ecm_dcm_entity source.
+# ---------------------------------------------------------------------------
+PROSE_LISTS = ("usage_notes", "how_to_use")
+for path in OBJECTS:
+    src = text(path)
+    for key in PROSE_LISTS:
+        m = re.search(rf"^{key}:\s*$", src, re.M)
+        if not m:
+            continue
+        rest = src[m.end():]
+        end = re.search(r"^\S", rest, re.M)
+        block = rest[: end.start()] if end else rest
+        for im in re.finditer(r"^  - (.*)$", block, re.M):
+            item = im.group(1)
+            if item[:1] in ("'", '"', "|", ">", "{", "["):
+                continue                      # quoted or explicitly structured
+            line = src[: m.end() + im.start()].count("\n") + 1
+            check(not re.search(r"[^\s]: ", item),
+                  f"[yaml] {path.name}:{line}: '{key}' item is unquoted and "
+                  f"contains ': ', so YAML parses it as a MAPPING",
+                  f"Quote the whole item. Item: {item[:70]}...")
+
+# ---------------------------------------------------------------------------
+# 0b. REFERENTIAL INTEGRITY — never instruct the agent to use a governed name
+#     the server cannot resolve. planner._resolve_computed_filter raises
+#     `unknown_computed_filter` for anything not in spec.computed_filters, so a
+#     recipe naming an undeclared filter fails at RUNTIME, not at load. The
+#     four-view split dropped v1's computed_filters block while the skill, the
+#     agent instruction and a worked example all still called for it.
+# ---------------------------------------------------------------------------
+V1_COMPUTED = ["broker_participation", "syndicate_member", "bill_and_deliver",
+               "syndicate_role_lead"]
+declared_cf = set()
+for path in OBJECTS:
+    for name, _body in blocks(path, "computed_filters"):
+        declared_cf.add(name)
+
+# (a) no request example may name an undeclared computed filter
+for path in OBJECTS:
+    src = text(path)
+    for m in re.finditer(r"^\s*-\s*\{name:\s*([a-z_0-9]+)", src, re.M):
+        line = src[: m.start()].count("\n") + 1
+        check(m.group(1) in declared_cf,
+              f"[refint] {path.name}:{line}: example uses computed_filter "
+              f"'{m.group(1)}', which no ontology declares",
+              "planner raises unknown_computed_filter — the example cannot run.")
+
+# (b) the skill and the agent instruction may only *recommend* one that exists,
+#     unless they explicitly say it is unavailable
+for path in [SKILL, AGENTS]:
+    src = text(path)
+    for name in V1_COMPUTED:
+        if name in declared_cf:
+            continue
+        # Word-boundary match: `syndicate_member_name` is a REAL filter and must
+        # not be mistaken for the computed filter `syndicate_member`.
+        for m in re.finditer(rf"{re.escape(name)}(?![a-z_])", src):
+            raw = src[max(0, m.start() - 500): m.end() + 500]
+            window = " ".join(re.sub(r"[`*]", "", raw).split())
+            line = src[: m.start()].count("\n") + 1
+            check(re.search(r"NOT available|not available|unknown_computed_filter|"
+                            r"declares no computed_filters|declare NO computed_filters",
+                            window, re.I) is not None,
+                  f"[refint] {path.name}:{line}: recommends computed_filter "
+                  f"'{name}', which no ontology declares, without saying it is "
+                  f"unavailable",
+                  "Either port the computed_filters block or stop recommending it.")
+
+# ---------------------------------------------------------------------------
 # 1. UNITS GUARD — every unit-sensitive aggregate declares requires_filters
 # ---------------------------------------------------------------------------
 for path in OBJECTS:
@@ -263,18 +335,29 @@ check(not re.search(r"discover_business_terms.{0,40}\(no arguments\)",
 
 # The B&D recipe must match the server's own docstring: bill_and_deliver is
 # TOKEN-LESS; "Citi non-B&D" = syndicate_member 'citi' + bill_and_deliver negate.
+# The non-B&D recipe must use filters that EXIST. Both wrong turns are
+# specifically dangerous: negating participation returned a structural zero in
+# production, and bnd_bank ne/not_in silently drops the no-B&D-recorded rows
+# that a non-B&D answer is partly about.
 for path in [TRANCHE, SKILL, AGENTS]:
-    check(has(path, "token-less") or has(path, "NO token"),
-          f"[bnd] {path.name}: lost the fact that bill_and_deliver is "
-          f"token-less — passing it a token is not the server's recipe")
-    # Must be syndicate_member PAIRED WITH bill_and_deliver in the same recipe —
-    # a bare mention of syndicate_member elsewhere in the file is not enough.
-    recipe = re.search(r"[Cc]iti[ -]?non-B&D.{0,400}", text(path), re.S)
+    recipe = re.search(r"[Nn][Oo][Nn][- ]?B&D.{0,700}", text(path), re.S)
     window = " ".join(re.sub(r"[`*]", "", recipe.group(0)).split()) if recipe else ""
-    check("syndicate_member" in window and "bill_and_deliver" in window,
-          f"[bnd] {path.name}: the 'Citi non-B&D' recipe no longer pairs "
-          f"syndicate_member with bill_and_deliver — that is the server's own "
-          f"documented composite")
+    check("syndicate_member_name" in window,
+          f"[bnd] {path.name}: the non-B&D recipe no longer filters "
+          f"participation via syndicate_member_name")
+    # Must PROJECT it, not merely mention it — the split is made from the rows.
+    check(re.search(r"project(ing)? bnd_bank", window, re.I) is not None,
+          f"[bnd] {path.name}: the non-B&D recipe no longer PROJECTS bnd_bank — "
+          f"without it the billed/not-billed split cannot be made")
+    # The warnings must PROHIBIT, not merely name the wrong approach.
+    check(re.search(r"(do not|don't|never|no)[^.]{0,40}bnd_bank ne\s*/\s*not_in",
+                    window, re.I) is not None,
+          f"[bnd] {path.name}: lost the PROHIBITION on bnd_bank ne/not_in, "
+          f"which drops tranches with no B&D recorded")
+    check(re.search(r"(do not|don't|never)\s+negate\s+participation", window, re.I)
+          is not None,
+          f"[bnd] {path.name}: lost the PROHIBITION on negating participation — "
+          f"that was the production zero-result bug")
 check(not re.search(r"bill_and_deliver[,(\s]+token", text(TRANCHE) + text(SKILL) + text(AGENTS)),
       "[bnd] a file passes a token to bill_and_deliver — it is token-less")
 
@@ -474,9 +557,36 @@ for skill_name in re.findall(r"^\s+- ([a-z0-9-]+)\s*$",
     check(f'"{skill_name}"' in text(SKILLS),
           f"[agent] agents.yaml references skill '{skill_name}', which "
           f"skills.yaml does not define")
-check("text_to_sql_mcp" in text(TOOLS),
-      "[agent] agents.yaml references tool 'text_to_sql_mcp', which tools.yaml "
-      "does not define")
+# The toolset name must be IDENTICAL everywhere. The platform registry owns
+# `ecm_dcm_oracle_mcp`; our config referred to `text_to_sql_mcp`, so the agent
+# pointed at a toolset that does not exist there. Derive it, don't hardcode.
+agent_tools = re.findall(r"^    tools:\n((?:      - \S+\n)+)", text(AGENTS), re.M)
+tool_names = re.findall(r"- (\S+)", agent_tools[0]) if agent_tools else []
+check(len(tool_names) == 1,
+      f"[toolset] agents.yaml should attach exactly one MCP toolset, found "
+      f"{tool_names}")
+if tool_names:
+    tname = tool_names[0]
+    # EVERY toolset reference in skills.yaml must be that same name — one
+    # stale entry is enough to hand a skill a tool the agent cannot resolve.
+    skill_refs = re.findall(r"^      - name:\s*(\S+)\s*$", text(SKILLS), re.M)
+    check(skill_refs and all(r == tname for r in skill_refs),
+          f"[toolset] skills.yaml references {sorted(set(skill_refs))} but "
+          f"agents.yaml attaches '{tname}' — a mismatch means tool-not-found")
+    check(tname in text(SKILL),
+          f"[toolset] SKILL.md does not use the toolset name '{tname}' that "
+          f"agents.yaml attaches")
+    # Either tools.yaml defines it, or it says the registry provides it. What it
+    # must NEVER do is define it locally with a localhost-defaulting URL, which
+    # would shadow the registry entry and break a deployed pod.
+    defines = re.search(rf"^\s*-\s*name:\s*{re.escape(tname)}\s*$",
+                        text(TOOLS), re.M) is not None
+    check(not defines or "${" not in text(TOOLS),
+          f"[toolset] tools.yaml defines '{tname}' locally with a "
+          f"${{VAR}} URL, shadowing the registry toolset of the same name")
+    check(defines or "registered" in text(TOOLS).lower(),
+          f"[toolset] tools.yaml neither defines '{tname}' nor explains that "
+          f"the registry provides it")
 
 # ---------------------------------------------------------------------------
 # 15. NO UNAPPLIED REVIEW MARKERS left in the shipped files
