@@ -494,6 +494,33 @@ check("mcp_tool_names: []" not in live,
       "[survival] tools.yaml: mcp_tool_names back to auto-discover; pin the "
       "read-only surface")
 
+# The local `adk` runtime reads its ONLY toolset from this file — higher envs
+# use the onboarding registry and never read it. So an empty list is not
+# "defer to the registry", it is "no MCP tools locally", and the agent dies with
+# Tool 'discover_business_terms' not found.
+check(not re.search(r"^tools:\s*\[\s*\]\s*$", live, re.M),
+      "[survival] tools.yaml has `tools: []` — the local runtime then has NO "
+      "MCP toolset and every run fails with Tool 'discover_business_terms' not "
+      "found. This file is local-only; it cannot shadow the registry.")
+defined_tools = set(re.findall(r"^\s*-\s*name:\s*([A-Za-z0-9_\-]+)", live, re.M))
+check(bool(defined_tools),
+      "[survival] tools.yaml defines no tool at all")
+for src_path, label in ((AGENTS, "agents.yaml"), (SKILLS, "skills.yaml")):
+    body = "\n".join(l for l in text(src_path).splitlines()
+                     if not l.lstrip().startswith("#"))
+    for ref in set(re.findall(r"^\s*-\s*(?:name:\s*)?(ecm_dcm_oracle_mcp|text_to_sql_mcp)\s*$",
+                              body, re.M)):
+        check(ref in defined_tools,
+              f"[survival] {label} references toolset '{ref}' but tools.yaml "
+              f"defines {sorted(defined_tools) or 'nothing'} — local runs will "
+              f"fail with Tool 'discover_business_terms' not found")
+    check("text_to_sql_mcp" not in body,
+          f"[survival] {label} still names the old toolset 'text_to_sql_mcp'; "
+          f"the registry entry is 'ecm_dcm_oracle_mcp'")
+check("mcp_server_url" in live,
+      "[survival] tools.yaml lost mcp_server_url — the local runtime has no "
+      "server to connect to")
+
 # ---------------------------------------------------------------------------
 # 12. SELF-CONTAINMENT — SKILL.md and skills.yaml must agree
 # ---------------------------------------------------------------------------

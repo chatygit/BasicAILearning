@@ -8,58 +8,67 @@
 # Supported tool_type values:
 #   mcp  - Model Context Protocol toolset (auto-created from config)
 #
-# Sample MCP tool attributes:
+# Sample MCP tool attributes (from the file's own commented reference):
 #   name / description / tool_type / mcp_server_url ("${VAR}" substitution)
 #   mcp_tool_names: []      # [] = auto-discover all tools from the server
 #   tool_name_prefix: ""    # prefix to avoid collisions across MCP servers
 #   tags: []
 # ---------------------------------------------------------------------------
-# THE ECM/DCM TOOLSET IS REGISTERED, NOT LOCAL.
+# THIS FILE IS THE LOCAL RUNTIME'S ONLY SOURCE FOR THE MCP TOOLSET.
 #
-# `ecm_dcm_oracle_mcp` already exists in the Ask Banking onboarding registry and
-# is what capital_markets_agent_v2 is wired to. It is merged at runtime, so it
-# must NOT be redefined here: a local entry of the same name would shadow the
-# registry one with an "${TEXT_TO_SQL_MCP_URL}" that defaults to localhost:8095,
-# and a deployed pod would resolve the toolset to localhost and fail.
+# Local `adk` runs read the toolset from here. Higher environments do NOT read
+# this file at all — there the toolset is the `ecm_dcm_oracle_mcp` entry created
+# in the Ask Banking onboarding UI, and promotion means copying the agent
+# description/instructions into that UI by hand.
 #
-# Reference it by name from agents.yaml / skills.yaml. Nothing to define.
+# So the two paths are independent, and emptying this list does not "defer to
+# the registry" — it removes the tools from local only, and the agent fails with
+# `Tool 'discover_business_terms' not found. Available tools: transfer_to_agent,
+# list_skills, load_skill, load_skill_resource, run_skill_script`.
+#
+# `name` must match what agents.yaml and skills.yaml reference, and it matches
+# the registry entry name so local and QA behave the same.
 # ---------------------------------------------------------------------------
-# THE TOOLSET DESCRIPTION IS A LOAD-BEARING SURFACE — AND IT LIVES IN THE
-# REGISTRY, NOT IN THIS FILE.
-#
+# WHY THE DESCRIPTION IS LONGER THAN A LABEL:
 # Tool definitions ship with EVERY request, regardless of which skills loaded,
 # how long the conversation has run, or whether the model re-read the catalog.
-# That makes the toolset description the most reliable place to put a rule.
-#
-# The registry entry currently reads:
-#   "Oracle MCP toolset for ECM/DCM prompt processing and BQS branch-aware
-#    orderbook query workflow."
-#
-# That is a label, not a survival kit. Paste the following into the Description
-# field of `ecm_dcm_oracle_mcp` in the onboarding tool — it carries the four
-# rules whose absence yields a WRONG answer rather than a failed one:
-#
-#   Ontology-based text-to-SQL for ECM/DCM. Two governed, read-only tools:
-#   discover_business_terms(source=...) and run_bqs_query (structured Business
-#   Query Specification against ONE object; you never write raw SQL).
-#   DISCOVERY IS SCOPED: there are FOUR grain-aligned objects — ecm_dcm_deal
-#   (one row per deal), ecm_dcm_tranche (per tranche: syndicate, B&D,
-#   identifiers, coupon), ecm_dcm_order (per order: investors, demand,
-#   allocation), ecm_dcm_entity (name -> id). Choose by grain, then pass that
-#   name as `source` so you get ONE catalog; omitting `source` returns all four,
-#   which is four times the context for one answer.
-#   RULES THAT ALWAYS APPLY: (1) Pick the object by the grain of the thing being
-#   counted/listed — it must be fine enough to carry every field you filter or
-#   project; among those, pick the coarsest. (2) ALWAYS set a `product` filter
-#   ('ECM' or 'DCM') — it is also the entitlement scope. (3) NEVER total sizes,
-#   allocations or demand across both products: ECM is SHARE COUNTS, DCM is
-#   notional MONEY, and DCM money needs one currency. (4) Ids (deal, tranche,
-#   order, GP id, GFCID) are TEXT — quote them, keep leading zeros, and never
-#   invent one that no tool response returned.
-#
-# The per-tool descriptions shown in the onboarding UI come from the MCP
-# server's own docstrings (app/mcpserver.py) and deploy with the server — those
-# are already ours.
+# That makes it the most reliable place to put a rule — so it carries exactly
+# the four whose absence produces a WRONG answer rather than a failed one.
+# Everything else belongs in the skill or the catalog. Keep this text and the
+# registry entry's Description field in sync.
 # ---------------------------------------------------------------------------
 
-tools: []
+tools:
+  - name: ecm_dcm_oracle_mcp                   # referenced by capital_markets_agent_v2 (agents.yaml) and both skills
+    description: >
+      Ontology-based text-to-SQL MCP server for ECM/DCM. Exposes governed,
+      read-only tools: `discover_business_terms(source=...)` and
+      `run_bqs_query` (runs a structured Business Query Specification against
+      ONE object; you never write raw SQL).
+      DISCOVERY IS SCOPED: there are FOUR grain-aligned objects — `ecm_dcm_deal`
+      (one row per deal), `ecm_dcm_tranche` (per tranche: syndicate, B&D,
+      identifiers, coupon), `ecm_dcm_order` (per order: investors, demand,
+      allocation), `ecm_dcm_entity` (name → id). Choose by grain, then pass that
+      name as `source` so you get ONE catalog. Omitting `source` returns all
+      four — four times the context for one answer.
+      RULES THAT ALWAYS APPLY: (1) Pick the object by the grain of the thing
+      being counted/listed — the object must be fine enough to carry every field
+      you filter or project; among those, pick the coarsest. (2) ALWAYS set a
+      `product` filter ('ECM' or 'DCM') — it is also the entitlement scope.
+      (3) NEVER total sizes, allocations or demand across both products: ECM is
+      SHARE COUNTS, DCM is notional MONEY, and DCM money needs one currency.
+      (4) Ids (deal, tranche, order, GP id, GFCID) are TEXT — quote them, keep
+      leading zeros, and never invent one that no tool response returned.
+    tool_type: mcp                             # Currently only "mcp" is supported.
+    # app/mcpserver.py serves on port 8080; point this at the V2 server, not the
+    # v1 nl2sql one. See app/.env.example for the variable's current default.
+    mcp_server_url: "${TEXT_TO_SQL_MCP_URL}"
+    # Pinned rather than auto-discovered: a governed read-only surface should not
+    # silently grow when a new tool is added to the server.
+    mcp_tool_names:
+      - discover_business_terms
+      - run_bqs_query
+    tags:
+      - "mcp"
+      - "text-to-sql"
+      - "ontology"
