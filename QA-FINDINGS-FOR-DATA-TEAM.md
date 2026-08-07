@@ -226,6 +226,48 @@ products.
 
 ---
 
+## Addendum (2026-08-07) — the `UPPER()` point now applies to the four new views
+
+The index candidates above list function-based indexes on `UPPER(name)` for the
+*name* columns. Having read the new MCP's SQL builder, that recommendation needs
+to be widened.
+
+Every filter the new agent marks case-insensitive compiles to:
+
+```sql
+UPPER(<column>) <op> UPPER(?)
+```
+
+— **both sides wrapped**, for `eq`, `ne`, `like`, `in` and `not_in` alike. So a
+plain b-tree on the raw column is unusable for *any* of them, not just names.
+
+On the four new views (`VW_DEAL_SUMMARY`, `VW_TRANCHE_SUMMARY`,
+`VW_ORDER_DETAIL`, `VW_ENTITY_SEARCH`) that covers, at minimum:
+
+| Filtered column | Views |
+|---|---|
+| `SECTOR`, `USE_OF_PROCEEDS`, `DEAL_STATUS`, `OFFERING_TYPE`, `EQUITY_TYPE`, `EXECUTION_STATUS`, `DEAL_REGION` | deal |
+| `CURRENCY`, `TRANCHE_REGION`, `TRANCHE_NAME`, `PRODUCT_TYPE`, `EXCHANGE`, `PRODUCT_CLASS`, `COUPON_TYPE`, `COUPON_FREQ`, `SENIORITY`, `REG_CATEGORY`, `DELIVERY_TYPE`, `ESG_BOND`, `TRANCHE_STATUS`, `TENORS` | tranche |
+| `INVESTOR_REGION`, `INVESTOR_CATEGORY`, `MEETING_TYPE`, `ORDER_TYPE`, `IOI_TYPE`, `CURRENCY` | order |
+| `ENTITY_NAME` | entity |
+
+Two asks, in order of value:
+
+1. **Function-based indexes on `UPPER(col)`** for the columns above that are
+   selective enough to matter — the low-cardinality taxonomies (status, sector,
+   currency, coupon type) are the cheap wins, since they are almost always
+   combined with `PRODUCT` and a date range.
+2. **Or normalise the stored values** so case-insensitive matching isn't needed
+   at all. This is the better fix where it's feasible: `DEAL_STATUS` currently
+   holds both `Open` and `OPEN` as distinct values, which is what forces
+   case-insensitive matching there in the first place, and which also splits
+   group-by buckets so they don't sum to the total.
+
+The `LIKE '%X%'` caveat from the previous section still stands and still points
+at Oracle Text for genuine contains-search.
+
+---
+
 ## Reproducing
 
 `entity-search-diagnostics.sql` (agent team) contains the measured queries

@@ -1,0 +1,58 @@
+# HARDENED 2026-08-07 — base transcribed from screenshot, then edited.
+# Changes are listed in CHANGES-APPLIED.md.
+# ---------------------------------------------------------------------------
+# Tool Definitions
+#
+# Tools defined here are made available to agents via their `tools` list in
+# agents.yaml. Tools from the registry are also merged at runtime, so you only
+# need to define your own custom tools here.
+#
+# Supported tool_type values:
+#   mcp  - Model Context Protocol toolset (auto-created from config)
+#
+# Sample MCP tool attributes (from the file's own commented reference):
+#   name / description / tool_type / mcp_server_url ("${VAR}" substitution)
+#   mcp_tool_names: []      # [] = auto-discover all tools from the server
+#   tool_name_prefix: ""    # prefix to avoid collisions across MCP servers
+#   tags: []
+# ---------------------------------------------------------------------------
+# WHY THIS DESCRIPTION IS LONGER THAN A LABEL:
+# Tool definitions ship with EVERY request, regardless of which skills loaded,
+# how long the conversation has run, or whether the model re-read the catalog.
+# In this architecture the tool description is the most reliable place to put a
+# rule — so it carries exactly the four whose absence produces a WRONG answer
+# rather than a failed one. Everything else belongs in the skill or the catalog.
+# ---------------------------------------------------------------------------
+
+tools:
+  - name: text_to_sql_mcp                      # snake_case; referenced by capital_markets_agent_v2 in agents.yaml
+    description: >
+      Ontology-based text-to-SQL MCP server for ECM/DCM. Exposes governed,
+      read-only tools: `discover_business_terms(source=...)` and
+      `run_bqs_query` (runs a structured Business Query Specification against
+      ONE object; you never write raw SQL).
+      DISCOVERY IS SCOPED: there are FOUR grain-aligned objects — `ecm_dcm_deal`
+      (one row per deal), `ecm_dcm_tranche` (per tranche: syndicate, B&D,
+      identifiers, coupon), `ecm_dcm_order` (per order: investors, demand,
+      allocation), `ecm_dcm_entity` (name → id). Choose by grain, then pass that
+      name as `source` so you get ONE catalog. Omitting `source` returns all
+      four — four times the context for one answer.
+      RULES THAT ALWAYS APPLY: (1) Pick the object by the grain of the thing
+      being counted/listed — the object must be fine enough to carry every field
+      you filter or project; among those, pick the coarsest. (2) ALWAYS set a
+      `product` filter ('ECM' or 'DCM') — it is also the entitlement scope.
+      (3) NEVER total sizes, allocations or demand across both products: ECM is
+      SHARE COUNTS, DCM is notional MONEY, and DCM money needs one currency.
+      (4) Ids (deal, tranche, order, GP id, GFCID) are TEXT — quote them, keep
+      leading zeros, and never invent one that no tool response returned.
+    tool_type: mcp                             # Currently only "mcp" is supported.
+    mcp_server_url: "${TEXT_TO_SQL_MCP_URL}"   # Defaults to http://localhost:8095/mcp (see app/.env.example)
+    # Pinned rather than auto-discovered: a governed read-only surface should not
+    # silently grow when a new tool is added to the server.
+    mcp_tool_names:
+      - discover_business_terms
+      - run_bqs_query
+    tags:
+      - "mcp"
+      - "text-to-sql"
+      - "ontology"

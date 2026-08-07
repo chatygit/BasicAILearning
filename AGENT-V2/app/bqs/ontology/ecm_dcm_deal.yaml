@@ -1,0 +1,363 @@
+# ---------------------------------------------------------------------------
+# HARDENED 2026-08-07 — base transcribed from screenshots, then edited to apply
+# the domain knowledge earned in v1 production/QA. Every change is listed in
+# CHANGES-APPLIED.md. Verify column names against the physical view before use.
+# ---------------------------------------------------------------------------
+# Governed ontology — ECM/DCM DEAL object (Oracle via Starburst/Trino).
+#
+# Grain: ONE row per PRODUCT + DEAL_ID. Deal facts do NOT repeat per tranche or
+# order here, so deal listings and deal counts need NO deduplication — this is
+# the whole point of the four-view split. Tranche- and order-level attributes
+# are deliberately ABSENT: ask the tranche or order object for those.
+#
+# Physical source: DGSTREAM.VW_DEAL_SUMMARY (UNION ALL of ECM + DCM), exposed
+# through the Starburst catalog dataglobe_oraas.dgstream. PRODUCT ('ECM'/'DCM')
+# separates the two; callers scope with a product filter (entitlement injects it
+# too). Only business names below are ever shown to the agent.
+# ---------------------------------------------------------------------------
+source: ecm_dcm_deal
+version: "2"
+dialect: trino
+
+connection:
+  catalog: dataglobe_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: dataglobe_oraas.dgstream.vw_deal_summary
+
+# Object grain (business names). One physical row per this combination.
+grain: [product, deal_id]
+
+max_limit: 5000
+query_timeout_seconds: 60
+
+# Deals are priced over a window; the deal row carries FIRST_PRICED/LAST_PRICED.
+default_time_dimension: last_priced
+
+how_to_use:
+  - "USE THIS OBJECT for deal-grain asks: 'list deals', 'how many deals', deal
+     size/value, issuer, sector, offering type, use of proceeds, deal status, and
+     the pre-computed per-deal roll-ups (tranche_count, order_count,
+     investor_count, currencies). One row per deal — never deduplicate."
+  - "DO NOT ask this object for tranche attributes (coupon, tenor, identifiers,
+     syndicate, ratings, exchange, seniority) — use ecm_dcm_tranche. DO NOT ask it
+     for investor/allocation/demand/order attributes — use ecm_dcm_order."
+  - "ALWAYS set a 'product' filter — 'ECM' for equity, 'DCM' for debt. ECM sizes
+     are SHARE COUNTS; DCM sizes are notional MONEY. Never total ECM and DCM
+     together — scope one product or group by 'product'."
+  - "DCM money caveat: this object's DEAL_SIZE is a single deal-level figure and
+     is NOT scoped to one currency (a deal may price in several — see
+     'currencies'). For currency-comparable DCM money totals, use the
+     ecm_dcm_tranche object's total_tranche_size scoped/grouped by 'currency'."
+  - "Deal date: a deal has FIRST_PRICED and LAST_PRICED (not a single pricing
+     date). Filter 'first_priced'/'last_priced' for 'priced in <period>'. For a
+     calendar year use two filters: gte Jan 1 and lt Jan 1 of the next year.
+     TRAILING windows ('last 12 months') need BOTH bounds too: gte the start AND
+     lt TOMORROW-MIDNIGHT — an upper bound of 'today' silently drops deals priced
+     today, and no upper bound at all lets future-dated (2027/2028) rows in."
+  - "Multi-currency deals: metric currency_count with a HAVING threshold (group
+     by deal_name, metric currency_count, having currency_count gt 1)."
+  - "VALUE TRAPS on this object (the stored literal is not the word the user
+     says): sector 'Oil & Gas' is NOT 'Energy'; use_of_proceeds spells it
+     'M & A' WITH SPACES and splits refinancing across 'Refinance' AND 'Debt
+     Repayment'; deal_status has case-variant duplicates ('Open' and 'OPEN').
+     Match these with 'like'/'in', never a single eq, and say which values the
+     answer covered."
+
+# ------------------------------- METRICS -----------------------------------
+# UNITS GUARD: every metric over DEAL_SIZE declares requires_filters: [product].
+# ECM deal_size is a SHARE COUNT and DCM deal_size is notional MONEY — an
+# unguarded MAX/MIN compares 40,000,000 shares against USD 40,000,000 and picks
+# a winner. This is how "1,000.0bn shares" reached a user in v1.
+metrics:
+  total_deal_size:
+    column: deal_size
+    aggregation: SUM
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Total deal size (DEAL_SIZE), summed over deals. One row per deal already,
+      so no dedup. ECM=shares, DCM=notional money (not currency-scoped here).
+  largest_deal_size:
+    column: deal_size
+    aggregation: MAX
+    numeric: true
+    requires_filters: [product]
+    description: Largest single deal size. Use for "biggest deal".
+  smallest_deal_size:
+    column: deal_size
+    aggregation: MIN
+    numeric: true
+    requires_filters: [product]
+    description: Smallest single deal size.
+  average_deal_size:
+    column: deal_size
+    aggregation: AVG
+    numeric: true
+    requires_filters: [product]
+    description: Average deal size across deals.
+  deal_count:
+    column: deal_id
+    aggregation: COUNT_DISTINCT
+    description: Number of distinct deals. Use for "how many deals".
+  issuer_count:
+    column: gfcid
+    aggregation: COUNT_DISTINCT
+    description: Number of distinct issuers (by GFCID).
+  total_tranche_count:
+    column: tranche_count
+    aggregation: SUM
+    numeric: true
+    description: >-
+      Total tranches across the matched deals (sum of the per-deal
+      pre-computed TRANCHE_COUNT). For tranche-grain analysis use ecm_dcm_tranche.
+  total_order_count:
+    column: order_count
+    aggregation: SUM
+    numeric: true
+    description: >-
+      Total orders across the matched deals (sum of the per-deal pre-computed
+      ORDER_COUNT). For order-grain analysis use ecm_dcm_order.
+  average_investor_count:
+    column: investor_count
+    aggregation: AVG
+    numeric: true
+    description: >-
+      Average distinct investors per deal (per-deal pre-computed INVESTOR_COUNT).
+      Do NOT sum it across deals — investors overlap between deals, so a sum
+      double-counts and will not reconcile with ecm_dcm_order.investor_count.
+  currency_count:
+    column: currencies
+    aggregation: MAX
+    list_count: true
+    description: >-
+      Number of distinct pricing currencies on a deal (counts the pipe-delimited
+      CURRENCIES roll-up). Use with a HAVING threshold for multi-currency deals
+      (group by deal, having currency_count gt 1).
+  row_count:
+    column: deal_id
+    aggregation: COUNT
+    description: >-
+      Total matched rows. At this grain that equals deal_count — prefer
+      deal_count in any answer shown to a user.
+
+# ------------------------------ DIMENSIONS ---------------------------------
+dimensions:
+  product: {column: product, description: "Product — 'ECM' or 'DCM'."}
+  deal_id: {column: deal_id, description: "Unique deal identifier. TEXT — quote it. Always project it in a listing: it is the drill-down handle."}
+  deal_name: {column: deal_name, description: "Deal name (display; filter by deal_id/deal_name). A trailing number in a deal name is part of the NAME, never an id."}
+  deal_size: {column: deal_size, description: "Deal size figure (ECM shares / DCM money). Not currency-scoped on DCM."}
+  issuer_name: {column: issuer_name, description: "Issuer/company name (display)."}
+  issuer_id: {column: gfcid, description: "Issuer GFCID (issuer-side key). TEXT — quote it."}
+  ticker: {column: ticker, description: "Issuer ticker symbol."}
+  sector: {column: sector, description: "Issuer industry sector. Closed list — 'Oil & Gas' is a SEPARATE value from 'Energy'."}
+  use_of_proceeds: {column: use_of_proceeds, description: "Purpose of raised funds. Stored literals include 'M & A' (with spaces) and BOTH 'Refinance' and 'Debt Repayment' for refinancing."}
+  equity_type: {column: equity_type, description: "ECM. Instrument CLASS (Common Stock, Convertible, Preferred…). 'common stock'/'common shares' asks belong HERE, not on tranche product_type."}
+  offering_type: {column: offering_type, description: "ECM. Offering type (IPO, FO/follow-on, Rights)."}
+  deal_status: {column: deal_status, description: "Deal execution status (Priced/Settled/Open…). CASE VARIANTS EXIST ('Open' and 'OPEN') — when grouping by status, merge case variants in the narrative or the buckets will not sum to the total."}
+  execution_status: {column: execution_status, description: "ECM. Execution status category."}
+  deal_region: {column: deal_region, description: "ECM. Deal-level region (NAM/EMEA/APAC); NULL on DCM."}
+  settlement_currency: {column: settlement_currency, description: "Settlement currency."}
+  tranche_count: {column: tranche_count, description: "Pre-computed tranche count for the deal."}
+  order_count: {column: order_count, description: "Pre-computed order count for the deal."}
+  investor_count: {column: investor_count, description: "Pre-computed distinct-investor count for the deal."}
+  currencies: {column: currencies, description: "Pipe-delimited list of pricing currencies on the deal. Display as ONE cell — never split a pipe list across table columns."}
+  first_priced: {column: first_priced, description: "Earliest tranche pricing timestamp on the deal."}
+  last_priced: {column: last_priced, description: "Latest tranche pricing timestamp on the deal."}
+
+# -------------------------------- FILTERS ----------------------------------
+filters:
+  product:
+    column: product
+    operators: [eq, in]
+    suggestable: true
+    values: ["ECM", "DCM"]
+    description: "Product scope — 'ECM' or 'DCM'. Set on every query."
+  deal_id:
+    column: deal_id
+    operators: [eq, ne, in, not_in]
+    description: >-
+      Filter by resolved deal id. Ids are TEXT — quote them, and never strip
+      leading zeros. 0 rows for an explicitly labelled id means NO DATA for that
+      id; never substitute a lookalike.
+  issuer_id:
+    column: gfcid
+    operators: [eq, ne, in, not_in]
+    description: "Issuer-side filter (GFCID, text — quote it). 'deals issued by <company>'."
+  deal_name:
+    column: deal_name
+    operators: [like, eq, in]
+    suggestable: true
+    entity_name: true
+    case_insensitive: true
+    description: "Filter by deal name — op 'like' with '%NAME%' (case-insensitive). No id lookup needed first."
+  issuer_name:
+    column: issuer_name
+    operators: [like, eq, in]
+    suggestable: true
+    entity_name: true
+    case_insensitive: true
+    description: "Filter by issuer/company name — op 'like' with '%NAME%'. No id lookup needed."
+  deal_size:
+    column: deal_size
+    operators: [gt, gte, lt, lte, between, eq]
+    description: "Deal-size threshold. Pair with product (and note DCM is not currency-scoped here)."
+  sector:
+    column: sector
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Issuer sector — a CLOSED list of stored labels, so a colloquial word is not
+      a value. 'Oil & Gas' is NOT filed under 'Energy': an "energy deals" ask
+      should use 'in' with every sector value that qualifies, and the answer must
+      state which ones were included.
+  use_of_proceeds:
+    column: use_of_proceeds
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Use of proceeds. Stored spellings differ from the spoken form: M&A is
+      stored as 'M & A' WITH SPACES, so like '%M&A%' matches NOTHING — use
+      like '%M & A%' or eq 'M & A'. Refinancing is split across BOTH
+      'Refinance' and 'Debt Repayment' — use 'in' with both values or the count
+      is short, and say which values the answer covered.
+  deal_status:
+    column: deal_status
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Deal execution status. CASE-VARIANT DUPLICATES EXIST ('Open' vs 'OPEN'), so
+      always rely on case-insensitive matching and never on a single exact
+      casing; when grouping by status, merge the variants before reporting.
+  offering_type:
+    column: offering_type
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: "ECM. Offering type (IPO, FO/follow-on, Rights). Match 'like' when the user's word may be an abbreviation."
+  equity_type:
+    column: equity_type
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM. Equity instrument CLASS. This is where class words land: 'common
+      stock', 'common shares', 'convertible', 'preferred'. The stored label
+      varies ('Common Stock' vs 'Common Shares'), so match the CLASS WORD with
+      like ('%COMMON%', '%CONVERT%') — never equality on the user's phrasing.
+  execution_status:
+    column: execution_status
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: "ECM. Execution status."
+  deal_region:
+    column: deal_region
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM. Deal-level region (NAM/EMEA/APAC). NULL on DCM. A NOT-region predicate
+      also drops NULL-region rows — use is_null to count them and say how many
+      were excluded.
+  settlement_currency:
+    column: settlement_currency
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    case_insensitive: true
+    description: "Settlement currency."
+  ticker:
+    column: ticker
+    operators: [eq, ne, in, not_in, like]
+    case_insensitive: true
+    description: "Filter by issuer ticker."
+  first_priced:
+    column: first_priced
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: "Earliest pricing timestamp. Use for 'priced from' bounds."
+  last_priced:
+    column: last_priced
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: "Latest pricing timestamp (default deal date field). Trailing windows need BOTH bounds (gte start, lt tomorrow-midnight)."
+
+unsupported_intents:
+  announced_date:
+    patterns: ["announced", "announcement date", "launch date", "when was it launched", "created date"]
+    reason: >-
+      Only pricing (first_priced/last_priced) and settlement dates exist on the
+      deal. There is no announcement, launch or creation date.
+    user_message: >-
+      Announcement/launch dates aren't tracked — the deal carries pricing and
+      settlement dates only. I can show first/last priced instead; would that
+      work?
+  deal_fees:
+    patterns: ["fees", "gross spread", "underwriting fee", "economics"]
+    reason: No fee or economics columns are exposed on the deal view.
+    user_message: >-
+      Fee economics aren't available. I can show deal sizes, tranche sizes and
+      order demand instead.
+
+usage_notes:
+  - Always set a product filter ('ECM' for equity, 'DCM' for debt).
+  - One row per deal — deal listings need no deduplication and no aggregation of
+    tranche fields. If you need a tranche/order attribute, switch objects.
+  - DCM deal-size money is not currency-scoped on this object; for currency
+    totals use ecm_dcm_tranche.total_tranche_size grouped by currency.
+  - Trailing windows need BOTH bounds (gte start AND lt tomorrow-midnight) so
+    future-dated pricings are excluded and today's pricings are not.
+  - EVERY ranking or paged request ends its 'order' with a UNIQUE key (deal_id
+    here). Without one, tied rows reshuffle between turns and paged listings
+    repeat or drop rows.
+  - Ids (deal_id, gfcid) are TEXT — quote them and keep leading zeros.
+
+examples:
+  - question: List energy-sector deals priced in 2025 (ECM)
+    request:
+      source: ecm_dcm_deal
+      metric: deal_count
+      dimensions: [deal_id, deal_name, issuer_name, sector, deal_status]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        # 'Oil & Gas' is a separate stored value from 'Energy' — include both and
+        # say so in the answer, or the count is short.
+        - {field: sector, op: in, value: ["Energy", "Oil & Gas"]}
+        - {field: last_priced, op: gte, value: "2025-01-01"}
+        - {field: last_priced, op: lt, value: "2026-01-01"}
+      order: [{field: last_priced, direction: desc}, {field: deal_id, direction: asc}]
+  - question: Top 10 DCM deals by size in 2024
+    request:
+      source: ecm_dcm_deal
+      metric: total_deal_size
+      dimensions: [deal_id, deal_name, issuer_name]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        - {field: last_priced, op: gte, value: "2024-01-01"}
+        - {field: last_priced, op: lt, value: "2025-01-01"}
+      order: [{field: total_deal_size, direction: desc}, {field: deal_id, direction: asc}]
+      limit: 10
+  - question: Multi-currency DCM deals in 2025
+    request:
+      source: ecm_dcm_deal
+      metric: currency_count
+      dimensions: [deal_id, deal_name, currencies]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        - {field: last_priced, op: gte, value: "2025-01-01"}
+        - {field: last_priced, op: lt, value: "2026-01-01"}
+      having: [{metric: currency_count, op: gt, value: 1}]
+      order: [{field: currency_count, direction: desc}, {field: deal_id, direction: asc}]
+  - question: Convertible deals priced in the last 12 months (ECM)
+    request:
+      source: ecm_dcm_deal
+      metric: deal_count
+      dimensions: [deal_id, deal_name, issuer_name, equity_type, deal_size]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        # Class word matched with 'like' — the stored label varies.
+        - {field: equity_type, op: like, value: "%CONVERT%"}
+        - {field: last_priced, op: gte, value: "REPLACE_WITH_WINDOW_START"}
+        - {field: last_priced, op: lt, value: "REPLACE_WITH_TOMORROW_MIDNIGHT"}
+      order: [{field: last_priced, direction: desc}, {field: deal_id, direction: asc}]

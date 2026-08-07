@@ -1,0 +1,56 @@
+# HARDENED 2026-08-07 — base transcribed from screenshot, then edited.
+# Changes are listed in CHANGES-APPLIED.md.
+# ---------------------------------------------------------------------------
+# Template reference (from the file's own comment header):
+#   - name: "my-skill"            # (required) must match the directory name under app/skills/
+#     display_name: "My Custom Skill"
+#     description: >              # what this skill does; helps agents understand when/how to use it
+#     tools:
+#       - name: my_mcp_tool       # references a tool from tools.yaml by name
+#         tool_filter: ["search", "lookup"]   # restricts which tools of that toolset the skill can use
+#     tags: ["demo", "processing"]
+#     metadata: {}
+#   MCP connections are lazy — no extra latency at bootstrap.
+# ---------------------------------------------------------------------------
+
+skills:
+  - name: "ontology-text-to-sql"
+    display_name: "Ontology Text-to-SQL"
+    description: >
+      Generic workflow for the text-to-SQL MCP with no ontology knowledge
+      assumed: always discover the governed business terms first, never invent
+      field names, never write raw SQL, submit structured BQS requests, and
+      surface governance rejections clearly. For ECM/DCM questions load
+      `text2sql-ecm-dcm` instead — it is self-contained and already includes
+      this contract.
+    tools:
+      - name: text_to_sql_mcp
+    tags:
+      - "text-to-sql"
+      - "ontology"
+      - "mcp"
+    metadata: {}
+
+  - name: "text2sql-ecm-dcm"
+    display_name: "ECM/DCM Deal Analysis"
+    description: >
+      LOAD FIRST for any ECM/DCM data question — REQUIRED to answer correctly.
+      SELF-CONTAINED: it includes the full discover→run contract, so it does not
+      depend on any other skill being loaded. Maps business language onto the
+      FOUR governed grain-aligned MCP objects (deal / tranche / order / entity):
+      which object answers which ask (routing by grain), which
+      metric/dimension/filter and computed broker filter (+negate) to use,
+      product-scoping and share-vs-money unit rules, the resolved B&D and
+      sole-managed fields, entity-name-vs-broker routing, the stored-value traps
+      (1x1, 'M & A', 'Oil & Gas', '10-YEAR', 'SEC Registered(Public)', US vs
+      '%US%'), and the house answer style. Load it before calling run_bqs_query.
+    tools:
+      - name: text_to_sql_mcp
+    tags:
+      - "text-to-sql"
+      - "ontology"
+      - "ecm"
+      - "dcm"
+      - "capital-markets"
+    metadata:
+      ontology_version: "2"

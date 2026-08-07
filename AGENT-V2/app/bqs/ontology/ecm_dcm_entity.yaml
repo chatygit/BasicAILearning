@@ -1,0 +1,177 @@
+# ---------------------------------------------------------------------------
+# HARDENED 2026-08-07 — base transcribed from screenshots, then edited to apply
+# the domain knowledge earned in v1 production/QA. Every change is listed in
+# CHANGES-APPLIED.md. Verify column names against the physical view before use.
+# ---------------------------------------------------------------------------
+# Governed ontology — ECM/DCM ENTITY object (name → id resolution).
+#
+# Grain: ONE row per named entity (ENTITY_TYPE + PRODUCT + ENTITY_ID). Answers
+# "which investor/issuer/deal did you mean?" — resolves a name to an id and
+# ranks candidates by activity so dormant/test entities sink.
+#
+# Physical source: DGSTREAM.VW_ENTITY_SEARCH (UNION ALL of INVESTOR / ISSUER /
+# DEAL rows) via the Starburst catalog dataglobe_oraas.dgstream. This is a
+# SQL-backed replacement for the old zen-API entity path FOR ECM/DCM.
+#
+# ENTITLEMENT: the request-level product filter injected by the entitlement gate
+# scopes resolution to the caller's entitled product(s) too, so name lookups
+# never leak cross-product entity names/counts to single-product users.
+#
+# RANKING CONTRACT: ONE request — contains-match the name, order by
+# entity_activity_count desc, last_active desc, entity_id asc, limit 10. Choose
+# the exact match FROM THE RETURNED ROWS rather than spending a second
+# round-trip probing for it. Always return entity_id (a candidate without an id
+# is useless). context_value_1/2 carry the disambiguation enrichment
+# (investor: category/region; issuer: sector/ticker; deal: status/issuer).
+# ---------------------------------------------------------------------------
+source: ecm_dcm_entity
+version: "2"
+dialect: trino
+
+connection:
+  catalog: dataglobe_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: dataglobe_oraas.dgstream.vw_entity_search
+
+grain: [entity_type, product, entity_id]
+
+max_limit: 50
+query_timeout_seconds: 30
+
+how_to_use:
+  - "USE THIS OBJECT only when you need ONE entity, or the user must pick between
+     candidates. A metric/list ask that merely NAMES an entity does NOT come here
+     — filter the name inline on the deal/tranche/order object instead (fewest
+     hops). Resolution runs BEFORE the user's real question, so every hop spent
+     here is paid twice."
+  - "Set 'entity_type' to scope the search: 'INVESTOR', 'ISSUER' or 'DEAL'. Set
+     'product' ('ECM'/'DCM') — entitlement also scopes this automatically."
+  - "ONE REQUEST, NOT TWO. Use op 'like' with '%NAME%' (case-insensitive) and
+     limit 10. Do NOT probe with op 'eq' first: users type partial names
+     ('blackrock' never equals 'BLACKROCK FINANCIAL MGMT (NY)'), so the exact
+     tier misses by construction and the fallback becomes the common path. If an
+     exact match exists it comes back INSIDE these rows — recognise it there and
+     use it. Reserve op 'eq' for a full legal name the user clearly typed in
+     full, or an id."
+  - "Rank with order: entity_activity_count desc, last_active desc, entity_id asc
+     (the unique tiebreaker keeps candidate lists stable between turns)."
+  - "Every candidate carries 'entity_id' — return it. Show
+     'entity_activity_count', 'last_active' and context_value_1/2 so the user can
+     pick a meaningful option. LABEL the context columns for the entity_type you
+     queried — they are generic columns with type-dependent meaning (investor:
+     Category / Region; issuer: Sector / Ticker; deal: Status / Issuer). Never
+     render them as 'Context 1' / 'Context 2'."
+  - "MISSPELLINGS: matching is contains-based, so a genuine typo ('blakrock')
+     cannot match anything. Do not loop trying variants. Retry ONCE on the
+     longest distinctive fragment you are confident of, then ask the user to
+     confirm the spelling and offer the closest active names you did find."
+  - "Bare umbrella names (blackrock, fidelity) mean the whole family — return the
+     family grouped, with ids, and offer the per-entity breakdown; do not force a
+     single pick."
+  - "Bank/broker names are NOT entities — they are syndicate members, and they
+     resolve on ecm_dcm_tranche. Rating-agency names (Moody's, S&P, Fitch) are
+     never entities either."
+  - "A name or row the user picked from a table already shown is ALREADY
+     RESOLVED — never resolve it again later in the session."
+
+# NOTE TO THE VIEW OWNER: v1 achieved exact-then-contains tiering in a SINGLE
+# query using is_exact/is_sub flags with MAX(...) OVER () gates. A MATCH_RANK
+# column on VW_ENTITY_SEARCH (0 = exact, 1 = prefix, 2 = contains) would restore
+# that behaviour here as a plain 'order' field — one hop, deterministic.
+
+# ------------------------------- METRICS -----------------------------------
+metrics:
+  entity_count:
+    column: entity_id
+    aggregation: COUNT_DISTINCT
+    description: Number of distinct matched entities. Use to report "found N candidates".
+  total_activity:
+    column: entity_activity_count
+    aggregation: SUM
+    numeric: true
+    description: Total activity (deal/tranche count) across matched entities.
+  max_activity:
+    column: entity_activity_count
+    aggregation: MAX
+    numeric: true
+    description: Highest single-entity activity count.
+  row_count:
+    column: entity_id
+    aggregation: COUNT
+    description: Total matched rows (equals entity_count at this grain).
+
+# ------------------------------ DIMENSIONS ---------------------------------
+dimensions:
+  entity_type: {column: entity_type, description: "INVESTOR / ISSUER / DEAL."}
+  product: {column: product, description: "Product — 'ECM' or 'DCM'."}
+  entity_name: {column: entity_name, description: "Entity name (display). NOT unique across ids."}
+  entity_id: {column: entity_id, description: "Resolved entity id (GP id / GFCID / DEAL_ID). TEXT — quote it, leading zeros matter. ALWAYS project it."}
+  entity_activity_count: {column: entity_activity_count, description: "Activity: deal count (investor/issuer) or tranche count (deal). The ranking signal — dormant/test entities sink."}
+  last_active: {column: last_active, description: "Most recent pricing/activity timestamp."}
+  context_value_1: {column: context_value_1, description: "TYPE-DEPENDENT — investor: category · issuer: sector · deal: status. Label the column for the type you queried."}
+  context_value_2: {column: context_value_2, description: "TYPE-DEPENDENT — investor: region · issuer: ticker · deal: issuer name. Label the column for the type you queried."}
+
+# -------------------------------- FILTERS ----------------------------------
+filters:
+  entity_type:
+    column: entity_type
+    operators: [eq, in]
+    suggestable: true
+    values: ["INVESTOR", "ISSUER", "DEAL"]
+    description: "Scope the search to INVESTOR, ISSUER or DEAL. Always set it."
+  product:
+    column: product
+    operators: [eq, in]
+    suggestable: true
+    values: ["ECM", "DCM"]
+    description: "Product scope — 'ECM' or 'DCM' (also enforced by entitlement). Always set it."
+  entity_name:
+    column: entity_name
+    operators: [like, eq, in]
+    suggestable: true
+    entity_name: true
+    case_insensitive: true
+    description: >-
+      Search name. Default to op 'like' with '%NAME%' (case-insensitive) — ONE
+      request. Use op 'eq' only for a full legal name the user typed in full.
+  entity_id:
+    column: entity_id
+    operators: [eq, ne, in, not_in]
+    description: "Filter by a known entity id (TEXT — quote it). An id needs no resolution at all."
+
+usage_notes:
+  - Resolve only when you need one entity, or the user must pick — otherwise
+    filter the name inline on the data object (fewest hops).
+  - ONE request: contains-match, ranked, limit 10. Do not probe with eq first.
+  - Always return entity_id; order by entity_activity_count desc, last_active
+    desc, entity_id asc.
+  - Label context_value_1/2 according to the entity_type queried.
+  - Entitlement scopes resolution to the caller's entitled product(s).
+  - Report the FOUND count honestly — "I found 3 matches" when three came back,
+    never "here are the top 10".
+
+examples:
+  - question: Resolve the investor "blackrock" (ECM)
+    request:
+      source: ecm_dcm_entity
+      metric: max_activity
+      dimensions: [entity_name, entity_id, entity_activity_count, last_active, context_value_1, context_value_2]
+      filters:
+        - {field: entity_type, op: eq, value: INVESTOR}
+        - {field: product, op: eq, value: ECM}
+        - {field: entity_name, op: like, value: "%BLACKROCK%"}
+      order: [{field: entity_activity_count, direction: desc}, {field: last_active, direction: desc}, {field: entity_id, direction: asc}]
+      limit: 10
+  - question: Resolve the issuer "apple" (ECM)
+    request:
+      source: ecm_dcm_entity
+      metric: max_activity
+      dimensions: [entity_name, entity_id, entity_activity_count, last_active, context_value_1, context_value_2]
+      filters:
+        - {field: entity_type, op: eq, value: ISSUER}
+        - {field: product, op: eq, value: ECM}
+        - {field: entity_name, op: like, value: "%APPLE%"}
+      order: [{field: entity_activity_count, direction: desc}, {field: last_active, direction: desc}, {field: entity_id, direction: asc}]
+      limit: 10

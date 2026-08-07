@@ -7,3 +7,6 @@ app/bqs/planner.py — how metrics/dimensions/filters resolve into a plan (and w
 app/bqs/entity/zen_entity_search.py — how names resolve today; this is where an entity dimension would plug in.
 adk/config/tools.yaml — the exact signatures of discover_business_terms and run_bqs_query.
 Optional but useful: sql_validator.py (does it carry rules like our 55?) and formatter.py (does it own presentation, or does the agent?).
+
+grep -rn "requires_filters\|suggestable\|list_count" app/ --include=*.py
+discover_business_terms
