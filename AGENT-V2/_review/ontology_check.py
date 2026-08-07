@@ -606,9 +606,29 @@ PLANNER = ROOT / "app" / "bqs" / "planner.py"
 MODELS = ROOT / "app" / "bqs" / "models.py"
 BUILDER = ROOT / "app" / "bqs" / "sql_builder.py"
 SCOPE_TEST = ROOT / "tests" / "test_entitlement_scope.py"
+SOEID_MW = ROOT / "app" / "middleware" / "soeid_middleware.py"
+SOEID_TEST = ROOT / "tests" / "test_soeid_resolution.py"
 
-for p in [MCPSERVER, PLANNER, MODELS, BUILDER, SCOPE_TEST]:
+for p in [MCPSERVER, PLANNER, MODELS, BUILDER, SCOPE_TEST, SOEID_MW, SOEID_TEST]:
     check(p.exists(), f"[python] {p.relative_to(ROOT)} is missing")
+
+if SOEID_MW.exists():
+    src = text(SOEID_MW)
+    # QA sent no identity header at all; the nl2sql channel passes ?user_id=.
+    check("request.query_params.get(" in src,
+          "[python] soeid_middleware.py: query-param identity resolution is gone "
+          "— a caller reaching /mcp?user_id=<soeid> resolves to an empty SOEID "
+          "and the entitlement gate denies with missing_soeid")
+    check("CANDIDATE_ID_QUERY_PARAMS" in src,
+          "[python] soeid_middleware.py: CANDIDATE_ID_QUERY_PARAMS is gone")
+    # Headers stay the trusted channel; the query param is only the fallback.
+    check(src.index("CANDIDATE_ID_HEADERS:") < src.index("CANDIDATE_ID_QUERY_PARAMS:"),
+          "[python] soeid_middleware.py: query params are now checked BEFORE "
+          "headers — a caller could override the gateway-set identity header")
+    for alias in ("x-user-id", "x-citiportal-loginid", "x-citi-soeid", "x-soeid",
+                  "x-authenticated-userid", "x-forwarded-user", "x-remote-user"):
+        check(f'"{alias}"' in src,
+              f"[python] soeid_middleware.py: lost header alias {alias}")
 
 if MCPSERVER.exists():
     src = text(MCPSERVER)
@@ -734,6 +754,13 @@ if SCOPE_TEST.exists():
                         capture_output=True, text=True).returncode
     check(rc == 0, "[python] entitlement_scope_test.py FAILED — run it directly "
                    "to see which case regressed")
+
+if SOEID_TEST.exists():
+    import subprocess
+    rc = subprocess.run([sys.executable, str(SOEID_TEST)],
+                        capture_output=True, text=True).returncode
+    check(rc == 0, "[python] test_soeid_resolution.py FAILED — run it directly "
+                   "to see which identity case regressed")
 
 # ---------------------------------------------------------------------------
 print(f"\n{passes} checks passed, {len(failures)} failed\n")

@@ -1,5 +1,3 @@
-# HARDENED 2026-08-07 — base transcribed from screenshot, then edited.
-# Changes are listed in CHANGES-APPLIED.md.
 # ---------------------------------------------------------------------------
 # Template reference (from the file's own comment header):
 #   - name: "my-skill"            # (required) must match the directory name under app/skills/

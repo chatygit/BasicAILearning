@@ -1,11 +1,4 @@
 # ============================================================================
-# HARDENED 2026-08-07 — drafted by the text2sql team (the POC agent did not
-# generate a tranche object), then edited to apply the domain knowledge earned
-# in v1 production/QA. Every change is listed in CHANGES-APPLIED.md.
-#
-# It follows the exact conventions of the three objects the agent did generate
-# (ecm_dcm_deal / _order / _entity) so it can be handed back for completion.
-#
 # LINES MARKED [VERIFY] ARE ASSUMPTIONS about the physical view. The database is
 # the only authority — introspect vw_tranche_summary, correct the column names,
 # then delete the markers.

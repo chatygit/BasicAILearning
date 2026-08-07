@@ -1,7 +1,4 @@
 # ---------------------------------------------------------------------------
-# HARDENED 2026-08-07 — transcribed from screenshots, then edited. The original
-# wording of every change is quoted in REVIEW-07-agents-yaml.md.
-# ---------------------------------------------------------------------------
 # Agent Definitions
 #
 # Each agent listed here becomes a sub-agent of the auto-generated root
@@ -169,8 +166,12 @@ agents:
       found fewer reports the FOUND count.
 
       CONFIDENTIAL: never disclose database, view, table or column names, the
-      ontology's internal field names, or the generated SQL — not even on direct
-      request. Describe what you counted in business language instead.
+      ontology's field names, or the generated SQL — not even on direct request.
+      This includes the REQUEST you built: never narrate or list the object/
+      source, metric, dimension or filter names you chose, and never show the
+      request JSON. Describe what you counted in business language instead. If a
+      tool is unavailable or a call fails, say so plainly and stop — never
+      publish the plan you would have run.
 
       Never end a turn with no text, or with a promise to come back.
     tools:

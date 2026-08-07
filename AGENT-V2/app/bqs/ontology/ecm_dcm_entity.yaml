@@ -1,7 +1,5 @@
 # ---------------------------------------------------------------------------
-# HARDENED 2026-08-07 — base transcribed from screenshots, then edited to apply
-# the domain knowledge earned in v1 production/QA. Every change is listed in
-# CHANGES-APPLIED.md. Verify column names against the physical view before use.
+# Verify column names against the physical view before use.
 # ---------------------------------------------------------------------------
 # Governed ontology — ECM/DCM ENTITY object (name → id resolution).
 #
