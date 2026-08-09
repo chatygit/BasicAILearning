@@ -148,25 +148,22 @@ except Exception:  # noqa: BLE001
 _ALLOWED_PRODUCTS = ("ECM", "DCM")
 
 
-def _is_local_mode() -> bool:
-    """True when running in local developer mode (entitlement gate bypassed)."""
-    return (
-        os.getenv("RUN_MODE", "local").strip().lower() == "local"
-        or os.getenv("LOCALHOST_MODE", "").strip().lower() in {"1", "true", "yes", "y"}
-    )
-
-
 def _ecm_entitlement_enabled() -> bool:
     """Whether the ECM/DCM entitlement gate should run.
 
-    Bypassed in local mode so developers don't need the ECMO API. In non-local
-    mode it honors ECM_DCM_ENTITLEMENT_FEATURE_FLAG (default "true").
+    ONE switch: ECM_DCM_ENTITLEMENT_FEATURE_FLAG (default "true").
+
+    There is deliberately no local bypass. RUN_MODE defaults to "local", so the
+    old `if _is_local_mode(): return False` meant the gate was off unless a
+    deployment explicitly set RUN_MODE to something else — an environment
+    variable nobody had to remember, silently granting ECM+DCM. Worse, it made
+    local behave differently from every other environment, so an entitlement
+    bug could not be reproduced on a laptop.
+
+    A developer without ECMO API access sets ECM_DCM_ENTITLEMENT_FEATURE_FLAG
+    =false in their own .env — a decision they make explicitly, and one the
+    startup log announces, rather than one the default quietly makes for them.
     """
-    # FAIL-OPEN (undecided): RUN_MODE DEFAULTS TO "local", so the gate is OFF unless the
-    # deployment explicitly sets RUN_MODE to something non-local. This belongs
-    # on the promote checklist.
-    if _is_local_mode():
-        return False
     return os.getenv("ECM_DCM_ENTITLEMENT_FEATURE_FLAG", "true").strip().lower() == "true"
 
 
@@ -518,36 +515,28 @@ def _log_entitlement_config() -> None:
     Turning the gate on takes three settings that live in two places, and the
     partial states fail in opposite directions:
 
-        RUN_MODE                            unset => "local" => gate OFF
         ECM_DCM_ENTITLEMENT_FEATURE_FLAG    chart default "false" => gate OFF
         ECM_DCM_PRODUCT_ENTITLEMENT_URL     chart default ""  } REQUIRED when
         ECM_DCM_ENTITLEMENT_POLICY_ID       chart default ""  } the flag is on
 
     Flip the flag alone and `get_entitled_products` raises on the empty URL, so
     EVERY query is refused with `entitlement_misconfigured` — a total outage
-    from a one-word values-file edit. Leave the flag off in a deployed
-    environment and every caller is silently granted ECM+DCM. Neither state
-    announced itself anywhere before this line.
+    from a one-word values-file edit. Leave the flag off and every caller is
+    granted ECM+DCM. Neither state announced itself anywhere before this line.
+
+    RUN_MODE is NOT consulted: the gate behaves identically in every
+    environment, so a local run reproduces what QA does.
     """
     try:
-        run_mode = os.getenv("RUN_MODE", "local").strip().lower()
         flag = os.getenv("ECM_DCM_ENTITLEMENT_FEATURE_FLAG", "true").strip().lower()
         url = os.getenv("ECM_DCM_PRODUCT_ENTITLEMENT_URL", "").strip()
         policy = os.getenv("ECM_DCM_ENTITLEMENT_POLICY_ID", "").strip()
 
-        if _is_local_mode():
-            logger.info(
-                "ENTITLEMENT CONFIG: gate OFF — local mode (RUN_MODE=%s). Every "
-                "caller is treated as entitled to ECM+DCM.",
-                run_mode,
-            )
-            return
         if flag != "true":
             logger.warning(
-                "ENTITLEMENT CONFIG: gate OFF in a NON-LOCAL environment "
-                "(RUN_MODE=%s, ECM_DCM_ENTITLEMENT_FEATURE_FLAG=%s). Every caller "
-                "is granted ECM+DCM without a check.",
-                run_mode,
+                "ENTITLEMENT CONFIG: gate OFF "
+                "(ECM_DCM_ENTITLEMENT_FEATURE_FLAG=%s). Every caller is granted "
+                "ECM+DCM without a check.",
                 flag,
             )
             return
@@ -570,9 +559,7 @@ def _log_entitlement_config() -> None:
             )
             return
         logger.info(
-            "ENTITLEMENT CONFIG: gate ENFORCED (RUN_MODE=%s, url set, policy set, "
-            "cache ttl=%ss).",
-            run_mode,
+            "ENTITLEMENT CONFIG: gate ENFORCED (url set, policy set, cache ttl=%ss).",
             os.getenv("ECM_DCM_ENTITLEMENT_CACHE_TTL_SECONDS", "300"),
         )
     except Exception as exc:  # noqa: BLE001 - logging must never break startup

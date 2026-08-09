@@ -899,8 +899,11 @@ if MCPSERVER.exists():
     check('"value": entitled[0]' not in src,
           "[python] mcpserver.py: the OLD full-entitlement injection is back")
     # The three fail-open paths must stay visibly flagged until decided.
-    check(src.count("FAIL-OPEN (undecided)") == 3,
-          f"[python] mcpserver.py: expected 3 FAIL-OPEN markers, found "
+    # Was 3. The RUN_MODE one is DECIDED and gone: the entitlement gate no
+    # longer consults the run mode at all. Two remain, both on import/response
+    # failure paths.
+    check(src.count("FAIL-OPEN (undecided)") == 2,
+          f"[python] mcpserver.py: expected 2 FAIL-OPEN markers, found "
           f"{src.count('FAIL-OPEN (undecided)')} — the entitlement fail-open "
           f"paths must stay visible until they are decided")
     check("PREFER passing one name" in src,
@@ -1144,6 +1147,31 @@ if MCPSERVER.exists():
     check("_log_entitlement_config()" in src.split("def _log_entitlement_config", 1)[-1],
           "[deployment] mcpserver.py: _log_entitlement_config is defined but "
           "never called — it only helps if it runs at startup")
+
+    # The entitlement gate must behave IDENTICALLY in every environment. The old
+    # `if _is_local_mode(): return False` keyed the gate off RUN_MODE, which
+    # defaults to "local" — so the gate was off unless a deployment remembered
+    # to set a variable, and a laptop could never reproduce an entitlement bug.
+    check("def _is_local_mode" not in src,
+          "[security] mcpserver.py: the local-mode bypass is back — RUN_MODE "
+          "defaults to 'local', so this silently disables the entitlement gate "
+          "in any environment that does not override it")
+    # Inspect the EXECUTABLE body only — the docstring quotes the removed line
+    # to explain why it went, and a substring check trips over its own comment.
+    import ast as _ast
+    _fn = next((n for n in _ast.walk(_ast.parse(src))
+                if isinstance(n, _ast.FunctionDef)
+                and n.name == "_ecm_entitlement_enabled"), None)
+    _code = ""
+    if _fn is not None:
+        _stmts = [s for s in _fn.body
+                  if not (isinstance(s, _ast.Expr)
+                          and isinstance(getattr(s, "value", None), _ast.Constant)
+                          and isinstance(s.value.value, str))]
+        _code = "\n".join(_ast.get_source_segment(src, s) or "" for s in _stmts)
+    check(_fn is not None and "_is_local_mode" not in _code and "RUN_MODE" not in _code,
+          "[security] mcpserver.py: _ecm_entitlement_enabled consults the run "
+          "mode again — ECM_DCM_ENTITLEMENT_FEATURE_FLAG must be the only switch")
 
 if AUTH_MW.exists():
     src = text(AUTH_MW)

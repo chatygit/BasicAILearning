@@ -76,6 +76,22 @@ tools:
     # `_resolve_user_id` checks headers FIRST and only then `?user_id=`, so this
     # goes inert the moment a real header arrives. v1 needed none of this only
     # because it had a server-side default quietly answering as somebody else.
+    #
+    # LOCAL RUNS ALSO NEED AN ENTITLEMENT DECISION.
+    # The gate no longer has a local bypass — RUN_MODE is not consulted, so the
+    # entitlement path behaves the same on a laptop as it does in QA (which is
+    # the point: an entitlement bug you cannot reproduce locally is one you
+    # debug in QA). ECM_DCM_ENTITLEMENT_FEATURE_FLAG defaults to "true", so
+    # without ECMO API credentials every local query is refused with
+    # `entitlement_misconfigured`. Pick one, in YOUR .env:
+    #
+    #     ECM_DCM_ENTITLEMENT_FEATURE_FLAG=false     # no gate; grants ECM+DCM
+    #   or
+    #     ECM_DCM_PRODUCT_ENTITLEMENT_URL=...        # real gate against ECMO
+    #     ECM_DCM_ENTITLEMENT_POLICY_ID=...
+    #
+    # Either way the server says which one it took, at startup, on one line
+    # beginning `ENTITLEMENT CONFIG:`.
     mcp_server_url: "${TEXT_TO_SQL_MCP_URL}"
     # Pinned rather than auto-discovered: a governed read-only surface should not
     # silently grow when a new tool is added to the server.

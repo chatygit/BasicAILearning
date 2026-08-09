@@ -59,11 +59,41 @@ comments (`FAIL-OPEN (undecided)` markers on entitlement paths, a
 `DEPLOYMENT LANDMINE` note on `BQS_ENABLED_SOURCES`, and a `SECURITY` note on
 `verify=False` in `zen_entity_search.py`).
 
-**Three fail-open defaults still stack, and none is ours to decide alone:**
-`RUN_MODE` defaults to `local` (entitlement gate off), `DISABLE_COIN` defaults
-to `true` (no token validated), and an entitlement import failure runs the query
-unscoped. All three now say so in the log; none has been flipped, because
-flipping any of them without the matching deployment change is an outage.
+**The `RUN_MODE` bypass is gone.** `_ecm_entitlement_enabled()` no longer
+consults the run mode, so the gate behaves identically on a laptop and in QA.
+`ECM_DCM_ENTITLEMENT_FEATURE_FLAG` is the only switch. A local run therefore
+needs that flag set to `false` **or** real ECMO credentials — see the note in
+`adk/config/tools.yaml`. Gated by 2 checks, one of which fails if the helper
+returns at all.
+
+**Two fail-open defaults remain, and neither is ours to decide alone:**
+`DISABLE_COIN` defaults to `true` (no token validated), and an entitlement
+import failure runs the query unscoped. Both now say so in the log; neither has
+been flipped, because flipping either without the matching deployment change is
+an outage.
+
+**Three entitlement env vars are new and not in the chart.** All have working
+defaults, so nothing breaks without them; add them only if you want them tunable
+per environment. They belong inside the existing `{{- with .Values.ecmDcm }}`
+block in the deployment template, beside `ECM_DCM_ENTITLEMENT_POLICY_ID`:
+
+```yaml
+- name: ECM_DCM_ENTITLEMENT_CACHE_TTL_SECONDS
+  value: {{ .entitlementCacheTtlSeconds | default "300" | quote }}
+- name: ECM_DCM_ENTITLEMENT_STALE_MAX_AGE_SECONDS
+  value: {{ .entitlementStaleMaxAgeSeconds | default "3600" | quote }}
+- name: ECM_DCM_ENTITLEMENT_TIMEOUT_SECONDS
+  value: {{ .entitlementTimeoutSeconds | default "30" | quote }}
+```
+
+The stale bound is the one with a security argument: it caps how long a revoked
+user keeps their scope while the ECMO API is unreachable.
+
+**Startup now states the entitlement posture on one line.** The chart ships
+`entitlementFeatureFlag: "false"` with an empty `productEntitlementUrl` and
+`entitlementPolicyId`, so flipping the flag alone refuses **every** query with
+`entitlement_misconfigured`. That is now an ERROR at pod start rather than a
+discovery on the first user query.
 
 The config layer — the four ontologies, `SKILL.md`, `agents.yaml`,
 `tools.yaml`, `skills.yaml` — is substantially edited. See
