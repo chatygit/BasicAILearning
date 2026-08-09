@@ -169,12 +169,21 @@ def _entitlement_gate(request: dict) -> dict | None:
     if not _ENTITLEMENT_AVAILABLE:
         # FAIL-OPEN (undecided): import failure = NO GATE AT ALL. Every query runs
         # unscoped. Should this fail closed in non-local mode?
+        logger.warning(
+            "ENTITLEMENT: gate UNAVAILABLE (import failed) — query runs UNSCOPED"
+        )
         return None
+    soeid = _resolve_soeid()
     gate = perform_initial_entitlement_check(
-        soeid=_resolve_soeid(),
+        soeid=soeid,
         entitlement_enabled=_ecm_entitlement_enabled(),
     )
     if not gate.get("ok"):
+        logger.warning(
+            "ENTITLEMENT: DENIED soeid=%s reason=%s",
+            soeid or "<empty>",
+            gate.get("reason", "entitlement_denied"),
+        )
         return {
             "error": True,
             "code": gate.get("reason", "entitlement_denied"),
@@ -185,6 +194,12 @@ def _entitlement_gate(request: dict) -> dict | None:
     entitled = [p for p in _ALLOWED_PRODUCTS if p in set(gate.get("entitled_products") or [])]
     if not entitled:
         # FAIL-OPEN (undecided): gate said ok but no products - let the query proceed unscoped
+        logger.warning(
+            "ENTITLEMENT: soeid=%s passed the gate with NO entitled products "
+            "(raw=%s) — query runs UNSCOPED",
+            soeid or "<empty>",
+            gate.get("entitled_products"),
+        )
         return None
 
     # Products the user explicitly asked for (via any product filter).
@@ -201,6 +216,13 @@ def _entitlement_gate(request: dict) -> dict | None:
 
     if requested and not any(p in entitled for p in requested):
         blocked = ", ".join(requested)
+        logger.warning(
+            "ENTITLEMENT: DENIED soeid=%s requested=%s entitled=%s "
+            "reason=product_not_entitled",
+            soeid or "<empty>",
+            requested,
+            entitled,
+        )
         return {
             "error": True,
             "code": "product_not_entitled",
@@ -235,6 +257,21 @@ def _entitlement_gate(request: dict) -> dict | None:
     else:
         filters.append({"field": "product", "op": "in", "value": scope})
     request["filters"] = filters
+    # The success path used to be silent, so nothing in the logs said which
+    # products a caller was entitled to or what scope the gate injected — you
+    # could only infer it from the `product` predicate in the generated SQL.
+    # `agent_scoped=False` means the agent set NO product filter and the gate
+    # chose for it; with two entitled products that also silently satisfies
+    # `requires_filters: [product]`, so those lines are the ones to grep when a
+    # size/allocation total looks like it mixed ECM shares with DCM money.
+    logger.info(
+        "ENTITLEMENT: soeid=%s entitled=%s requested=%s scope=%s agent_scoped=%s",
+        soeid or "<empty>",
+        entitled,
+        requested or [],
+        scope,
+        bool(requested),
+    )
     return None
 
 

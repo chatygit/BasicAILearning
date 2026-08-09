@@ -639,9 +639,37 @@ BUILDER = ROOT / "app" / "bqs" / "sql_builder.py"
 SCOPE_TEST = ROOT / "tests" / "test_entitlement_scope.py"
 SOEID_MW = ROOT / "app" / "middleware" / "soeid_middleware.py"
 SOEID_TEST = ROOT / "tests" / "test_soeid_resolution.py"
+SECRETS = ROOT / "app" / "utils" / "cyberark_integration" / "secrets.py"
+SECRETS_TEST = ROOT / "tests" / "test_cyberark_cache.py"
 
-for p in [MCPSERVER, PLANNER, MODELS, BUILDER, SCOPE_TEST, SOEID_MW, SOEID_TEST]:
+for p in [MCPSERVER, PLANNER, MODELS, BUILDER, SCOPE_TEST, SOEID_MW, SOEID_TEST,
+          SECRETS, SECRETS_TEST]:
     check(p.exists(), f"[python] {p.relative_to(ROOT)} is missing")
+
+if SECRETS.exists():
+    src = text(SECRETS)
+    # Every CyberArk resolve spawns a bash script that boots a ~2 GB JVM
+    # SecretAgent — measured 5.5s and 7.7s on two consecutive queries, paid
+    # inside the executor's execute= phase on EVERY query.
+    check("_SECRET_CACHE" in src and "_cached_secret(" in src,
+          "[latency] secrets.py: the per-FID secret cache is gone — every query "
+          "boots a fresh SecretAgent JVM (5-8s) to fetch a credential that never "
+          "changed")
+    # Assert the CALL SITE, not the definition — leaving `def _fid_lock` behind
+    # while dropping `with _fid_lock(...)` would satisfy a bare name check and
+    # silently restore the stampede.
+    check("with _fid_lock(" in src,
+          "[latency] secrets.py: the per-FID lock is no longer taken around the "
+          "fetch — N concurrent cold callers will each boot their own JVM")
+    check("invalidate_secret_cache" in src,
+          "[security] secrets.py: invalidate_secret_cache is gone — a rotated "
+          "credential would then stay stale for the whole TTL with no way out")
+    check("if secret and ttl:" in src,
+          "[security] secrets.py: the cache no longer guards on a truthy secret "
+          "— a FAILED lookup must never be cached, or one transient failure is "
+          "pinned for the entire TTL")
+    check("CYBERARK_CACHE_TTL_SECONDS" in src,
+          "[latency] secrets.py: the TTL is no longer configurable/disableable")
 
 if SOEID_MW.exists():
     src = text(SOEID_MW)
@@ -837,6 +865,13 @@ if SOEID_TEST.exists():
                         capture_output=True, text=True).returncode
     check(rc == 0, "[python] test_soeid_resolution.py FAILED — run it directly "
                    "to see which identity case regressed")
+
+if SECRETS_TEST.exists():
+    import subprocess
+    rc = subprocess.run([sys.executable, str(SECRETS_TEST)],
+                        capture_output=True, text=True).returncode
+    check(rc == 0, "[python] test_cyberark_cache.py FAILED — run it directly to "
+                   "see which cache guarantee regressed")
 
 # ---------------------------------------------------------------------------
 print(f"\n{passes} checks passed, {len(failures)} failed\n")
