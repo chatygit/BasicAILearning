@@ -1173,6 +1173,19 @@ if MCPSERVER.exists():
           "[security] mcpserver.py: _ecm_entitlement_enabled consults the run "
           "mode again — ECM_DCM_ENTITLEMENT_FEATURE_FLAG must be the only switch")
 
+    # Fail on the FIRST tool the agent calls, not the last. Gating only
+    # run_bqs_query meant an unentitled caller burned transfer -> load_skill ->
+    # discover -> build-a-request before hearing "no".
+    _disc = src.split("def discover_business_terms", 1)[-1].split("\n    @", 1)[0]
+    check("_entitlement_preflight()" in _disc,
+          "[latency] mcpserver.py: discover_business_terms no longer runs the "
+          "entitlement preflight — a refusal costs four LLM turns instead of one, "
+          "and run_bqs_query's check loses its warm cache")
+    check("_require_caller_soeid" in src.split("def _entitlement_preflight", 1)[-1]
+          .split("\ndef ", 1)[0],
+          "[security] mcpserver.py: _entitlement_preflight skips the identity "
+          "check — discover would answer a caller with no SOEID")
+
 if AUTH_MW.exists():
     src = text(AUTH_MW)
     check("DISABLE_COIN" in src and 'strip().lower()' in src,

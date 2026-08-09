@@ -233,19 +233,24 @@ def _require_caller_soeid() -> dict | None:
     }
 
 
-def _entitlement_gate(request: dict) -> dict | None:
-    """Enforce ECM/DCM entitlement on a BQS request (mutates it in place).
+def _entitlement_preflight() -> tuple[dict | None, list[str]]:
+    """Identity + entitlement, without touching a BQS request.
 
-    Returns None when the request is allowed (and product-scoped to the caller's
-    entitled products); returns an agent-facing error dict when access is denied.
+    Returns (denial_or_None, entitled_products). Split out of
+    `_entitlement_gate` so the FIRST tool the agent calls can fail as early as
+    the last one: the checks are identical, only the product-filter injection is
+    specific to a query.
     """
+    denial = _require_caller_soeid()
+    if denial is not None:
+        return denial, []
     if not _ENTITLEMENT_AVAILABLE:
         # FAIL-OPEN (undecided): import failure = NO GATE AT ALL. Every query runs
         # unscoped. Should this fail closed in non-local mode?
         logger.warning(
             "ENTITLEMENT: gate UNAVAILABLE (import failed) — query runs UNSCOPED"
         )
-        return None
+        return None, []
     soeid = _resolve_soeid()
     gate = perform_initial_entitlement_check(
         soeid=soeid,
@@ -263,7 +268,7 @@ def _entitlement_gate(request: dict) -> dict | None:
             "message": gate.get(
                 "user_message", "Unable to verify your ECM/DCM entitlements."
             ),
-        }
+        }, []
     entitled = [p for p in _ALLOWED_PRODUCTS if p in set(gate.get("entitled_products") or [])]
     if not entitled:
         # FAIL-OPEN (undecided): gate said ok but no products - let the query proceed unscoped
@@ -273,6 +278,19 @@ def _entitlement_gate(request: dict) -> dict | None:
             soeid or "<empty>",
             gate.get("entitled_products"),
         )
+    return None, entitled
+
+
+def _entitlement_gate(request: dict) -> dict | None:
+    """Enforce ECM/DCM entitlement on a BQS request (mutates it in place).
+
+    Returns None when the request is allowed (and product-scoped to the caller's
+    entitled products); returns an agent-facing error dict when access is denied.
+    """
+    denial, entitled = _entitlement_preflight()
+    if denial is not None:
+        return denial
+    if not entitled:
         return None
 
     # Products the user explicitly asked for (via any product filter).
@@ -373,6 +391,19 @@ if _BQS_AVAILABLE:
                 'ecm_dcm_entity', and fetching all four costs four times the
                 context needed to answer one question.
         """
+        # Entitlement is checked HERE, on the first tool the agent calls, not
+        # only on run_bqs_query. An unentitled or unidentified caller used to
+        # get all the way through transfer -> load_skill -> discover -> build a
+        # request -> run_bqs_query before hearing "no" — four LLM turns spent to
+        # produce a refusal we could have given on the first one. It also warms
+        # the entitlement cache, so the check inside run_bqs_query is a cache
+        # hit and costs nothing.
+        denial, _entitled = _entitlement_preflight()
+        if denial is not None:
+            logger.info(
+                "discover_business_terms: refused early (code=%s)", denial.get("code")
+            )
+            return denial
         logger.info("discover_business_terms: source=%s", source)
         return _get_bqs_service().discover(source)
 
