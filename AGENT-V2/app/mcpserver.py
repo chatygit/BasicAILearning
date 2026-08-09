@@ -147,17 +147,51 @@ def _ecm_entitlement_enabled() -> bool:
 
 
 def _resolve_soeid() -> str | None:
-    """Resolve caller SOEID: request header (via middleware) -> env -> local default."""
-    resolved = ""
-    if _ENTITLEMENT_AVAILABLE:
-        try:
-            resolved = (_get_soeid() or "").strip()
-        except Exception:  # noqa: BLE001
-            resolved = ""
-    resolved = resolved or os.getenv("MCP_CALLER_SOEID", "").strip()
-    if not resolved and _is_local_mode():
-        resolved = os.getenv("LOCAL_DEFAULT_SOEID", "sr37832").strip()
-    return resolved or None
+    """Resolve the caller SOEID from the REQUEST only — no env, no default.
+
+    Identity belongs to the caller. A server-side fallback attributes one
+    person's queries AND one person's entitlements to everybody who arrives
+    without a header, and it hides a broken identity chain behind an answer that
+    looks correct — which is how a local default (`sr37832`) ended up scoping
+    real query results. The middleware accepts the SOEID as `x-user-id` (plus
+    documented aliases) or as `?user_id=` on the MCP URL; if neither is present
+    the request has no identity and must be refused, in every environment.
+    """
+    if not _ENTITLEMENT_AVAILABLE:
+        return None
+    try:
+        return (_get_soeid() or "").strip() or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _require_caller_soeid() -> dict | None:
+    """Refuse a data request that carries no caller identity.
+
+    Returns None when a SOEID is present, otherwise an agent-facing error. This
+    runs BEFORE the entitlement gate and independently of
+    ECM_DCM_ENTITLEMENT_FEATURE_FLAG: turning entitlement enforcement off is a
+    decision about which products a known user may see, never a licence to run
+    as nobody.
+    """
+    if _resolve_soeid():
+        return None
+    logger.warning(
+        "ENTITLEMENT: refusing data request — no caller SOEID on the request "
+        "(expected an 'x-user-id' header or ?user_id= on the MCP URL)"
+    )
+    return {
+        "error": True,
+        "code": "missing_soeid",
+        "message": (
+            "No user identity was supplied with this request, so your ECM/DCM "
+            "entitlements cannot be checked and no data can be returned. The "
+            "calling application must send the user's SOEID as an 'x-user-id' "
+            "header (or ?user_id= on the MCP server URL). This is a client "
+            "configuration problem — rewording the question will not fix it, so "
+            "do not retry; report it to the user plainly."
+        ),
+    }
 
 
 def _entitlement_gate(request: dict) -> dict | None:
@@ -386,6 +420,11 @@ if _BQS_AVAILABLE:
             "order": order or [],
             "limit": limit,
         }
+        # Identity first: no caller SOEID, no data. Checked before the
+        # entitlement gate so it applies even when the gate is flagged off.
+        denial = _require_caller_soeid()
+        if denial is not None:
+            return denial
         # Entitlement gate: block unentitled callers and scope the query to the
         # caller's entitled ECM/DCM product(s) before any SQL is built/run.
         denial = _entitlement_gate(request)

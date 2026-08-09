@@ -172,7 +172,23 @@ agents:
       and 67 SECONDS, 44% of the whole answer. The count you state comes from
       the full result set, not the rows you print, so "list all the X" is fully
       answered by "189 deals — showing the top 50" with ids in the table for
-      drill-down. Print more only if the user asks for more rows.
+      drill-down. "LIST ALL" IS NOT A REQUEST FOR MORE ROWS: "list all", "show
+      all", "every X" describe the scope of the QUESTION (count them all), not
+      the size of the table — answer them with "189 deals — showing 1-50". The
+      cap lifts ONLY on a follow-up asking for more ROWS ("next 50", "the
+      rest").
+
+      ALWAYS NUMBERED, ALWAYS WITH IDS. Every table starts with a `#` column of
+      ABSOLUTE row numbers that CONTINUE across pages (1-50, then 51-100, never
+      1-50 twice). Every list the user is meant to CHOOSE from is NUMBERED, not
+      bulleted, and you close by inviting a number: "Reply with a number (or the
+      id)." A named entity is never shown by name alone — always name AND its id
+      (investors: the GP id/GPNUM; issuers/deals: GFCID or DEAL_ID), so when you
+      filter on a name also PROJECT its id in `dimensions` and render a numbered
+      table of name + id + metric. When you capped a listing, end with "Showing
+      1-50 of N — ask for the next 50", and on that follow-up continue from 51
+      and say so; never restart the numbering and never reprint seen rows.
+
       If the skill did not load, still: lead with the number and its UNIT
       ("USD 2.1bn", "3.0mm shares"), put data in a markdown table with ids
       present, keep pipe-delimited values (identifiers, syndicate lists) inside

@@ -758,6 +758,37 @@ for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
           f"8+ column table with pipe-list cells costs about twice 50 narrow "
           f"ones, and the budget is tokens, not rows")
 
+# PRESENTATION CONTRACT (user, 2026-08-09): a banker picks by NUMBER, and an
+# entity is only actionable with its id. The Blackrock answer listed 10 entity
+# names as BULLETS with no GP ids, so the only way to drill in was to retype a
+# name — and names are not unique.
+for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
+    body = text(path)
+    check(re.search(r"(?i)(choose|CHOOSE) from is NUMBERED", body),
+          f"[answer] {label}: lost the rule that CHOICE lists are numbered, not "
+          f"bulleted — the user has to retype an entity name to pick one")
+    check(re.search(r"(?i)reply with a number", body),
+          f"[answer] {label}: lost the 'reply with a number' invitation")
+    # Anchor on the RULE, not the token: "gpnum" already appears in the routing
+    # table, so a bare token check passes even with the rule deleted.
+    check(re.search(r"(?i)never shown by name alone", body),
+          f"[answer] {label}: lost the rule that an entity is never shown by "
+          f"name alone — a name is not a drill-down handle and is not unique; "
+          f"the GP id (GPNUM) / GFCID / DEAL_ID must sit beside it")
+    check(re.search(r"(?i)51.{0,6}100", body),
+          f"[answer] {label}: lost the continue-the-numbering-across-pages rule "
+          f"(1-50 then 51-100), so page 2 restarts at 1 and rows look duplicated")
+    # "List all the multi-currency deals" printed all 189 rows (9,828 tokens,
+    # 63s) because the cap said "print more only if the user explicitly asks" —
+    # and the model read the word "all" in the QUESTION as that request.
+    check(re.search(r'(?i)"?list all"? is not a request for more rows', body),
+          f"[latency] {label}: lost the carve-out that \"list all\"/\"show all\" "
+          f"describes the scope of the QUESTION, not the size of the table — "
+          f"without it the cap is silently lifted by the word 'all'")
+    check(re.search(r"(?i)ask for the next 50", body),
+          f"[answer] {label}: lost the explicit 'ask for the next 50' offer, so a "
+          f"capped listing looks like the whole answer")
+
 for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
     body = text(path)
     check(re.search(r"(?i)count.{0,120}unit.?free", body, re.S),
@@ -766,6 +797,30 @@ for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
 
 if MCPSERVER.exists():
     src = text(MCPSERVER)
+    # IDENTITY IS THE CALLER'S. A server-side SOEID fallback attributes one
+    # person's queries AND entitlements to every unidentified caller, and makes
+    # a broken identity chain look like a correct answer — a local default of
+    # sr37832 was scoping real results as late as 2026-08-09.
+    check('os.getenv("LOCAL_DEFAULT_SOEID"' not in src,
+          "[security] mcpserver.py: the LOCAL_DEFAULT_SOEID fallback is back — "
+          "an unidentified caller silently runs as somebody else")
+    check('os.getenv("MCP_CALLER_SOEID"' not in src,
+          "[security] mcpserver.py: the MCP_CALLER_SOEID env fallback is back — "
+          "identity must come from the request, not the environment")
+    check("def _require_caller_soeid" in src,
+          "[security] mcpserver.py: _require_caller_soeid is gone — a request "
+          "with no caller identity would be served")
+    check("denial = _require_caller_soeid()" in src,
+          "[security] mcpserver.py: run_bqs_query no longer calls "
+          "_require_caller_soeid, so the guard is dead code")
+    check('"code": "missing_soeid"' in src,
+          "[security] mcpserver.py: the missing_soeid refusal is gone")
+    if "denial = _require_caller_soeid()" in src and "denial = _entitlement_gate" in src:
+        check(src.index("denial = _require_caller_soeid()")
+              < src.index("denial = _entitlement_gate"),
+              "[security] mcpserver.py: the identity check now runs AFTER the "
+              "entitlement gate — it must run first, so it still applies when "
+              "ECM_DCM_ENTITLEMENT_FEATURE_FLAG is off")
     # Transport parity with the v1 nl2sql server, which builds its app as
     # mcp.http_app(middleware=[...]) with no stateless flag. Stateless mode
     # drops GET /mcp with a bare 405 before the MCP layer sees it, so a client
