@@ -1112,6 +1112,23 @@ if ENT_SVC.exists():
           "[latency] entitlement_service.py: the per-SOEID lock is not held around "
           "the fetch — a cold burst makes N API calls instead of one")
 
+    # This function decides what a person may see. Verified against QAT
+    # 2026-08-09: the shapes below are what the API actually returns, and a
+    # SOEID with no grant is correctly denied. Speculative branches (top-level
+    # arrays, gateway envelopes) were added on a hypothesis, disproved, and
+    # removed — every extra branch is another way to read a grant that was
+    # never issued, because _extract_products_from_clause matches ECM/DCM
+    # ANYWHERE in a string.
+    _parse = src.split("def _parse_entitlement_response", 1)[-1].split("\ndef ", 1)[0]
+    check("_parse_entitlement_response(" not in _parse,
+          "[security] entitlement_service.py: the response parser recurses into "
+          "nested envelopes — an unrecognised shape must DENY and log its shape, "
+          "not go hunting for an ECM/DCM token somewhere inside it")
+    check("Response shape:" in src,
+          "[diagnostics] entitlement_service.py: an empty product list no longer "
+          "logs the response SHAPE — nothing then distinguishes a real denial "
+          "from a parser miss, which are fixed by different teams")
+
 if ENT_CACHE_TEST.exists():
     import subprocess
     rc = subprocess.run([sys.executable, str(ENT_CACHE_TEST)],
@@ -1196,6 +1213,60 @@ if AUTH_MW.exists():
           "[security] auth_middleware.py: the startup warning is gone — an unset "
           "DISABLE_COIN means NO tool call is authenticated, and nothing in the "
           "logs would say so")
+
+# ---------------------------------------------------------------------------
+# Scope-aware undefined-name check.
+#
+# mcpserver.py cannot be imported here (fastmcp, uvicorn, mcp), so nothing in
+# this gate ever executed a line of it — py_compile only proves it PARSES. That
+# gap shipped a real NameError: splitting `_entitlement_gate` into a preflight
+# moved `soeid = _resolve_soeid()` into the new function while two log lines in
+# the old one still referenced it. It fired only on the success path, so a
+# caller WITHOUT entitlements never reached it and a caller WITH them got a 500.
+#
+# A flat "collect every assignment in the file" check does not catch this — a
+# name bound in ANY function looks defined in all of them. symtable gives the
+# real per-scope answer.
+# ---------------------------------------------------------------------------
+import builtins as _builtins
+import symtable as _symtable
+
+def _undefined_names(source: str, path: str):
+    st = _symtable.symtable(source, path, "exec")
+    module_names = {s.get_name() for s in st.get_symbols()}
+    found = []
+
+    def walk(tbl, enclosing, trail):
+        bound = {s.get_name() for s in tbl.get_symbols()
+                 if s.is_assigned() or s.is_parameter() or s.is_imported()}
+        for s in tbl.get_symbols():
+            name = s.get_name()
+            if not s.is_referenced():
+                continue
+            if name in bound or name in enclosing or name in module_names:
+                continue
+            if hasattr(_builtins, name) or name.startswith("__"):
+                continue
+            found.append((".".join(trail + [tbl.get_name()]), name))
+        for child in tbl.get_children():
+            walk(child, enclosing | bound, trail + [tbl.get_name()])
+
+    walk(st, set(), [])
+    return found
+
+for _py in sorted((ROOT / "app").rglob("*.py")):
+    if "__pycache__" in _py.parts:
+        continue
+    try:
+        _bad = _undefined_names(text(_py), str(_py))
+    except SyntaxError as _exc:
+        check(False, f"[python] {_py.relative_to(ROOT)} does not parse: {_exc}")
+        continue
+    check(not _bad,
+          f"[python] {_py.relative_to(ROOT)} references undefined name(s): "
+          + ", ".join(f"{scope}() -> {name!r}" for scope, name in _bad)
+          + " — this is a NameError at runtime, and these modules cannot be "
+            "imported by the gate so nothing else would catch it")
 
 # ---------------------------------------------------------------------------
 print(f"\n{passes} checks passed, {len(failures)} failed\n")

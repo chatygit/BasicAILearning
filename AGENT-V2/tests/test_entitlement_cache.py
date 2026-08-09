@@ -409,6 +409,56 @@ def test_clause_shaped_response_still_parsed():
     assert res["entitled_products"] == ["ECM"]
 
 
+# --------------------------------------------------------------------------
+# the parser must stay NARROW — it decides what a person may see
+# --------------------------------------------------------------------------
+
+def test_clause_list_shape_is_parsed():
+    global BEHAVIOUR
+    BEHAVIOUR = ("json", {"sqlClauses": [{"sqlClause": "PRODUCT = 'DCM'"}]})
+    assert check()["entitled_products"] == ["DCM"]
+
+
+def test_genuinely_empty_is_a_denial():
+    global BEHAVIOUR
+    # Observed for real against QAT 2026-08-09: a SOEID with no ECM/DCM grant.
+    # This must stay a denial no matter how forgiving the parser gets.
+    BEHAVIOUR = ("json", {"soeid": "bk42867", "clauses": []})
+    assert check()["reason"] == "no_ecm_dcm_entitlement"
+
+
+def test_unknown_envelope_is_a_denial_not_a_guess():
+    global BEHAVIOUR
+    # A shape we do not recognise must DENY and log its shape — never go
+    # hunting for an ECM/DCM token somewhere inside it.
+    BEHAVIOUR = ("json", {"result": {"entitledProducts": ["ECM"]}})
+    assert check()["reason"] == "no_ecm_dcm_entitlement", (
+        "the parser is digging into unrecognised envelopes — that is how a "
+        "grant gets read out of text that never granted anything"
+    )
+
+
+def test_top_level_array_is_a_denial_not_a_guess():
+    global BEHAVIOUR
+    BEHAVIOUR = ("json", ["PRODUCT IN ('ECM','DCM')"])
+    assert check()["reason"] == "no_ecm_dcm_entitlement"
+
+
+def test_unrelated_products_are_not_matched():
+    global BEHAVIOUR
+    BEHAVIOUR = ("json", {"products": ["FX", "RATES"]})
+    assert check()["reason"] == "no_ecm_dcm_entitlement"
+
+
+def test_shape_is_described_without_values():
+    shape = ent._describe_shape(
+        {"status": "OK", "data": [{"sqlClause": "PRODUCT = 'ECM'", "id": 7}]}
+    )
+    assert "status" in shape and "data" in shape
+    assert "OK" not in shape, "a value leaked into the shape description"
+    assert "ECM" not in shape, "a clause leaked into the shape description"
+
+
 def test_session_is_built_once():
     ent._get_session = _ORIG_GET_SESSION
     built = []
@@ -449,6 +499,12 @@ CASES = [
     ("missing soeid is refused", test_missing_soeid_is_refused),
     ("product_clause shape unchanged", test_product_clause_shape_is_unchanged),
     ("clause-shaped response parsed", test_clause_shaped_response_still_parsed),
+    ("clause-list shape is parsed", test_clause_list_shape_is_parsed),
+    ("genuinely empty is a denial", test_genuinely_empty_is_a_denial),
+    ("unknown envelope denies, no guessing", test_unknown_envelope_is_a_denial_not_a_guess),
+    ("top-level array denies, no guessing", test_top_level_array_is_a_denial_not_a_guess),
+    ("unrelated products not matched", test_unrelated_products_are_not_matched),
+    ("shape logged without values", test_shape_is_described_without_values),
     ("session is built once", test_session_is_built_once),
 ]
 

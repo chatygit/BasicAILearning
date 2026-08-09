@@ -213,6 +213,55 @@ def _extract_products_from_clause(clause: str) -> list[str]:
     return products
 
 
+def _extract_products_from_clause_list(clauses: Any) -> list[str]:
+    """Pull ECM/DCM out of a list of clauses, each a string or an object."""
+    if not isinstance(clauses, list):
+        return []
+    for item in clauses:
+        if isinstance(item, str):
+            products = _extract_products_from_clause(item)
+        elif isinstance(item, dict):
+            candidate_clause = (
+                item.get("sql_clause")
+                or item.get("sqlClause")
+                or item.get("clause")
+                or item.get("where_clause")
+                or item.get("whereClause")
+            )
+            products = _extract_products_from_clause(
+                candidate_clause if isinstance(candidate_clause, str) else ""
+            )
+        else:
+            products = []
+
+        if products:
+            return products
+    return []
+
+
+def _describe_shape(data: Any, depth: int = 0) -> str:
+    """Structure of a response WITHOUT its values — safe to log anywhere.
+
+    An empty product list is indistinguishable from a parse miss, and the parser
+    below recognises about ten key spellings. When it finds none of them the
+    useful question is 'what shape DID the API return', and the keys answer that
+    without putting entitlement data in the log.
+    """
+    if isinstance(data, dict):
+        if depth >= 2:
+            return "{…}"
+        inner = ", ".join(
+            f"{k}: {_describe_shape(v, depth + 1)}" for k, v in list(data.items())[:12]
+        )
+        return "{" + inner + "}"
+    if isinstance(data, list):
+        if depth >= 2:
+            return "[…]"
+        head = _describe_shape(data[0], depth + 1) if data else ""
+        return f"[{len(data)} x {head}]" if data else "[]"
+    return type(data).__name__
+
+
 def build_product_in_clause(products: list[str]) -> str:
     entitled = [p for p in _ALLOWED_PRODUCTS if p in set(products)]
     if not entitled:
@@ -291,6 +340,43 @@ def get_entitled_products(soeid: str) -> list[str]:
             f"ECM/DCM entitlement API returned an unparseable body: {exc}"
         ) from exc
 
+    products = _parse_entitlement_response(data)
+    if not products:
+        # An empty list and a parse miss look identical to the caller, and the
+        # difference decides whether you call the entitlements team or fix a
+        # key name here. Shape only — no values.
+        logger.warning(
+            "ECM/DCM entitlement API returned NO ECM/DCM products for soeid=%s. "
+            "Response shape: %s",
+            soeid,
+            _describe_shape(data),
+        )
+        if os.getenv("ECM_DCM_ENTITLEMENT_DEBUG_BODY", "").strip().lower() in {
+            "1", "true", "yes",
+        }:
+            logger.warning(
+                "ECM/DCM entitlement raw body (ECM_DCM_ENTITLEMENT_DEBUG_BODY): %s",
+                response.text[:2000],
+            )
+    return products
+
+
+def _parse_entitlement_response(data: Any) -> list[str]:
+    """Map an entitlement API response onto ['ECM'] / ['DCM'] / both.
+
+    Deliberately NARROW. This function decides what a person is allowed to see,
+    so every extra branch is another way to read a grant that was never issued —
+    `_extract_products_from_clause` regex-matches ECM/DCM anywhere in a string,
+    which is safe over a field the API means as a clause and unsafe over
+    arbitrary text. Only shapes this API is KNOWN to return are handled.
+
+    Verified against the QAT policy backend 2026-08-09: a SOEID with a grant
+    parses here; a SOEID without one returns nothing and is correctly denied.
+    Speculative handling for top-level arrays and gateway envelopes was tried
+    and removed once the API was observed working — when nothing parses, the
+    `Response shape:` warning in the caller says so, and the shape is the thing
+    that tells you whether to add a branch or call the entitlements team.
+    """
     if not isinstance(data, dict):
         return []
 
@@ -315,28 +401,7 @@ def get_entitled_products(soeid: str) -> list[str]:
         return _extract_products_from_clause(clause)
 
     clauses = data.get("sql_clauses") or data.get("sqlClauses") or data.get("clauses")
-    if isinstance(clauses, list):
-        for item in clauses:
-            if isinstance(item, str):
-                products = _extract_products_from_clause(item)
-            elif isinstance(item, dict):
-                candidate_clause = (
-                    item.get("sql_clause")
-                    or item.get("sqlClause")
-                    or item.get("clause")
-                    or item.get("where_clause")
-                    or item.get("whereClause")
-                )
-                products = _extract_products_from_clause(
-                    candidate_clause if isinstance(candidate_clause, str) else ""
-                )
-            else:
-                products = []
-
-            if products:
-                return products
-
-    return []
+    return _extract_products_from_clause_list(clauses)
 
 
 def _granted(soeid: str, products: List[str], source: str) -> Dict[str, Any]:

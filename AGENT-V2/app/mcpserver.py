@@ -292,6 +292,9 @@ def _entitlement_gate(request: dict) -> dict | None:
         return denial
     if not entitled:
         return None
+    # Read again for the log lines below. Cheap — it is a ContextVar get, not
+    # the entitlement call — and it keeps the preflight's return a 2-tuple.
+    soeid = _resolve_soeid()
 
     # Products the user explicitly asked for (via any product filter).
     requested: list[str] = []
