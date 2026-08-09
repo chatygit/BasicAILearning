@@ -1048,6 +1048,115 @@ if DISAMBIG_TEST.exists():
                    "no longer scoped like the query it explains")
 
 # ---------------------------------------------------------------------------
+# Entitlement service — it sits in front of EVERY query, so its cache is a
+# latency guarantee and its failure taxonomy is a correctness one.
+# ---------------------------------------------------------------------------
+ENT_SVC = ROOT / "app" / "services" / "entitlement_service.py"
+ENT_CACHE_TEST = ROOT / "tests" / "test_entitlement_cache.py"
+AUTH_MW = ROOT / "app" / "middleware" / "auth_middleware.py"
+
+for p in [ENT_SVC, ENT_CACHE_TEST, AUTH_MW]:
+    check(p.exists(), f"[python] {p.relative_to(ROOT)} is missing")
+
+if ENT_SVC.exists():
+    src = text(ENT_SVC)
+
+    check("_cache_get_fresh" in src and "_cache_put" in src,
+          "[latency] entitlement_service.py: the per-SOEID cache is gone — the "
+          "ECMO API is back to one live POST on every single query")
+    check("ECM_DCM_ENTITLEMENT_CACHE_TTL_SECONDS" in src,
+          "[latency] entitlement_service.py: the cache TTL is no longer tunable")
+    check("_cache_get_stale" in src and "cache_fallback" in src,
+          "[resilience] entitlement_service.py: the last-known-good fallback is "
+          "gone — one API blip now revokes every active session")
+    check("ECM_DCM_ENTITLEMENT_STALE_MAX_AGE_SECONDS" in src,
+          "[security] entitlement_service.py: the stale scope is no longer "
+          "bounded — a revocation would never land during a long outage")
+
+    # A misconfigured deployment must NEVER be served from stale cache: we
+    # cannot verify a scope when we cannot reach the thing that grants it.
+    if "except ValueError" in src:
+        _vblock = src.split("except ValueError", 1)[1].split("except ", 1)[0]
+        check("_cache_get_stale" not in _vblock,
+              "[security] entitlement_service.py: the misconfiguration branch now "
+              "serves a stale scope — it must fail closed, only transient "
+              "failures may fall back")
+
+    # `reason` is copied verbatim into the agent-facing error `code` by
+    # mcpserver._entitlement_gate, so an interpolated one ships the upstream
+    # response body to the model and out to the user.
+    check('"reason": f"' not in src,
+          "[security] entitlement_service.py: a `reason` is being interpolated — "
+          "it becomes the agent-facing error code, so it must stay a stable slug "
+          "and the detail must go to the log instead")
+
+    # requests' exceptions are OSErrors, and JSONDecodeError is a ValueError.
+    # Neither lands where you would expect, and run_bqs_query has no handler.
+    check("requests.RequestException" in src,
+          "[correctness] entitlement_service.py: a connection error or timeout is "
+          "an OSError, not a RuntimeError — uncaught it escapes run_bqs_query, "
+          "which has no exception handler, and reaches the agent as a crash")
+    check("unparseable" in src,
+          "[correctness] entitlement_service.py: response.json() is unguarded — "
+          "requests' JSONDecodeError subclasses ValueError, so a proxy's HTML "
+          "error page gets reported to the user as 'service misconfigured'")
+
+    check("_build_session().post" not in src and "_get_session" in src,
+          "[latency] entitlement_service.py: a Session is being built per call "
+          "again, which discards the connection pool it just configured and pays "
+          "a fresh TCP+TLS handshake on every query")
+    check("with _soeid_lock(" in src,
+          "[latency] entitlement_service.py: the per-SOEID lock is not held around "
+          "the fetch — a cold burst makes N API calls instead of one")
+
+if ENT_CACHE_TEST.exists():
+    import subprocess
+    rc = subprocess.run([sys.executable, str(ENT_CACHE_TEST)],
+                        capture_output=True, text=True).returncode
+    check(rc == 0, "[python] test_entitlement_cache.py FAILED — run it directly "
+                   "to see which entitlement guarantee regressed")
+
+if MCPSERVER.exists():
+    src = text(MCPSERVER)
+    # Identity and entitlement fail in OPPOSITE directions (closed vs open).
+    # Sharing one import block made a missing entitlement_service present itself
+    # as a missing header on every request.
+    check("_SOEID_AVAILABLE" in src,
+          "[correctness] mcpserver.py: identity and entitlement share an import "
+          "flag again — an entitlement_service import failure will masquerade as "
+          "`missing_soeid` on every query")
+    check("if not _SOEID_AVAILABLE:\n        return None" in src,
+          "[correctness] mcpserver.py: _resolve_soeid no longer gates on "
+          "_SOEID_AVAILABLE — it is reading the wrong subsystem's flag")
+    check("identity_unavailable" in src,
+          "[correctness] mcpserver.py: a startup identity failure reports as "
+          "`missing_soeid`, which sends whoever debugs it after a header that "
+          "was there all along")
+    # The helm chart ships entitlementFeatureFlag "false" with an EMPTY
+    # productEntitlementUrl / entitlementPolicyId. Flipping the flag alone makes
+    # get_entitled_products raise on the empty URL, so every query is refused
+    # with `entitlement_misconfigured` — a total outage from a one-word edit.
+    check("_log_entitlement_config" in src,
+          "[deployment] mcpserver.py: the startup entitlement-config check is "
+          "gone — a values file that enables the gate without the URL and policy "
+          "id would take the agent down on the first query with no warning at "
+          "pod start")
+    check("_log_entitlement_config()" in src.split("def _log_entitlement_config", 1)[-1],
+          "[deployment] mcpserver.py: _log_entitlement_config is defined but "
+          "never called — it only helps if it runs at startup")
+
+if AUTH_MW.exists():
+    src = text(AUTH_MW)
+    check("DISABLE_COIN" in src and 'strip().lower()' in src,
+          "[correctness] auth_middleware.py: DISABLE_COIN is compared raw again — "
+          "`DISABLE_COIN=True` would not match and would silently switch "
+          "authentication back on")
+    check("COIN token validation is DISABLED" in src,
+          "[security] auth_middleware.py: the startup warning is gone — an unset "
+          "DISABLE_COIN means NO tool call is authenticated, and nothing in the "
+          "logs would say so")
+
+# ---------------------------------------------------------------------------
 print(f"\n{passes} checks passed, {len(failures)} failed\n")
 if failures:
     print("FAILURES")

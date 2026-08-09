@@ -105,15 +105,39 @@ except Exception as _bqs_import_exc:  # noqa: BLE001 - optional module
 # no ECM/DCM access and constrains every query to the caller's entitled
 # product(s) via an injected `product` filter.
 # ---------------------------------------------------------------------------
+#
+# Identity and entitlement are imported SEPARATELY and tracked by separate
+# flags. They used to share one try block, which coupled two unrelated
+# failures: if entitlement_service failed to import, `get_soeid` went with it,
+# `_resolve_soeid()` returned None, and every query died with `missing_soeid` —
+# sending whoever debugged it after a header that was there all along. The two
+# also fail in OPPOSITE directions (identity closed, entitlement open), so
+# merging them produced the worst combination: refuse everything, for the
+# wrong stated reason.
+try:
+    from middleware.soeid_middleware import get_soeid as _get_soeid
+
+    _SOEID_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    try:
+        from app.middleware.soeid_middleware import get_soeid as _get_soeid
+
+        _SOEID_AVAILABLE = True
+    except Exception as _soeid_import_exc:  # noqa: BLE001
+        _SOEID_AVAILABLE = False
+        logger.error(
+            "IDENTITY: soeid middleware unavailable (%s) — no request can be "
+            "attributed to a caller, so every data request will be refused",
+            _soeid_import_exc,
+        )
+
 try:
     from services.entitlement_service import perform_initial_entitlement_check
-    from middleware.soeid_middleware import get_soeid as _get_soeid
 
     _ENTITLEMENT_AVAILABLE = True
 except Exception:  # noqa: BLE001
     try:
         from app.services.entitlement_service import perform_initial_entitlement_check
-        from app.middleware.soeid_middleware import get_soeid as _get_soeid
 
         _ENTITLEMENT_AVAILABLE = True
     except Exception as _ent_import_exc:  # noqa: BLE001
@@ -157,7 +181,7 @@ def _resolve_soeid() -> str | None:
     documented aliases) or as `?user_id=` on the MCP URL; if neither is present
     the request has no identity and must be refused, in every environment.
     """
-    if not _ENTITLEMENT_AVAILABLE:
+    if not _SOEID_AVAILABLE:
         return None
     try:
         return (_get_soeid() or "").strip() or None
@@ -176,6 +200,24 @@ def _require_caller_soeid() -> dict | None:
     """
     if _resolve_soeid():
         return None
+    if not _SOEID_AVAILABLE:
+        # Not the caller's fault and not fixable by adding a header — say so,
+        # or the next person spends the afternoon on the wrong problem.
+        logger.error(
+            "IDENTITY: refusing data request — the soeid middleware failed to "
+            "import at startup, so no request carries an identity. This is a "
+            "server deployment fault, not a missing header."
+        )
+        return {
+            "error": True,
+            "code": "identity_unavailable",
+            "message": (
+                "This server cannot determine who is asking, because its identity "
+                "component failed to load at startup. No data can be returned "
+                "until it is fixed. This is a server fault — do not retry and do "
+                "not reword the question; report it to the user plainly."
+            ),
+        }
     logger.warning(
         "ENTITLEMENT: refusing data request — no caller SOEID on the request "
         "(expected an 'x-user-id' header or ?user_id= on the MCP URL)"
@@ -470,6 +512,73 @@ async def actuator_health_check(request):
     return JSONResponse("All ok")
 
 
+def _log_entitlement_config() -> None:
+    """State the effective entitlement posture ONCE, at startup.
+
+    Turning the gate on takes three settings that live in two places, and the
+    partial states fail in opposite directions:
+
+        RUN_MODE                            unset => "local" => gate OFF
+        ECM_DCM_ENTITLEMENT_FEATURE_FLAG    chart default "false" => gate OFF
+        ECM_DCM_PRODUCT_ENTITLEMENT_URL     chart default ""  } REQUIRED when
+        ECM_DCM_ENTITLEMENT_POLICY_ID       chart default ""  } the flag is on
+
+    Flip the flag alone and `get_entitled_products` raises on the empty URL, so
+    EVERY query is refused with `entitlement_misconfigured` — a total outage
+    from a one-word values-file edit. Leave the flag off in a deployed
+    environment and every caller is silently granted ECM+DCM. Neither state
+    announced itself anywhere before this line.
+    """
+    try:
+        run_mode = os.getenv("RUN_MODE", "local").strip().lower()
+        flag = os.getenv("ECM_DCM_ENTITLEMENT_FEATURE_FLAG", "true").strip().lower()
+        url = os.getenv("ECM_DCM_PRODUCT_ENTITLEMENT_URL", "").strip()
+        policy = os.getenv("ECM_DCM_ENTITLEMENT_POLICY_ID", "").strip()
+
+        if _is_local_mode():
+            logger.info(
+                "ENTITLEMENT CONFIG: gate OFF — local mode (RUN_MODE=%s). Every "
+                "caller is treated as entitled to ECM+DCM.",
+                run_mode,
+            )
+            return
+        if flag != "true":
+            logger.warning(
+                "ENTITLEMENT CONFIG: gate OFF in a NON-LOCAL environment "
+                "(RUN_MODE=%s, ECM_DCM_ENTITLEMENT_FEATURE_FLAG=%s). Every caller "
+                "is granted ECM+DCM without a check.",
+                run_mode,
+                flag,
+            )
+            return
+        missing = [
+            name
+            for name, val in (
+                ("ECM_DCM_PRODUCT_ENTITLEMENT_URL", url),
+                ("ECM_DCM_ENTITLEMENT_POLICY_ID", policy),
+            )
+            if not val
+        ]
+        if missing:
+            logger.error(
+                "ENTITLEMENT CONFIG: gate is ENABLED but %s %s empty — EVERY query "
+                "will be refused with `entitlement_misconfigured`. Set %s, or set "
+                "ECM_DCM_ENTITLEMENT_FEATURE_FLAG=false.",
+                " and ".join(missing),
+                "is" if len(missing) == 1 else "are",
+                "it" if len(missing) == 1 else "them",
+            )
+            return
+        logger.info(
+            "ENTITLEMENT CONFIG: gate ENFORCED (RUN_MODE=%s, url set, policy set, "
+            "cache ttl=%ss).",
+            run_mode,
+            os.getenv("ECM_DCM_ENTITLEMENT_CACHE_TTL_SECONDS", "300"),
+        )
+    except Exception as exc:  # noqa: BLE001 - logging must never break startup
+        logger.debug("Entitlement config summary skipped: %s", exc)
+
+
 def _log_startup_summary() -> None:
     """Log which tools are registered and note the optional stdio server.
 
@@ -504,6 +613,8 @@ def _log_startup_summary() -> None:
             )
         else:
             logger.warning("Capital Markets BQS tools are NOT active on this HTTP server.")
+
+        _log_entitlement_config()
     except Exception as exc:  # noqa: BLE001 - logging must never break startup
         logger.debug("Startup tool summary logging skipped: %s", exc)
 
