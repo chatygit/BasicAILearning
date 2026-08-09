@@ -1015,6 +1015,21 @@ if SECRETS_TEST.exists():
     check(rc == 0, "[python] test_cyberark_cache.py FAILED — run it directly to "
                    "see which cache guarantee regressed")
 
+# A test that monkeypatches at IMPORT time poisons every test that runs after
+# it in the same process. test_cyberark_cache.py did exactly that and made the
+# repo's own tests/test_secrets.py fail with "'s3cr3t-value' != 'supersecret'".
+if SECRETS_TEST.exists():
+    tsrc = text(SECRETS_TEST)
+    check("def teardown_function" in tsrc and "_ORIG_RUN_RETRIEVE" in tsrc,
+          "[python] test_cyberark_cache.py: patches are no longer restored in a "
+          "teardown — a global monkeypatch here leaks into every later test in "
+          "the suite")
+    # Nothing may be assigned onto the module at import time (column 0).
+    import re as _re
+    check(not _re.search(r"^sec\.\w+\s*=", tsrc, _re.M),
+          "[python] test_cyberark_cache.py: something patches the secrets module "
+          "at MODULE level — patch inside setup_function so it can be undone")
+
 if DISAMBIG_TEST.exists():
     import subprocess
     rc = subprocess.run([sys.executable, str(DISAMBIG_TEST)],

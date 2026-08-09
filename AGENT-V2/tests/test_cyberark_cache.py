@@ -46,8 +46,28 @@ def _fake_retrieve(fid: str, timeout_seconds: int = 30):
     return SPAWN_RESULT
 
 
-sec._run_retrieve_script = _fake_retrieve
-sec._is_linux = lambda: True          # the cache path is Linux-gated upstream
+# Originals, captured before anything is patched. NOTHING is patched at import
+# time: this module shares a process with the rest of the suite, and a global
+# monkeypatch here leaks into every later test (it once made test_secrets.py
+# fail with "'s3cr3t-value' != 'supersecret'"). Patch in setup, restore in
+# teardown, always.
+_ORIG_RUN_RETRIEVE = sec._run_retrieve_script
+_ORIG_IS_LINUX = sec._is_linux
+
+
+def setup_function(func=None) -> None:
+    """pytest calls this per test; standalone mode calls it explicitly."""
+    sec._run_retrieve_script = _fake_retrieve
+    sec._is_linux = lambda: True      # the cache path is Linux-gated upstream
+    reset()
+
+
+def teardown_function(func=None) -> None:
+    """Leave the module, the cache and the environment exactly as found."""
+    sec._run_retrieve_script = _ORIG_RUN_RETRIEVE
+    sec._is_linux = _ORIG_IS_LINUX
+    sec.invalidate_secret_cache()
+    os.environ.pop("CYBERARK_CACHE_TTL_SECONDS", None)
 
 
 def reset(ttl: str = "900") -> None:
@@ -150,12 +170,21 @@ if __name__ == "__main__":
     print()
     failures = 0
     for label, fn in CASES:
+        setup_function()
         try:
             fn()
             print(f"  ok   {label}")
         except AssertionError as exc:
             failures += 1
             print(f"  FAIL {label}\n         {exc}")
+        finally:
+            teardown_function()
+    # The suite shares a process — prove we handed the module back intact.
+    if sec._run_retrieve_script is not _ORIG_RUN_RETRIEVE or sec._is_linux is not _ORIG_IS_LINUX:
+        failures += 1
+        print("  FAIL module left monkeypatched — later tests would see the fake")
+    else:
+        print("  ok   module restored (no leak into the rest of the suite)")
     print()
     if failures:
         print(f"{failures} case(s) FAILED")
