@@ -870,11 +870,21 @@ if MCPSERVER.exists():
     # that opens its session over SSE never gets a tool list.
     src_code = "\n".join(l for l in src.splitlines()
                          if not l.lstrip().startswith("#"))
-    check("stateless_http=True" not in src_code,
-          "[python] mcpserver.py: stateless_http=True is back — GET /mcp then "
-          "returns a bare 405 Method Not Allowed and an SSE client resolves ZERO "
-          "tools (agent fails with Tool 'run_bqs_query' not found). v1 answers "
-          "the same GET with a JSON-RPC 406; match it.")
+    # Session mode must stay a SWITCH, not a hardcoded choice. Both modes have a
+    # real failure: stateless 405s a GET/SSE client; stateful 404s every POST
+    # whose session the pod has not seen (measured in QA 2026-08-09 across
+    # replicas). The default is stateless because this service is horizontally
+    # scaled and the ADK client only ever POSTs.
+    check("MCP_STATELESS_HTTP" in src_code,
+          "[python] mcpserver.py: the session mode is hardcoded again — keep "
+          "MCP_STATELESS_HTTP so it can be flipped without a rebuild")
+    check('os.getenv("MCP_STATELESS_HTTP", "true")' in src_code,
+          "[python] mcpserver.py: MCP_STATELESS_HTTP no longer defaults to true "
+          "— stateful across >1 replica returns 404 on every POST whose session "
+          "landed on another pod")
+    check("stateless_http=stateless" in src_code,
+          "[python] mcpserver.py: http_app() is no longer given the resolved "
+          "session mode")
     check("mcp.http_app(" in src,
           "[python] mcpserver.py: the HTTP app is no longer built via "
           "mcp.http_app()")

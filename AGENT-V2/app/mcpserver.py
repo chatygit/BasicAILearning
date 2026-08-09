@@ -510,20 +510,40 @@ def _log_startup_summary() -> None:
 
 def create_http_app():
     """Create and configure the HTTP app once for import and runtime use."""
-    # NOT stateless — this matches the v1 nl2sql server, which builds its app as
-    # `mcp.http_app(middleware=[...])` with no stateless flag.
+    # SESSION MODE. Streamable HTTP uses POST for JSON-RPC and GET to open an
+    # SSE stream. The two modes trade different failures:
     #
-    # Streamable HTTP uses POST for JSON-RPC and GET to open the SSE stream.
-    # `stateless_http=True` has no sessions to stream into, so it drops GET at
-    # the routing layer: a client that opens its session with GET /mcp gets a
-    # bare `Method Not Allowed` and never reaches the MCP layer, which then
-    # surfaces to the agent as "Tool 'run_bqs_query' not found". v1 answers the
-    # same GET with a JSON-RPC 406 asking for `Accept: text/event-stream` —
-    # i.e. it negotiates instead of refusing.
+    #   stateless=True   Every POST is self-contained, so ANY replica can serve
+    #                    ANY request and a restart is invisible. GET /mcp is not
+    #                    supported and returns a bare 405, so a client that
+    #                    opens its session over SSE gets nothing.
+    #   stateless=False  GET/SSE works (v1 builds its app this way), but session
+    #                    state lives in POD MEMORY keyed by Mcp-Session-Id. With
+    #                    more than one replica, or after a restart, a POST whose
+    #                    session the pod has never seen gets 404 Not Found.
     #
-    # Stateful mode keeps per-session state in pod memory keyed by
-    # Mcp-Session-Id, so multi-replica deployments need session affinity.
-    app = mcp.http_app()
+    # Measured in QA 2026-08-09: stateful produced a storm of
+    # `POST /mcp -> 404`. The trigger was a REDEPLOY, not a second replica. The
+    # platform opens its MCP connection ONCE at agent bootstrap and holds it, so
+    # a new chat is NOT a new MCP session: after the pod was replaced, the
+    # client kept posting a session id no server had ever seen, and did not
+    # re-initialize. In stateful mode every deploy therefore breaks the agent
+    # until someone restarts the agent runtime — on top of the multi-replica
+    # problem. Stateless has no session to lose, so a redeploy is invisible.
+    # The ADK client POSTs and never opens a GET stream, so it loses nothing.
+    # Set MCP_STATELESS_HTTP=false only if a client genuinely needs SSE, and
+    # only alongside session affinity or a single replica.
+    stateless = os.getenv("MCP_STATELESS_HTTP", "true").strip().lower() in {
+        "1", "true", "yes",
+    }
+    logger.info(
+        "MCP HTTP app: stateless_http=%s (%s)",
+        stateless,
+        "any replica can serve any request; GET /mcp returns 405"
+        if stateless
+        else "GET/SSE supported; REQUIRES session affinity or a single replica",
+    )
+    app = mcp.http_app(stateless_http=stateless)
     app.add_route("/health", health_check, methods=["GET"])
     app.add_route("/actuator/health", actuator_health_check, methods=["GET"])
     # Extract the caller SOEID (x-user-id + fallbacks) from inbound requests into
