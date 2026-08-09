@@ -205,6 +205,7 @@ class _EntityFilter:
     column: str         # physical name column (server-side only)
     op: str             # like / eq / in
     value: object       # raw value (str for like/eq; list for in)
+    id_column: str = ""  # physical id paired with the name (may be unset)
 
 
 def _collect_entity_filters(
@@ -221,7 +222,13 @@ def _collect_entity_filters(
         if f.value is None:
             continue
         out.append(
-            _EntityFilter(field=f.field, column=fs.column, op=f.op.value, value=f.value)
+            _EntityFilter(
+                field=f.field,
+                column=fs.column,
+                op=f.op.value,
+                value=f.value,
+                id_column=getattr(fs, "entity_id_column", "") or "",
+            )
         )
     return out
 
@@ -271,8 +278,14 @@ def _build_entity_distinct_probe(
             where = f" WHERE {col} = {dialect.placeholder(0, 'd')}"
         where = f"{where} AND {col} IS NOT NULL"
 
+    # Return the paired id when the ontology declares one. A name is not
+    # unique, so a list of bare names is something the user has to RETYPE and
+    # may still get wrong; name + id is a handle they can paste or pick.
+    select = f'DISTINCT {col} AS "value"'
+    if ef.id_column:
+        select += f', {dialect.quote_ident(ef.id_column)} AS "entity_id"'
     sql = (
-        f'SELECT DISTINCT {col} AS "value" FROM {base}{where} '
+        f"SELECT {select} FROM {base}{where} "
         f"ORDER BY 1 {dialect.limit_clause(_DISAMBIG_MAX + 1)}"
     )
     return sql, params
@@ -322,6 +335,7 @@ def build_disambiguation(
     for ef in entity_filters:
         try:
             names: list[str] = []
+            ids: dict[str, str] = {}
             # 1) Free path: the name field is a selected dimension -> use rows.
             #    PROJECTING the name field you filter on therefore makes
             #    disambiguation cost nothing. Worth doing every time.
@@ -333,26 +347,44 @@ def build_disambiguation(
                 }
                 names = sorted(seen)
             else:
-                # 2) One bounded DISTINCT probe scoped by the same predicate.
+                # 2) One bounded DISTINCT probe scoped by the same predicate,
+                #    returning (name, id) when the ontology pairs an id column.
                 sql, params = _build_entity_distinct_probe(spec, ef, dialect, plan)
                 _cols, rows = execute(spec, BuiltQuery(sql=sql, params=params), dialect)
-                names = [str(r[0]) for r in rows if r and r[0] is not None]
+                for r in rows:
+                    if not r or r[0] is None:
+                        continue
+                    name = str(r[0])
+                    names.append(name)
+                    if ef.id_column and len(r) > 1 and r[1] is not None:
+                        ids.setdefault(name, str(r[1]))
 
             if len(names) <= 1:
                 continue  # single (or no) entity -> unambiguous, no nag
 
             guess = ef.value if isinstance(ef.value, str) else ""
             ordered = _order_by_closeness(guess, names)[:_DISAMBIG_MAX]
+            # Always objects, so the shape is the same whether or not an id was
+            # available. `id` is null only when the ontology declares no pairing
+            # (or on the free path, where the agent already holds its own rows).
+            matched = [{"name": n, "id": ids.get(n)} for n in ordered]
+            has_ids = any(m["id"] for m in matched)
             blocks.append(
                 {
                     "field": ef.field,
                     "your_value": ef.value,
-                    "matched_multiple": ordered,
+                    "matched_multiple": matched,
                     "truncated": len(names) > _DISAMBIG_MAX,
                     "hint": (
                         f"Your filter on '{ef.field}' matched multiple distinct "
-                        f"entities, so the result blends them together. To isolate "
-                        f"one, re-run with a single exact name from the list above."
+                        f"entities, so the result blends them together. Show them "
+                        f"to the user as a NUMBERED list"
+                        + (" with each entity's id beside its name, "
+                           if has_ids else ", ")
+                        + "and invite them to reply with a number"
+                        + (" or paste an id" if has_ids else "")
+                        + ". To isolate one, re-run filtered to that single "
+                        + ("id." if has_ids else "exact name.")
                     ),
                 }
             )

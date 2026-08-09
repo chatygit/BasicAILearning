@@ -62,6 +62,20 @@ tools:
     tool_type: mcp                             # Currently only "mcp" is supported.
     # app/mcpserver.py serves on port 8080; point this at the V2 server, not the
     # v1 nl2sql one. See app/.env.example for the variable's current default.
+    #
+    # LOCAL RUNS MUST CARRY THE SOEID IN THIS URL.
+    # Observed 2026-08-09 from the server's own access log: calls from the
+    # deployed platform (10.18.16.x) arrive WITH an `x-user-id` header; calls
+    # from local ADK (127.0.0.1) arrive with NO identity header at all. The
+    # server no longer invents one — `_resolve_soeid()` reads the request only,
+    # and `run_bqs_query` refuses with `missing_soeid` — so a local run without
+    # a SOEID gets no data. Put YOUR soeid in YOUR .env, not in this file:
+    #
+    #     TEXT_TO_SQL_MCP_URL=http://localhost:8080/mcp?user_id=<your-soeid>
+    #
+    # `_resolve_user_id` checks headers FIRST and only then `?user_id=`, so this
+    # goes inert the moment a real header arrives. v1 needed none of this only
+    # because it had a server-side default quietly answering as somebody else.
     mcp_server_url: "${TEXT_TO_SQL_MCP_URL}"
     # Pinned rather than auto-discovered: a governed read-only surface should not
     # silently grow when a new tool is added to the server.

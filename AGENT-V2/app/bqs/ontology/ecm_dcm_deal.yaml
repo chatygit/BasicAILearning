@@ -188,6 +188,7 @@ filters:
     operators: [like, eq, in]
     suggestable: true
     entity_name: true
+    entity_id_column: deal_id
     case_insensitive: true
     description: "Filter by deal name — op 'like' with '%NAME%' (case-insensitive). No id lookup needed first."
   issuer_name:
@@ -195,6 +196,7 @@ filters:
     operators: [like, eq, in]
     suggestable: true
     entity_name: true
+    entity_id_column: gfcid
     case_insensitive: true
     description: "Filter by issuer/company name — op 'like' with '%NAME%'. No id lookup needed."
   deal_size:

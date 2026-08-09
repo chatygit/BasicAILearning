@@ -130,6 +130,7 @@ filters:
     operators: [like, eq, in]
     suggestable: true
     entity_name: true
+    entity_id_column: entity_id
     case_insensitive: true
     description: >-
       Search name. Default to op 'like' with '%NAME%' (case-insensitive) — ONE

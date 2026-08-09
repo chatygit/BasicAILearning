@@ -114,6 +114,13 @@ ENTITY = _EntityFilter(
     column="investor_name",
     op="like",
     value="%BLACKROCK%",
+    id_column="investor_gp_id",
+)
+ENTITY_NO_ID = _EntityFilter(
+    field="investor_name",
+    column="investor_name",
+    op="like",
+    value="%BLACKROCK%",
 )
 
 # Exactly the shape of the measured 41s call.
@@ -164,6 +171,20 @@ def test_values_are_parameter_bound_never_inlined():
     assert "%BLACKROCK%" in str(params)
 
 
+def test_probe_returns_the_paired_id():
+    sql, _ = _build_entity_distinct_probe(SPEC, ENTITY, DIALECT, PLAN)
+    assert '"investor_gp_id" AS "entity_id"' in sql, (
+        "the probe no longer returns the paired id, so the agent can only offer "
+        "the user a list of NAMES to retype — and names are not unique:\n" + sql
+    )
+
+
+def test_probe_without_a_declared_id_still_works():
+    sql, _ = _build_entity_distinct_probe(SPEC, ENTITY_NO_ID, DIALECT, PLAN)
+    assert 'SELECT DISTINCT "investor_name"' in sql
+    assert "entity_id" not in sql, "no pairing declared -> must not invent one"
+
+
 def test_no_plan_falls_back_without_crashing():
     sql, params = _build_entity_distinct_probe(SPEC, ENTITY, DIALECT, None)
     assert 'SELECT DISTINCT "investor_name"' in sql
@@ -177,6 +198,8 @@ CASES = [
     ("probe matches case-insensitively", test_probe_matches_case_insensitively_like_the_main_query),
     ("probe still DISTINCT + bounded", test_probe_still_selects_distinct_names_and_is_bounded),
     ("values are parameter-bound", test_values_are_parameter_bound_never_inlined),
+    ("probe returns the paired id", test_probe_returns_the_paired_id),
+    ("no pairing declared -> no id", test_probe_without_a_declared_id_still_works),
     ("no-plan fallback still works", test_no_plan_falls_back_without_crashing),
 ]
 

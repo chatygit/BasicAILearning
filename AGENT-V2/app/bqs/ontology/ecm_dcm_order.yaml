@@ -188,6 +188,7 @@ filters:
     operators: [like, eq, in]
     suggestable: true
     entity_name: true
+    entity_id_column: investor_gp_id
     case_insensitive: true
     description: "Filter by investor/account name — like '%NAME%'. No id lookup needed."
   deal_name:
@@ -195,6 +196,7 @@ filters:
     operators: [like, eq, in]
     suggestable: true
     entity_name: true
+    entity_id_column: deal_id
     case_insensitive: true
     description: "Filter by deal name — like '%NAME%'."
   investor_region:

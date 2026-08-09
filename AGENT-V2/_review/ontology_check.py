@@ -662,6 +662,31 @@ if SUGGESTIONS.exists():
     # Assert the CALL SITE. The unit test exercises the helper directly, so it
     # stays green even if the caller quietly stops passing the plan — which is
     # exactly the regression that reinstates the 35s unscoped probe.
+    # A name is not unique. Offering the user a list of bare NAMES to retype is
+    # both ambiguous and unusable — the Blackrock answer listed 10 names with no
+    # GP ids because the server only ever sent names.
+    check("entity_id_column" in src,
+          "[answer] suggestions.py: the probe no longer returns the paired id, "
+          "so disambiguation can only offer names the user must retype")
+    check('AS "entity_id"' in src,
+          "[answer] suggestions.py: the entity_id column is no longer selected")
+    for ont, filt, idcol in (
+        (ORDER, "investor_name", "investor_gp_id"),
+        (ORDER, "deal_name", "deal_id"),
+        (DEAL, "deal_name", "deal_id"),
+        (DEAL, "issuer_name", "gfcid"),
+        (TRANCHE, "deal_name", "deal_id"),
+        (TRANCHE, "issuer_name", "gfcid"),
+        (ENTITY, "entity_name", "entity_id"),
+    ):
+        body = text(ont)
+        m = re.search(rf"^  {filt}:\n(?:    .*\n)*?    entity_id_column: {idcol}\s*$",
+                      body, re.M)
+        check(m is not None,
+              f"[answer] {ont.name}: filter '{filt}' lost "
+              f"'entity_id_column: {idcol}' — its disambiguation list will carry "
+              f"names with no id")
+
     check("_build_entity_distinct_probe(spec, ef, dialect, plan)" in src,
           "[latency] suggestions.py: build_disambiguation no longer passes the "
           "plan to the probe — it falls back to the unscoped shape and rescans "
@@ -785,6 +810,24 @@ for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
           f"[latency] {label}: lost the carve-out that \"list all\"/\"show all\" "
           f"describes the scope of the QUESTION, not the size of the table — "
           f"without it the cap is silently lifted by the word 'all'")
+    # Ported from v1 skill-v7 §14 after a side-by-side diff (2026-08-09).
+    for phrase, why in (
+        (r"never a bare count",
+         "a listing ask answered with a number is a wrong answer"),
+        (r"(?i)export is not available",
+         "the user asks to download and gets no honest answer (export is out of MVP)"),
+        (r"(?i)answerable",
+         "an ECM-only user gets offered DCM follow-ups that cannot run"),
+        (r"(?i)book profile",
+         "order-level asks return a truncated dump instead of a book profile"),
+        (r"(?i)escalated",
+         "the agent invents an escalation path that does not exist"),
+    ):
+        check(re.search(phrase, body),
+              f"[answer] {label}: lost a v1 presentation rule — {why}")
+    check(re.search(r"(?i)aggregate\W{0,4}instead", body),
+          f"[answer] {label}: lost the three-doors offer (filter / aggregate / "
+          f"next page) — paging alone makes the user walk the whole list")
     check(re.search(r"(?i)ask for the next 50", body),
           f"[answer] {label}: lost the explicit 'ask for the next 50' offer, so a "
           f"capped listing looks like the whole answer")

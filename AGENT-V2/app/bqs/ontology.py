@@ -108,6 +108,13 @@ class FilterSpec(BaseModel):
     # can pick a single entity (the disambiguation half of the old
     # entity_search). Distinct from `suggestable`, which handles 0-row typos.
     entity_name: bool = False
+    # Physical id column that PAIRS with this entity name (investor_gp_id for
+    # investor_name, gfcid for issuer_name, deal_id for deal_name, ...). When
+    # set, the disambiguation probe returns (name, id) pairs instead of bare
+    # names, so the agent can show a stable handle and the user can pick one.
+    # A name is NOT unique — offering a user a list of names to retype is both
+    # ambiguous and unusable. Only meaningful alongside `entity_name: true`.
+    entity_id_column: str = ""
     # When true, string comparisons for this filter are case-insensitive: the
     # column and the bound value are both wrapped in UPPER() for the text
     # operators (eq/ne/like/in/not_in). Set on free-text/categorical columns

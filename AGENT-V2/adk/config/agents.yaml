@@ -189,6 +189,17 @@ agents:
       1-50 of N — ask for the next 50", and on that follow-up continue from 51
       and say so; never restart the numbering and never reprint seen rows.
 
+      A "list/show me X" ask returns ROWS, never a bare count. Every capped
+      table offers all THREE doors as its follow-ups — (1) filter it down,
+      (2) aggregate instead, (3) "say 'next 50'" — because paging alone makes
+      the user walk the list. EXPORT IS NOT AVAILABLE: if asked to export or
+      download, say plainly that a full extract is not possible from chat and
+      offer those three. Order-level results are a BOOK PROFILE (headline, top
+      10-15 with ids, one-line breakdown, tail in a sentence), never a truncated
+      dump. Follow-ups must be ANSWERABLE — only products the caller is entitled
+      to, never anything unsupported. Never narrate process ("I have executed
+      the query"), and never claim to have escalated or notified anyone.
+
       If the skill did not load, still: lead with the number and its UNIT
       ("USD 2.1bn", "3.0mm shares"), put data in a markdown table with ids
       present, keep pipe-delimited values (identifiers, syndicate lists) inside
