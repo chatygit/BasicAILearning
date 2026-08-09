@@ -641,10 +641,37 @@ SOEID_MW = ROOT / "app" / "middleware" / "soeid_middleware.py"
 SOEID_TEST = ROOT / "tests" / "test_soeid_resolution.py"
 SECRETS = ROOT / "app" / "utils" / "cyberark_integration" / "secrets.py"
 SECRETS_TEST = ROOT / "tests" / "test_cyberark_cache.py"
+SUGGESTIONS = ROOT / "app" / "bqs" / "suggestions.py"
+DISAMBIG_TEST = ROOT / "tests" / "test_disambiguation_scope.py"
 
 for p in [MCPSERVER, PLANNER, MODELS, BUILDER, SCOPE_TEST, SOEID_MW, SOEID_TEST,
-          SECRETS, SECRETS_TEST]:
+          SECRETS, SECRETS_TEST, SUGGESTIONS, DISAMBIG_TEST]:
     check(p.exists(), f"[python] {p.relative_to(ROOT)} is missing")
+
+if SUGGESTIONS.exists():
+    src = text(SUGGESTIONS)
+    # The disambiguation probe must reuse the MAIN query's WHERE. Scoped by the
+    # entity predicate alone it scans the whole view for all time and both
+    # products: measured execute=6.11s vs enrich=34.89s on a single Blackrock
+    # ask — 85% of a 41s call — and it offered entities with no rows in the
+    # answer at all.
+    check("_build_where" in src,
+          "[latency] suggestions.py: the disambiguation probe no longer reuses "
+          "sql_builder._build_where — it will drop the date range and product "
+          "and rescan the entire view (measured enrich=34.89s vs execute=6.11s)")
+    # Assert the CALL SITE. The unit test exercises the helper directly, so it
+    # stays green even if the caller quietly stops passing the plan — which is
+    # exactly the regression that reinstates the 35s unscoped probe.
+    check("_build_entity_distinct_probe(spec, ef, dialect, plan)" in src,
+          "[latency] suggestions.py: build_disambiguation no longer passes the "
+          "plan to the probe — it falls back to the unscoped shape and rescans "
+          "the whole view (measured enrich=34.89s vs execute=6.11s)")
+
+_SVC = ROOT / "app" / "services" / "domain_query_service.py"
+if _SVC.exists():
+    check("self._enrich_result(result, req, spec, dialect, len(rows), plan)" in text(_SVC),
+          "[latency] domain_query_service.py: the plan is no longer handed to "
+          "_enrich_result, so the disambiguation probe cannot be scoped")
 
 if SECRETS.exists():
     src = text(SECRETS)
@@ -714,6 +741,23 @@ for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
 # COUNT metrics are unit-free — one request grouped by product, not one per
 # product. Measured 2026-08-07: the agent split a currency_count ask into an ECM
 # request (9.9s) and a DCM request (27.1s); one grouped request would have done.
+# ROW CAP — the largest single latency item measured. Event 10 of the 2026-08-09
+# trace: candidatesTokenCount 9,299 / thoughtsTokenCount 266, i.e. 67s of a 153s
+# answer was the model typing 189 table rows, and 98.7% of the session's output
+# tokens were that one table. Nothing capped it before.
+for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
+    check(re.search(r"(?i)never print more than 50 data rows", text(path)),
+          f"[latency] {label}: lost the 50-row display cap — an unbounded table "
+          f"is the biggest single cost in an answer (measured 9,299 output "
+          f"tokens / 67s for 189 rows)")
+    check(re.search(r"(?i)showing 50 of", text(path)),
+          f"[latency] {label}: lost the 'showing 20 of N' caption, which is what "
+          f"keeps the capped table an HONEST answer to 'list all'")
+    check(re.search(r"(?i)(wide|8\\+ columns)", text(path)),
+          f"[latency] {label}: lost the wide-table clause — 50 rows of an "
+          f"8+ column table with pipe-list cells costs about twice 50 narrow "
+          f"ones, and the budget is tokens, not rows")
+
 for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
     body = text(path)
     check(re.search(r"(?i)count.{0,120}unit.?free", body, re.S),
@@ -872,6 +916,13 @@ if SECRETS_TEST.exists():
                         capture_output=True, text=True).returncode
     check(rc == 0, "[python] test_cyberark_cache.py FAILED — run it directly to "
                    "see which cache guarantee regressed")
+
+if DISAMBIG_TEST.exists():
+    import subprocess
+    rc = subprocess.run([sys.executable, str(DISAMBIG_TEST)],
+                        capture_output=True, text=True).returncode
+    check(rc == 0, "[python] test_disambiguation_scope.py FAILED — the probe is "
+                   "no longer scoped like the query it explains")
 
 # ---------------------------------------------------------------------------
 print(f"\n{passes} checks passed, {len(failures)} failed\n")

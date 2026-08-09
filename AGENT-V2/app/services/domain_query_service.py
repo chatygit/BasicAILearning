@@ -102,7 +102,7 @@ class DomainQueryService:
         return BQSError(msg, code="invalid_request").to_dict()
 
     @staticmethod
-    def _enrich_result(result: dict, req, spec, dialect, row_count: int) -> None:
+    def _enrich_result(result: dict, req, spec, dialect, row_count: int, plan=None) -> None:
         """Attach best-effort suggestions/disambiguation to ``result`` in place.
 
         Enrichment must never break the response, so all failures are swallowed.
@@ -124,7 +124,7 @@ class DomainQueryService:
                 from bqs.suggestions import build_disambiguation
 
                 disambig = build_disambiguation(
-                    req, spec, dialect, result_rows=result.get("rows")
+                    req, spec, dialect, result_rows=result.get("rows"), plan=plan
                 )
                 if disambig:
                     result["disambiguation"] = disambig
@@ -184,7 +184,7 @@ class DomainQueryService:
             # agent sees. The skill's confidentiality rule ("never disclose the
             # generated SQL") is therefore a real, load-bearing instruction —
             # the SQL is right there in the payload, not merely conceptual.
-            self._enrich_result(result, req, spec, dialect, len(rows))
+            self._enrich_result(result, req, spec, dialect, len(rows), plan)
             t_enrich = time.perf_counter()
             # enrich is NOT free: build_suggestions runs a DISTINCT probe per
             # suggestable filter on 0 rows, and build_disambiguation runs one

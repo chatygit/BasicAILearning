@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 
 from .models import BQSRequest
 from .executor import execute
-from .sql_builder import BuiltQuery
+from .sql_builder import BuiltQuery, _build_where
 
 if TYPE_CHECKING:  # avoid import cycles / heavy imports at module load
     from .dialects.base import BaseDialect
@@ -227,33 +227,54 @@ def _collect_entity_filters(
 
 
 def _build_entity_distinct_probe(
-    spec: "OntologySpec", ef: _EntityFilter, dialect: "BaseDialect"
+    spec: "OntologySpec", ef: _EntityFilter, dialect: "BaseDialect", plan=None
 ) -> tuple[str, dict]:
-    """DISTINCT of the matched entity names, scoped by the SAME value predicate.
+    """DISTINCT of the matched entity names, scoped exactly like the main query.
+
+    ``plan`` is the QueryPlan the answer was built from. Reusing its WHERE via
+    the SAME renderer the main SQL uses is both a correctness and a latency fix:
+
+      - LATENCY. Scoping by the entity predicate ALONE drops the date range and
+        the product, so the probe scans the whole view for all time and both
+        products. Measured on "how much did Blackrock invest in ECM deals in
+        2025": the main query ran in 6.11s and this probe took 34.89s — 85% of
+        a 41s tool call, for a list the user did not need to be that wide.
+      - CORRECTNESS. The hand-rolled predicate was case-SENSITIVE while the main
+        query wraps both sides in UPPER(), so the two could match different
+        rows; and an unscoped probe offers the user entities that contributed
+        nothing to the number they are looking at.
 
     The agent's value is always parameter-bound (never concatenated).
     """
     col = dialect.quote_ident(ef.column)
     base = dialect.quote_ident(spec.base_view)
     params: dict = {}
-    if ef.op == "in" and isinstance(ef.value, (list, tuple)):
-        names = []
-        for j, v in enumerate(ef.value):
-            pname = f"d{j}"
-            params[pname] = v
-            names.append(dialect.placeholder(0, pname))
-        where = f" WHERE {col} IN ({', '.join(names)})"
-    elif ef.op == "like":
-        params["d"] = str(ef.value)
-        where = f" WHERE {col} LIKE {dialect.placeholder(0, 'd')}"
-    else:  # eq
-        params["d"] = str(ef.value)
-        where = f" WHERE {col} = {dialect.placeholder(0, 'd')}"
+
+    if plan is not None:
+        where = _build_where(plan, dialect, params)
+        where = f"{where} AND {col} IS NOT NULL" if where else f" WHERE {col} IS NOT NULL"
+    else:
+        # Fallback: entity predicate only. Kept so the helper stays callable
+        # without a plan, but it is the slow, unscoped shape described above.
+        if ef.op == "in" and isinstance(ef.value, (list, tuple)):
+            names = []
+            for j, v in enumerate(ef.value):
+                pname = f"d{j}"
+                params[pname] = v
+                names.append(dialect.placeholder(0, pname))
+            where = f" WHERE {col} IN ({', '.join(names)})"
+        elif ef.op == "like":
+            params["d"] = str(ef.value)
+            where = f" WHERE {col} LIKE {dialect.placeholder(0, 'd')}"
+        else:  # eq
+            params["d"] = str(ef.value)
+            where = f" WHERE {col} = {dialect.placeholder(0, 'd')}"
+        where = f"{where} AND {col} IS NOT NULL"
+
     sql = (
         f'SELECT DISTINCT {col} AS "value" FROM {base}{where} '
-        f"AND {col} IS NOT NULL ORDER BY 1 {dialect.limit_clause(_DISAMBIG_MAX + 1)}"
+        f"ORDER BY 1 {dialect.limit_clause(_DISAMBIG_MAX + 1)}"
     )
-    # The extra AND after a WHERE is safe because `where` always starts a WHERE.
     return sql, params
 
 
@@ -284,6 +305,7 @@ def build_disambiguation(
     spec: "OntologySpec",
     dialect: "BaseDialect",
     result_rows: list[dict] | None = None,
+    plan=None,
 ) -> list[dict]:
     """When an entity-name filter matched MORE THAN ONE distinct entity, return
     a disambiguation block so the agent can re-run with a single entity.
@@ -312,7 +334,7 @@ def build_disambiguation(
                 names = sorted(seen)
             else:
                 # 2) One bounded DISTINCT probe scoped by the same predicate.
-                sql, params = _build_entity_distinct_probe(spec, ef, dialect)
+                sql, params = _build_entity_distinct_probe(spec, ef, dialect, plan)
                 _cols, rows = execute(spec, BuiltQuery(sql=sql, params=params), dialect)
                 names = [str(r[0]) for r in rows if r and r[0] is not None]
 

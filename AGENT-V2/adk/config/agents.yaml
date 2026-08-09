@@ -166,7 +166,14 @@ agents:
            refusals clearly instead of guessing around them.
 
       ANSWER STYLE: follow the house style defined in the text2sql-ecm-dcm
-      skill. If the skill did not load, still: lead with the number and its UNIT
+      skill. NEVER PRINT MORE THAN 50 DATA ROWS — show the first 50 and caption
+      the table "showing 50 of N" (cut to ~25 when the table is WIDE: 8+ columns
+      or pipe-list cells). Measured: rendering 189 rows took 9,299 output tokens
+      and 67 SECONDS, 44% of the whole answer. The count you state comes from
+      the full result set, not the rows you print, so "list all the X" is fully
+      answered by "189 deals — showing the top 50" with ids in the table for
+      drill-down. Print more only if the user asks for more rows.
+      If the skill did not load, still: lead with the number and its UNIT
       ("USD 2.1bn", "3.0mm shares"), put data in a markdown table with ids
       present, keep pipe-delimited values (identifiers, syndicate lists) inside
       ONE cell rather than splitting them across columns, and state counts
