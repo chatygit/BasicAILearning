@@ -470,3 +470,123 @@ SELECT DEAL_TRANSACTION_ID, SYNDICATE_DEAL_NAME,
 FROM   DGSTREAM.OPUS_ECM_TRANSACTION
 WHERE  SYNDICATE_DEAL_NAME IS NOT NULL
 FETCH  FIRST 30 ROWS ONLY;
+
+
+-- ===========================================================================
+-- ROUND 2 — added after V1-V17.  V8 and V12 both died on ORA-01722, which
+-- disproved my assumption that DCM TRANCHE_SIZE is numeric. It is character
+-- data containing values Oracle cannot convert. I need to see them before I
+-- can write the conversion, because the ECM-side fix alone will NOT make the
+-- column numeric while DCM stays text.
+-- ===========================================================================
+
+-- V18 [cheap] *** BLOCKS THE TRANCHE_SIZE FIX ***
+-- What is actually in DCM TRANCHE_SIZE that will not convert?
+SELECT COUNT(*)                                                        AS non_null_rows,
+       COUNT(CASE WHEN NOT REGEXP_LIKE(TRANCHE_SIZE,
+                       '^\s*-?[0-9]+(\.[0-9]+)?\s*$') THEN 1 END)      AS non_numeric_rows
+FROM   DGSTREAM.OB_DEAL_TRANCHE
+WHERE  TRANCHE_SIZE IS NOT NULL;
+
+
+-- V19 [cheap] Show me the offending values — the shape decides the fix
+-- (thousands separators and currency prefixes are salvageable with a strip;
+-- free text is not, and those rows become NULL rather than a fake 0).
+SELECT TRANCHE_SIZE AS raw_value, COUNT(*) AS occurrences
+FROM   DGSTREAM.OB_DEAL_TRANCHE
+WHERE  TRANCHE_SIZE IS NOT NULL
+AND    NOT REGEXP_LIKE(TRANCHE_SIZE, '^\s*-?[0-9]+(\.[0-9]+)?\s*$')
+GROUP  BY TRANCHE_SIZE
+ORDER  BY COUNT(*) DESC
+FETCH  FIRST 30 ROWS ONLY;
+
+
+-- V20 [cheap] Same question for DEAL_ISSUE_SIZE, which feeds DCM DEAL_SIZE on
+-- vw_deal_summary. Q1 says that view column IS a NUMBER today, so this should
+-- come back clean — but V8 already caught me assuming, so verify.
+SELECT COUNT(*)                                                        AS non_null_rows,
+       COUNT(CASE WHEN NOT REGEXP_LIKE(TO_CHAR(DEAL_ISSUE_SIZE),
+                       '^\s*-?[0-9]+(\.[0-9]+)?\s*$') THEN 1 END)      AS non_numeric_rows
+FROM   DGSTREAM.OB_DEAL_TRANCHE
+WHERE  DEAL_ISSUE_SIZE IS NOT NULL;
+
+
+-- V21 [heavy] Re-run of V12 with the conversion guarded, so it survives the
+-- bad values. PASS = sum_order_alloc within an order of magnitude of
+-- sum_tranche_size, and sum_matchgroup_alloc far smaller (the broken source).
+SELECT SUM(t.sz)     AS sum_tranche_size,
+       SUM(o.alloc)  AS sum_order_alloc,
+       SUM(m.alloc)  AS sum_matchgroup_alloc,
+       COUNT(*)      AS tranches
+FROM   (SELECT DEAL_ID, TRANCHE_ID,
+               MAX(CASE WHEN REGEXP_LIKE(TRANCHE_SIZE, '^\s*-?[0-9]+(\.[0-9]+)?\s*$')
+                        THEN TO_NUMBER(TRIM(TRANCHE_SIZE)) END) sz
+        FROM DGSTREAM.OB_DEAL_TRANCHE GROUP BY DEAL_ID, TRANCHE_ID) t
+LEFT   JOIN (SELECT ROOT_ID, PARENT_ID, SUM(FINAL_ALLOC) alloc
+             FROM DGSTREAM.OB_ORDER GROUP BY ROOT_ID, PARENT_ID) o
+       ON o.ROOT_ID = t.DEAL_ID AND o.PARENT_ID = t.TRANCHE_ID
+LEFT   JOIN (SELECT ROOT_ID, PARENT_ID, SUM(FINAL_ALLOC) alloc
+             FROM DGSTREAM.OB_ORDER_MATCH_GROUP GROUP BY ROOT_ID, PARENT_ID) m
+       ON m.ROOT_ID = t.DEAL_ID AND m.PARENT_ID = t.TRANCHE_ID;
+
+
+-- V22 [heavy] Re-run of V3 with the tranche spine now deduped — this is the
+-- fix for the 365 residual duplicates V3 found. V5 proved
+-- OPUS_ECM_TRANSACTION_TRANCHE has 1,835 duplicate (txn,tranche) pairs and it
+-- was the last join in the ECM order branch still going in raw.
+-- PASS = rows_ equals orders_ equals 48,302.
+SELECT COUNT(*) AS rows_, COUNT(DISTINCT ORDER_ID) AS orders_
+FROM (
+    SELECT O.ORDER_ID
+    FROM (
+        SELECT E.* FROM (
+            SELECT EO.*, ROW_NUMBER() OVER (PARTITION BY EO.ORDER_ID ORDER BY EO.ROWID) AS RN_
+            FROM DGSTREAM.OB_ECM_ORDER EO
+        ) E WHERE E.RN_ = 1
+    ) O
+    INNER JOIN (
+        SELECT X.* FROM (
+            SELECT ET.ECM_TRANSACTION_ID, ET.DEAL_TRANSACTION_ID,
+                   ROW_NUMBER() OVER (PARTITION BY ET.ECM_TRANSACTION_ID ORDER BY ET.ROWID) AS RN_
+            FROM DGSTREAM.OPUS_ECM_TRANSACTION ET
+        ) X WHERE X.RN_ = 1
+    ) T
+        ON O.DEAL_ID = T.DEAL_TRANSACTION_ID
+        AND O.IS_OWNED = 'true'
+        AND O.ORDER_STATUS NOT IN ('CANCELLED', 'DELETED', 'PASS')
+        AND ((O.IS_MATCHED = 'true' AND O.IS_DOMINANT = 'true') OR O.IS_MATCHED = 'false')
+    INNER JOIN (
+        SELECT ECM_TRANSACTION_ID, MAX(STATUS_VALUE) AS STATUS_VALUE
+        FROM DGSTREAM.OPUS_ECM_TRANSACTION_STATUS
+        WHERE STATUS_TYPE = 'Execution_Status'
+          AND STATUS_VALUE NOT IN ('Confidential', 'Withdrawn', 'Terminated')
+        GROUP BY ECM_TRANSACTION_ID
+    ) S
+        ON T.ECM_TRANSACTION_ID = S.ECM_TRANSACTION_ID
+    LEFT JOIN (
+        SELECT ORDER_ID, MAX(LIMIT_VALUE) AS LIMIT_VALUE
+        FROM DGSTREAM.OB_ECM_ORDER_IOI GROUP BY ORDER_ID
+    ) OI
+        ON O.ORDER_ID = OI.ORDER_ID
+    LEFT JOIN (
+        SELECT W.* FROM (
+            SELECT TTR.ECM_TRANSACTION_ID, TTR.ECM_TRANSACTION_TRANCHE_ID,
+                   TTR.TRANCHE_NAME, TTR.PRICING_TS, TTR.TRANCHE_CURRENCY_ID,
+                   ROW_NUMBER() OVER (PARTITION BY TTR.ECM_TRANSACTION_ID,
+                                                   TTR.ECM_TRANSACTION_TRANCHE_ID
+                                      ORDER BY TTR.ROWID) AS RN_
+            FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TTR
+        ) W WHERE W.RN_ = 1
+    ) TT
+        ON T.ECM_TRANSACTION_ID = TT.ECM_TRANSACTION_ID
+        AND TO_CHAR(TT.ECM_TRANSACTION_TRANCHE_ID) = O.TRANCHE_ID
+    LEFT JOIN (
+        SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID,
+               MAX(CURRENCY_NAME) AS CURRENCY_NAME
+        FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY
+        GROUP BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID
+    ) TDC
+        ON TT.ECM_TRANSACTION_ID = TDC.ECM_TRANSACTION_ID
+        AND TT.ECM_TRANSACTION_TRANCHE_ID = TDC.ECM_TRANSACTION_TRANCHE_ID
+        AND TT.TRANCHE_CURRENCY_ID = TDC.CURRENCY_ID
+);

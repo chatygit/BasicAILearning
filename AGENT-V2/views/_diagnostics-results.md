@@ -724,3 +724,137 @@ whether `MAX(ODT.STATUS)` is safe on the deal view. Q17 already settles it:
 `STATUS` contains case-variant duplicates (`priced`/`Priced`,
 `announced`/`Announced`), and `MAX()` on text picks lowercase over uppercase by
 codepoint. So the aggregate is unsound regardless of how often statuses differ.
+
+---
+---
+
+# ROUND 2 — validation of the rewritten views (V1–V17)
+
+Each V-query ran the rewritten view body as a SELECT, so a result proves both
+that the SQL compiles and whether the grain assertion holds.
+
+| Query | Verdict |
+|---|---|
+| V1 ECM deal branch | ✅ **PASS** |
+| V2 DCM currency dedupe | ✅ **PASS** |
+| V3 ECM order branch | ❌ **FAIL** — 365 residual duplicates |
+| V4 DCM order branch | ✅ **PASS** grain; allocation now non-zero |
+| V5 tranche spine | ❌ **FAIL** — 1,835 duplicate (txn,tranche) pairs |
+| V8 DCM tranche size | 💥 **ORA-01722** |
+| V12 allocation reconcile | 💥 **ORA-01722** |
+| V15 | still running |
+
+## V1 — ECM deal branch: PASS
+
+| rows_ | deals_ | total_tranches | max_currencies_len |
+|---|---|---|---|
+| 18,399 | 18,399 | 34,599 | 19 |
+
+**rows_ = deals_.** The old view was 22,347 rows for 18,399 deals; the
+GROUP BY collapse works, and it ran in 0.9s.
+
+## V2 — DCM currency dedupe: PASS
+
+Zero rows. No deal renders a repeated currency any more (was 6,940).
+
+## V3 — ECM order branch: FAIL
+
+| rows_ | orders_ | excess |
+|---|---|---|
+| 48,667 | 48,302 | **365** |
+
+Cause identified by V5: `OPUS_ECM_TRANSACTION_TRANCHE` was the one join in
+this branch still going in raw. Fixed; re-test is **V22**.
+
+(48,302 ECM + 5,826,084 DCM = 5,874,386 = exactly the Q9 distinct-order total,
+so the two branches reconcile.)
+
+## V4 — DCM order branch: PASS
+
+| rows_ | orders_ | sum_alloc | orders_with_alloc |
+|---|---|---|---|
+| 5,826,084 | 5,826,084 | 1,308,958,060,851,846.4 | 1,747,582 |
+
+Grain holds, and allocation is populated where the deployed view reports zero.
+`sum_alloc` looks high against tranche sizes — **V21** re-checks it.
+
+## V5 — tranche spine: FAIL ⚠️ this was my known gap
+
+`OPUS_ECM_TRANSACTION_TRANCHE` has **1,835** duplicate `(ECM_TRANSACTION_ID,
+ECM_TRANSACTION_TRANCHE_ID)` pairs. It is the FROM of the tranche view and a
+raw join in the order view, so both still fan out.
+-> both now dedupe it by ROWID. The deal view is unaffected because its tranche
+subqueries already use `COUNT(DISTINCT ...)` and `SELECT DISTINCT`, which V1
+confirms.
+
+## V6 — tranche id uniqueness
+
+72,403 rows / 70,568 distinct tranche ids / 70,567 distinct (txn,tranche).
+Excess of ~1,836 matches V5. Tranche ids are effectively globally unique, so
+the `txn||'~'||tranche` composite in the deal view is belt-and-braces, not
+load-bearing.
+
+## V7 — NULL DEAL_TRANSACTION_ID
+
+44,829 transaction rows; the guard I added costs nothing measurable.
+
+## V8 — 💥 ORA-01722 — **DCM TRANCHE_SIZE IS NOT NUMERIC**
+
+`COUNT(CASE WHEN TRANCHE_SIZE > 1000000000 ...)` raised *invalid number*.
+Comparing the column to a number forces a conversion that fails, which proves
+it is character data holding values Oracle cannot convert.
+
+**This disproves the reasoning I used to revert the DCM guard.** I argued from
+the deployed `VARCHAR2(480)` = 120 CHAR × 4 bytes that DCM was already numeric
+and only the ECM cast was widening it. Wrong. Removing the ECM cast alone will
+NOT yield a NUMBER column while DCM stays text.
+-> blocked on **V18/V19** to see the bad values before writing the conversion.
+
+## V9 — ECM tranche size expression: PASS
+
+72,403 rows, min 0, max 1.0000E+11 (100bn), **would_become_zero = 0**.
+The expression now in the view is safe on every current ECM row.
+
+## V10 — MAX() collapse blast radius: small
+
+~20 multi-transaction ECM deals, ~9 disagreeing. Partially legible; the
+magnitude is what matters and it is negligible.
+
+## V11 — where MAX() is CHOOSING, not deduplicating
+
+| Aggregate | Keys whose duplicates hold different values |
+|---|---|
+| OPUS_BASE_TRANSACTION.DEAL_REGION | 261 |
+| TRANCHE_PRODUCT_DETAIL.SECURITY_TYPE_NAME | 0 |
+| TRANCHE_DEMAND_CURRENCY.CURRENCY_NAME | 0 |
+| **OB_ECM_ORDER_IOI.LIMIT_VALUE** | **14,341** |
+| OB_ORDER_SIZE.AMT | 264 |
+| OB_DEAL_ISSUER.NAME | 0 |
+| EXEC_STATUS.STATUS_VALUE | 115 |
+
+Three are lossless. Four are real choices, and `LIMIT_VALUE` is the one that
+matters: 14,341 ECM orders have several IOI limit points — a demand curve —
+and `MAX()` now reports the highest. That is a defensible reading of
+ORDER_AMOUNT but it IS a decision, and it must be stated in the ontology.
+
+## V13 — list lengths under the new keying: PASS
+
+deal currencies 22 chars · bnd_bank 101 · dcm identifier values 531.
+All far below 32,767; no overflow risk from the re-keying.
+(Supersedes the Q23 reading of 1,304 identifiers per tranche, which the OCR
+likely garbled.)
+
+## V14 — ⚠️ ECM ISSUER NAME **IS** POPULATED
+
+44,829 transaction rows, with issuer name / gfcid / ticker / sector all in the
+42,203–42,872 range, and deal name on 18,156.
+
+**This contradicts the conclusion I drew from Q28.** I reported "there are no
+ECM issuer entities at all" from a five-group result where ISSUER/ECM was
+absent. The source column is well populated, so that was almost certainly an
+OCR-dropped row, not a real defect. V15 settles it.
+
+## V12 — 💥 ORA-01722, same root cause as V8
+
+`SUM` over `NVL(TRANCHE_SIZE,0)` inherits the character type and fails.
+Re-run guarded as **V21**.
