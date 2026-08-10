@@ -2,20 +2,20 @@
 -- VW_TRANCHE_SUMMARY — grain: one row per PRODUCT + DEAL_ID + TRANCHE_ID
 --
 -- FIXES IN THIS REVISION (evidence: views/_diagnostics-results.md)
---   1. TRANCHE_SIZE deployed as VARCHAR2(480) (Q1) because the ECM branch cast
---      it to VARCHAR2(120). Q13/Q14: 66,571 non-null values, ZERO non-numeric.
---      The cast was never justified by the data, and it made "top N by tranche
---      size" sort lexically — '900' beat '1000000'.
---      -> ECM is now a regex-guarded TO_NUMBER (the identical TO_CHAR+regex
---         is what Q13 ran, so it is proven safe on current data; a future bad
---         value yields 0 rather than ORA-01722). DCM is left as
---         NVL(ODT.TRANCHE_SIZE, 0) ON PURPOSE — the base type was never
---         measured, and wrapping it in TO_CHAR could hit scientific notation
---         on large values, fail the regex and silently zero real tranche
---         sizes. The deployed column is VARCHAR2(480) = 120 CHAR x 4 bytes,
---         i.e. exactly the old ECM cast, so DCM did not widen it and is
---         almost certainly already NUMBER. Removing the ECM cast should
---         therefore yield a NUMBER column. VERIFY with Q1 after deploy.
+--   1. TRANCHE_SIZE deployed as VARCHAR2(480) (Q1), so "top N by tranche
+--      size" sorted lexically — '900' beat '1000000'.
+--      BOTH branches were character, not just ECM. V8 proved it: comparing
+--      DCM TRANCHE_SIZE to a number raised ORA-01722. My earlier reasoning
+--      (that 480 = 120 CHAR x 4 bytes meant only the ECM cast was widening
+--      the column, so DCM was already NUMBER) was WRONG.
+--      V18/V19 then showed the "bad" DCM values are not garbage — they are
+--      SCIENTIFIC NOTATION held as text: '11.25E9', '2.3E9', '6.0E8', 44 rows
+--      in all, of which 43 are E-notation and one is the literal '1k'.
+--      -> both branches now convert with a regex that ACCEPTS E-notation, so
+--         the 43 multi-billion tranches convert correctly instead of being
+--         discarded. A genuinely unparseable value (the '1k') becomes NULL,
+--         never a fake 0 — a missing size must not read as a zero size.
+--         NULL source still maps to 0, preserving existing behaviour.
 --   2. SECURITIES_MATURITY deployed as VARCHAR2(16000) (Q1) because the ECM
 --      placeholder was CAST(NULL AS VARCHAR2) against a DCM DATE, so maturity
 --      was an NLS-formatted string — unsortable, unfilterable as a date.
@@ -65,10 +65,11 @@ SELECT
     OBT.DEAL_REGION AS DEAL_REGION,
     TO_CHAR(TT.ECM_TRANSACTION_TRANCHE_ID) AS TRANCHE_ID,
     TT.TRANCHE_NAME AS TRANCHE_NAME,
-    CASE WHEN REGEXP_LIKE(TO_CHAR(TT.TRANCHE_OFFER_SIZE),
-                          '^\s*-?[0-9]+(\.[0-9]+)?\s*$')
+    CASE WHEN TT.TRANCHE_OFFER_SIZE IS NULL THEN 0
+         WHEN REGEXP_LIKE(TO_CHAR(TT.TRANCHE_OFFER_SIZE),
+                          '^\s*[+-]?[0-9]+(\.[0-9]+)?([Ee][+-]?[0-9]+)?\s*$')
          THEN TO_NUMBER(TRIM(TO_CHAR(TT.TRANCHE_OFFER_SIZE)))
-         ELSE 0 END AS TRANCHE_SIZE,
+         ELSE NULL END AS TRANCHE_SIZE,
     CAST(TT.PRICING_TS AS TIMESTAMP(3)) AS PRICING_TS,
     TDC.CURRENCY_NAME AS CURRENCY,
     TT.REGION AS TRANCHE_REGION,
@@ -101,10 +102,13 @@ FROM (
     SELECT W.*
     FROM (
         SELECT TTR.*,
-               ROW_NUMBER() OVER (PARTITION BY TTR.ECM_TRANSACTION_ID,
+               ROW_NUMBER() OVER (PARTITION BY ETX.DEAL_TRANSACTION_ID,
                                                TTR.ECM_TRANSACTION_TRANCHE_ID
                                   ORDER BY TTR.ROWID) AS RN_
         FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TTR
+        JOIN (SELECT DISTINCT ECM_TRANSACTION_ID, DEAL_TRANSACTION_ID
+              FROM DGSTREAM.OPUS_ECM_TRANSACTION) ETX
+          ON ETX.ECM_TRANSACTION_ID = TTR.ECM_TRANSACTION_ID
     ) W
     WHERE W.RN_ = 1
 ) TT
@@ -219,7 +223,11 @@ SELECT
     ODT.REGION AS DEAL_REGION,
     ODT.TRANCHE_ID AS TRANCHE_ID,
     ODT.NAME AS TRANCHE_NAME,
-    NVL(ODT.TRANCHE_SIZE, 0) AS TRANCHE_SIZE,
+    CASE WHEN ODT.TRANCHE_SIZE IS NULL THEN 0
+         WHEN REGEXP_LIKE(ODT.TRANCHE_SIZE,
+                          '^\s*[+-]?[0-9]+(\.[0-9]+)?([Ee][+-]?[0-9]+)?\s*$')
+         THEN TO_NUMBER(TRIM(ODT.TRANCHE_SIZE))
+         ELSE NULL END AS TRANCHE_SIZE,
     ODT.PRICING_TS AS PRICING_TS,
     ODT.CURRENCY AS CURRENCY,
     ODT.TRANCHE_REGION AS TRANCHE_REGION,
@@ -255,7 +263,16 @@ SELECT
     END AS TENORS,
     ODT.MATURITY_DATE AS SECURITIES_MATURITY,
     NVL(DST.DEAL_SHARING_TYPE, 'SHARED') AS DEAL_SHARING_TYPE
-FROM DGSTREAM.OB_DEAL_TRANCHE ODT
+FROM (
+    SELECT V.*
+    FROM (
+        SELECT DTR.*,
+               ROW_NUMBER() OVER (PARTITION BY DTR.DEAL_ID, DTR.TRANCHE_ID
+                                  ORDER BY DTR.ROWID) AS RN_
+        FROM DGSTREAM.OB_DEAL_TRANCHE DTR
+    ) V
+    WHERE V.RN_ = 1
+) ODT
 LEFT JOIN (
     SELECT Z.*
     FROM (

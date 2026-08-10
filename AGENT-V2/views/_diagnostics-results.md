@@ -858,3 +858,82 @@ OCR-dropped row, not a real defect. V15 settles it.
 
 `SUM` over `NVL(TRANCHE_SIZE,0)` inherits the character type and fails.
 Re-run guarded as **V21**.
+
+---
+
+# ROUND 3 — V18–V24
+
+| Query | Verdict |
+|---|---|
+| V18/V19 TRANCHE_SIZE values | ✅ diagnosed — scientific notation, not garbage |
+| V20 DEAL_ISSUE_SIZE | ✅ clean |
+| V21 allocation reconcile | ⚠️ inconclusive **by design flaw in my query** |
+| V22 ECM order grain | ✅ **PASS** 48,302 = 48,302 |
+| V23 ECM tranche grain | ❌ 33,011 vs 33,010 — **one** duplicate |
+| V24 DCM tranche grain | ❌ 36,371 vs 36,370 — **one** duplicate |
+| V15 | cancelled, too slow — moot after V14 |
+
+## V18 / V19 — the "invalid number" values are SCIENTIFIC NOTATION
+
+34,861 non-null DCM tranche sizes, **44 non-numeric** under my strict regex.
+And they are not garbage:
+
+`11.25E9` ×6 · `21.0E9` ×5 · `6.0E8` ×4 · `5.0E8` ×4 · `7.5E8` ×4 ·
+`3.0E8` ×2 · `1.4E9` ×2 · `2.3E9` · `5.5E8` · `8.5E8` · `1.6E9` · `2.25E9` ·
+`9.0E8` · `1.5E8` · `4.0E8` · `1.5E9` · `4.5E8` · `1.1E9` · `8.0E8` · `5.0E7` ·
+`2.0E9` · `3.25E8` · `1.7E9` … and one literal **`1k`**.
+
+43 of the 44 are E-notation for real multi-billion tranches. **My original
+strict regex would have converted every one of them to 0** — silently
+destroying the largest tranches in the book while appearing to fix the column.
+Catching this is the single best return from this round.
+
+-> regex widened to accept `[Ee][+-]?[0-9]+` on both branches. The one
+   unparseable value becomes NULL, never 0.
+
+## V20 — DEAL_ISSUE_SIZE is clean
+
+35,268 non-null, 0 non-numeric. DCM `DEAL_SIZE` needs no change.
+
+## V21 — inconclusive, and that is my query's fault
+
+| sum_tranche_size | sum_order_alloc | sum_matchgroup_alloc | tranches |
+|---|---|---|---|
+| 70,262,179,462,948.87 | 1,308,958,138,351,846.4 | 12,856,146,081,514,577.21 | 36,370 |
+
+Order allocation is ~18.6× tranche size, which looks alarming until you notice
+the query **sums raw notionals across currencies**. A JPY tranche contributes
+~150× a USD tranche of equal value, so the global total is meaningless as a
+reconciliation. I should not have written it that way.
+
+The valid evidence is still Q8, which compared **per tranche** (single currency
+within a tranche) and found order-side sums matching tranche size exactly on
+one and at 98.6% / 99.5% on two others.
+
+What V21 *does* show usefully: `sum_matchgroup_alloc` is ~10× `sum_order_alloc`,
+consistent with the match-group table fanning out — more support for dropping
+that join.
+
+## V22 — ECM order branch: PASS
+
+48,302 rows = 48,302 orders. Deduping the tranche spine cleared the 365
+residual duplicates from V3.
+
+## V23 / V24 — one duplicate each
+
+| Branch | rows_ | tranches_ |
+|---|---|---|
+| ECM | 33,011 | 33,010 |
+| DCM | 36,371 | 36,370 |
+
+**ECM**: I deduped the spine at `(txn, tranche)`, but the declared grain is
+`(deal, tranche)`. A deal spanning two transactions that share a tranche id
+yields two rows. V6 showed tranche ids are near-globally unique, hence exactly
+one collision. -> the dedupe now partitions by `(DEAL_TRANSACTION_ID,
+TRANCHE_ID)`, matching the declared grain rather than the physical key.
+
+**DCM**: `OB_DEAL_TRANCHE` has one duplicate `(DEAL_ID, TRANCHE_ID)` — this is
+the V5 line the OCR could not read. -> deduped by ROWID.
+
+Both are single rows, but a view whose declared grain is violated at all is a
+view the planner cannot trust, which is the entire premise of the split.
