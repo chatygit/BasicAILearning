@@ -51,6 +51,52 @@ FROM   DGSTREAM.OB_ORDER_MATCH_GROUP m
 JOIN   DGSTREAM.OB_ORDER o ON o.ORDER_ID = m.PRIMARY_ORDER_ID;
 
 
+-- Q35 [cheap] *** NEW, ADDED AFTER Q34 ***
+-- Q34 proved PRIMARY_ORDER_ID is the right join key. But joining on it only
+-- works if it is UNIQUE in the match-group table — otherwise we swap one
+-- fan-out for another. DECIDES: whether the new join needs pre-aggregation.
+SELECT COUNT(*)                             AS rows_with_primary,
+       COUNT(DISTINCT PRIMARY_ORDER_ID)     AS distinct_primary_orders,
+       MAX(c)                               AS worst_rows_per_primary_order
+FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
+CROSS  JOIN (SELECT MAX(COUNT(*)) c
+             FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
+             WHERE  PRIMARY_ORDER_ID IS NOT NULL
+             GROUP  BY PRIMARY_ORDER_ID)
+WHERE  PRIMARY_ORDER_ID IS NOT NULL
+GROUP  BY c;
+
+
+-- Q36 [cheap] *** NEW, ADDED AFTER Q34 ***
+-- The 34 rows where both sides are populated and disagree.
+-- DECIDES: which side wins, and whether IS_ACTIVE/STATUS explains the split.
+SELECT m.ORDER_GROUP_ID, m.PRIMARY_ORDER_ID, m.ROOT_ID, m.PARENT_ID,
+       m.STATUS AS mg_status, m.IS_ACTIVE AS mg_is_active, m.FINAL_ALLOC AS mg_alloc,
+       o.STATUS AS ord_status, o.IS_ACTIVE AS ord_is_active, o.FINAL_ALLOC AS ord_alloc
+FROM   DGSTREAM.OB_ORDER_MATCH_GROUP m
+JOIN   DGSTREAM.OB_ORDER o ON o.ORDER_ID = m.PRIMARY_ORDER_ID
+WHERE  m.FINAL_ALLOC IS NOT NULL
+AND    o.FINAL_ALLOC IS NOT NULL
+AND    m.FINAL_ALLOC <> o.FINAL_ALLOC
+FETCH  FIRST 40 ROWS ONLY;
+
+
+-- Q37 [cheap] *** NEW, ADDED AFTER Q34 ***
+-- Coverage check. Q34 only saw orders that ARE a PRIMARY_ORDER_ID. How many
+-- DCM orders are NOT one, and do they have an allocation of their own?
+-- DECIDES: whether a PRIMARY_ORDER_ID-only join leaves orders unallocated.
+SELECT COUNT(*)                                                  AS all_orders,
+       COUNT(CASE WHEN m.PRIMARY_ORDER_ID IS NOT NULL THEN 1 END) AS is_a_primary_order,
+       COUNT(CASE WHEN m.PRIMARY_ORDER_ID IS NULL THEN 1 END)     AS not_a_primary_order,
+       COUNT(CASE WHEN m.PRIMARY_ORDER_ID IS NULL
+                   AND o.FINAL_ALLOC IS NOT NULL THEN 1 END)      AS non_primary_with_own_alloc
+FROM   DGSTREAM.OB_ORDER o
+LEFT   JOIN (SELECT DISTINCT PRIMARY_ORDER_ID
+             FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
+             WHERE  PRIMARY_ORDER_ID IS NOT NULL) m
+       ON m.PRIMARY_ORDER_ID = o.ORDER_ID;
+
+
 -- Q6 [cheap] What IS a match group? Sample the meaningful columns.
 -- DECIDES: whether FINAL_ALLOC there is a per-group total (in which case it
 -- must never reach an order row) or a per-order value.

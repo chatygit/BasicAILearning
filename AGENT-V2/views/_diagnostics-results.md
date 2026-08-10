@@ -4,6 +4,15 @@ Answers to [`_diagnostics.sql`](_diagnostics.sql), captured as they come back.
 Source of truth for the deployed shape — these override any column list in
 `V1/docs/VIEW-SPLIT-PROPOSAL.md` or the `app/bqs/ontology/*.yaml` files.
 
+## Reading these numbers — QA, not PROD
+
+This is the **QA** environment. Counts and percentages here do **not** size PROD
+impact and must never be quoted as such. What QA gives us is **existence
+proof**: if a fan-out, a bad value or a confidential row appears here, the
+schema permits it and the view must handle it. Absence in QA proves nothing.
+
+Every conclusion below is written as a structural yes/no for that reason.
+
 ## Scope rules — these bound every fix, not just this batch
 
 1. **Do not add columns.** A column existing in a base table is not a reason to
@@ -26,10 +35,14 @@ Source of truth for the deployed shape — these override any column list in
 | Q1 view column types | ✅ captured below |
 | Q2 DCM order tables | ✅ captured below |
 | Q3 remaining base tables | ⏳ pending |
-| Q4–Q8 DCM allocation | ⏳ pending |
-| Q9–Q12 grain integrity | ⏳ pending |
-| Q13–Q16 typing | ⏳ pending |
-| Q17–Q20 DCM status / counts | ⏳ pending |
+| Q34 allocation source | ✅ captured below |
+| Q6 match-group sample | ✅ captured below |
+| Q8 allocation reconcile | ✅ captured below |
+| Q35–Q37 allocation | ⏳ pending |
+| Q9–Q12 grain integrity | ✅ captured below |
+| Q13–Q14 typing | ✅ captured below |
+| Q17 DCM status | ✅ captured below |
+| Q18–Q20 DCM counts | ⏳ pending |
 | Q21–Q27 list columns | ⏳ pending |
 | Q28–Q29 entity view | ⏳ pending |
 | Q30–Q33 dead columns | ⏳ pending |
@@ -340,3 +353,227 @@ Source of truth for the deployed shape — these override any column list in
 | 26 | CREATED_TS | TIMESTAMP(7) | 11 | Y |
 | 27 | UPDATED_TS | TIMESTAMP(7) | 11 | Y |
 | 28 | MIN_ALLOCATION | NUMBER | 22 | Y |
+
+---
+
+## Q34 — do the two FINAL_ALLOC columns agree?
+
+`OB_ORDER_MATCH_GROUP m JOIN OB_ORDER o ON o.ORDER_ID = m.PRIMARY_ORDER_ID`
+
+| Metric | Count | % |
+|---|---|---|
+| PRIMARY_ORDERS_MATCHED | 29,681 | 100% |
+| ALLOC_EQUAL | 24,230 | 81.6% |
+| ALLOC_DIFFERS | 5,451 | 18.4% |
+| ONLY_MATCHGROUP_HAS | 5,413 | 18.2% |
+| ONLY_ORDER_HAS | 4 | 0.01% |
+
+Decomposition of the 5,451 differences:
+
+| Case | Count |
+|---|---|
+| order NULL, match group has a value | 5,413 |
+| order has a value, match group NULL | 4 |
+| both non-null but values disagree | **34** |
+
+### What this settles
+
+- **`OB_ORDER.FINAL_ALLOC` alone is NOT sufficient.** It is NULL for 5,413
+  primary orders (18.2%) where the match group carries the allocation.
+  Dropping the join would silently zero those out — `NVL(...,0)` in the view
+  turns a missing allocation into a reported **0**, not a NULL.
+- **The match group is very nearly a superset**: only 4 rows have an order-side
+  value the match group lacks.
+- **Genuine conflicts are rare** — 34 rows where both are populated and differ.
+  Needs a tiebreak rule but is not a blocker.
+- **`PRIMARY_ORDER_ID` is a usable join key**, which is the real fix: replace
+  the `(ROOT_ID, PARENT_ID)` key with it.
+
+### Still open before the fix can be written
+
+1. **Non-primary orders.** This query only covers orders that ARE a
+   `PRIMARY_ORDER_ID`. Orders appearing only in
+   `REF_SOURCE_SECONDARY_ORDER_LIST` are untested — do they get an allocation?
+   → Q6, Q8.
+2. **Which side wins on the 34 conflicts** — inspect a sample.
+3. **Match-group grain per primary order** — if `PRIMARY_ORDER_ID` is not
+   unique in `OB_ORDER_MATCH_GROUP`, joining on it still fans out. Not yet
+   measured; added as Q35.
+
+---
+
+## Q6 — what a match group actually is (sample of 20)
+
+Read via OCR (screenshot exceeded the image-reader size cap), so **per-row
+column alignment is unreliable**. The structural facts below are legible and
+consistent across all 20 rows; do not quote individual cell values.
+
+Fetched 20 rows in 0.059s.
+
+| Field | What the sample shows |
+|---|---|
+| ORDER_GROUP_ID | unique per row (`I-240723-885637490490`, …) |
+| PRIMARY_ORDER_ID | populated on most rows, **NULL on some** (rows 2, 3) |
+| ROOT_ID / PARENT_ID | **repeat heavily** — 13 of 20 rows share `I-240618-062736259063` / `I-240618-062736669439` |
+| STATUS | `updated` on every row |
+| IS_ACTIVE | `Y` on every row |
+| FINAL_ALLOC | mix of `0` and real notionals (3.5m, 7m, 11m, 12m, 13m, 15m, 44m, 100k, 123m) |
+| GB_ALLOC | almost entirely NULL |
+| SECONDARY_LIST_LEN | almost entirely NULL |
+
+### What this settles
+
+1. **The fan-out is real and large.** 13 of 20 sampled rows sit on a single
+   `(ROOT_ID, PARENT_ID)`. The current view joins on exactly that pair, so
+   every DCM order on that tranche is currently multiplied ~13×, each copy
+   carrying a different `FINAL_ALLOC`. This is worse than "same value on every
+   order" — it is duplication *and* wrong values.
+2. **A match group is one-per-order, not one-per-tranche.** `ORDER_GROUP_ID` is
+   unique per row and `SECONDARY_LIST_LEN` is almost always NULL, so these are
+   not aggregating several orders. Combined with Q34 (81.6% agree with the
+   order's own allocation) the table behaves as an order-level allocation
+   record keyed by `PRIMARY_ORDER_ID`.
+3. **`PRIMARY_ORDER_ID` is nullable**, so a plain inner join on it drops rows —
+   the replacement join must be a LEFT JOIN from the order side, which is the
+   correct direction anyway.
+4. **`FINAL_ALLOC` includes legitimate `0`s**, so the view's `NVL(...,0)` makes
+   "allocated nothing" and "no allocation record" indistinguishable.
+
+### Emerging fix for vw_order_detail (DCM branch)
+
+Replace the `(ROOT_ID, PARENT_ID)` join with a `PRIMARY_ORDER_ID` join, and
+coalesce order-side over match-group side (or the reverse — Q36 decides).
+Still gated on **Q35** (is `PRIMARY_ORDER_ID` unique in the match-group table?)
+and **Q37** (do non-primary orders get an allocation at all?).
+
+---
+
+## Q9 / Q9b — grain integrity  ⚠️ ALL FOUR VIEWS FAIL
+
+| Object | rows_ | grain_ | verdict |
+|---|---|---|---|
+| deal | 43,415 | 39,467 | **fails** |
+| tranche | 89,651 | 69,380 | **fails** |
+| order | 11,881,246 | 5,874,386 | **fails — ~2× duplication** |
+| entity | 177,972 | 51,169 | fails (partly by design — branches also group by NAME) |
+
+Deal view split by product (Q9b):
+
+| PRODUCT | rows_ | deals_ |
+|---|---|---|
+| ECM | 22,347 | 18,399 |
+| DCM | 21,068 | 21,068 |
+
+**The deal-view violation is entirely ECM.** DCM is exactly 1:1. The ECM gap
+(3,948) accounts for the whole deal-object gap.
+
+## Q10 — is a deal one ECM transaction?  NO
+
+`OPUS_ECM_TRANSACTION`: 44,829 rows / 43,718 distinct `ECM_TRANSACTION_ID` /
+41,779 distinct `DEAL_TRANSACTION_ID`.
+
+Two separate defects feeding the ECM fan-out:
+1. One deal maps to **several ECM transactions** (43,718 txns > 41,779 deals),
+   so keying the deal view on `DEAL_TRANSACTION_ID` while joining on
+   `ECM_TRANSACTION_ID` cannot yield one row per deal.
+2. `OPUS_ECM_TRANSACTION` itself has **duplicate `ECM_TRANSACTION_ID`s**
+   (44,829 rows > 43,718 distinct).
+
+## Q11 — multiple Execution_Status rows per transaction:  1,356
+
+Confirmed. This INNER JOIN appears in the deal, tranche **and** order views, so
+one offending transaction multiplies all three simultaneously.
+
+## Q12 — unguarded joins:  every single one fans out
+
+| Check | Offenders |
+|---|---|
+| OPUS_BASE_TRANSACTION per TRANSACTION_ID | 39,606 |
+| TRANCHE_PRODUCT_DETAIL per tranche | 1,737 |
+| TRANCHE_DEMAND_CURRENCY per tranche+ccy | 4,547 |
+| OB_ECM_ORDER_IOI per ORDER_ID | 20,739 |
+| OB_ECM_ORDER per ORDER_ID | 101 |
+| OB_ORDER_SIZE per ORDER_ID | 314 |
+| OB_ORDER per ORDER_ID | 6 |
+| OB_DEAL_ISSUER per DEAL_TRANCHE_ID | 156 |
+| OB_DEAL_TRANCHE per DEAL_ID+TRANCHE_ID | (not legible) |
+
+⚠️ OCR could not reliably pair value to label; treat the individual numbers as
+indicative. The conclusion that matters is unambiguous and mapping-independent:
+**every join on this list has offenders, so every one must be guarded.** The
+fix is designed to that, not to the counts.
+
+`OPUS_BASE_TRANSACTION` is the worst — it is a plain `LEFT JOIN` in both the
+deal and tranche views purely to fetch `DEAL_REGION`.
+
+## Q13 / Q14 — TRANCHE_OFFER_SIZE is 100% numeric
+
+66,571 non-null values, **0 non-numeric**. Q14 returned zero rows.
+
+The `CAST(... AS VARCHAR2(120))` in the ECM branch is pure damage — no data
+requires it. Removing it makes `TRANCHE_SIZE` a proper `NUMBER` and fixes the
+lexical sort ('900' beating '1000000') with no conversion risk.
+
+## Q17 — DCM statuses  ⚠️ `confidential` EXISTS AND IS NOT FILTERED
+
+16 distinct values on `OB_DEAL_TRANCHE.STATUS`:
+
+| Status | rows_ | deals_ |
+|---|---|---|
+| Settled | 25,772 | 15,513 |
+| priced | 4,231 | 2,505 |
+| announced | 2,187 | 1,564 |
+| Announced | 2,076 | 649 |
+| draft | 923 | 623 |
+| freeToTrade | 403 | 240 |
+| cancelled | 304 | 226 |
+| allocated | 212 | 163 |
+| Priced | 111 | 74 |
+| subject | 58 | 47 |
+| archived | 33 | 26 |
+| deleted | 17 | 16 |
+| postponed | 16 | 14 |
+| **confidential** | **14** | **12** |
+| (null) | 12 | 2 |
+| Final Settled | 2 | — |
+
+Three findings:
+
+1. **`confidential` exists on DCM and no view excludes it.** ECM excludes
+   Confidential/Withdrawn/Terminated everywhere; DCM excludes nothing. Also
+   unfiltered: `cancelled`, `deleted`, `archived`, `draft`, `postponed`.
+2. **Case-variant duplicates**: `announced`/`Announced` and `priced`/`Priced`
+   are distinct stored values. Any status filter — in the view or the
+   ontology — must be case-insensitive, and the ontology's allowed-value list
+   is currently wrong.
+3. A NULL status and a space-containing value (`Final Settled`) both exist.
+
+## Q8 — allocation reconciliation  ✅ OB_ORDER.FINAL_ALLOC IS AUTHORITATIVE
+
+Five busiest DCM tranches. Query took **28.9 seconds**.
+
+| ROOT_ID | ORDER_CNT | TRANCHE_SIZE | SUM_ORDER_ALLOC | ORDERS_WITH_ALLOC | MATCH_GROUP_ROWS |
+|---|---|---|---|---|---|
+| I-230109-…011684 | 2,870 | (null) | 749,800,000 | 401 | **(null)** |
+| I-230109-…011684 | 2,820 | (null) | 992,000,000 | 406 | **(null)** |
+| 1500009396 | 2,762 | 3,000,000,000 | 2,958,900,000 | 2,762 | **(null)** |
+| 1447715114 | 2,723 | 1,000,000,000 | 1,000,000,000 | 2,723 | **(null)** |
+| 1447601646 | 2,522 | 2,250,000,000 | 2,239,050,000 | 2,522 | **(null)** |
+
+Two decisive results:
+
+1. **`SUM(OB_ORDER.FINAL_ALLOC)` reconciles to `TRANCHE_SIZE`** — exactly on one
+   tranche, 98.6% and 99.5% on the others. That is the allocation book.
+2. **`OB_ORDER_MATCH_GROUP` has NO rows at all for these tranches.** So the
+   view's `LEFT JOIN` yields NULL and `NVL(OMT.FINAL_ALLOC, 0)` reports
+   **ORDER_ALLOCATION = 0 for every order on the busiest tranches.**
+
+So the DCM allocation defect is not merely "wrong value" — for high-volume
+tranches it is **silently zero**, while the correct figure sits unused on the
+order row. Fix: source `ORDER_ALLOCATION` from `OB_ORDER.FINAL_ALLOC` and drop
+the match-group join. Q34's 5,413 order-NULL/matchgroup-populated rows are the
+only reason to keep a coalesce; Q35/Q37 decide whether that is worth a join.
+
+Incidental: DCM ids come in two formats — `I-230109-080151011684` and bare
+numerics like `1500009396`. Consistent with `TRANCHE_SIZE` being NULL on the
+`I-`-prefixed rows. Two source systems behind `OB_DEAL_TRANCHE`.
