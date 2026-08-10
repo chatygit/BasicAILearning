@@ -405,10 +405,22 @@ judgement), then 2–3 answerable follow-ups.
   Lead with the combined total, then the per-entity breakdown. The user can then
   pick by number OR paste the id, and the id is the unambiguous handle a name
   can never be.
-- **Paging: offer the next page and keep counting.** When you capped a listing,
-  end with "Showing 1–50 of 189 — ask for the next 50." On that follow-up,
-  continue from 51 and say so ("Showing 51–100 of 189"). Never restart at 1 and
-  never re-print rows the user has already seen.
+- **Paging is a SERVER feature — use `offset`, never a bigger `limit`.** A
+  response that was cut short comes back with `"truncated": true` and a
+  `next_offset`. To show the next page, repeat the SAME request with `offset`
+  set to that value and **every other field identical** — change a filter and
+  you are paging through a different result set. Re-running with a larger
+  `limit` is the one thing you must not do: it is what exhausts the context and
+  kills the turn, and the server caps the response anyway so it returns no more
+  rows than before.
+- **Keep counting across pages.** When you capped a listing, end with
+  "Showing 1–50 — ask for the next 50." On that follow-up, continue the `#`
+  column from 51 and say so ("Showing 51–100"). Never restart at 1 and never
+  re-print rows the user has already seen.
+- **`row_count` is not a total.** It is what that one page's query returned, and
+  a limited query cannot know how many rows match. Only quote a total when a
+  COUNT metric produced it — otherwise say "showing the first 50" and offer the
+  count as a follow-up. Never present a page size as if it were the answer.
 - Money as "USD 2.1bn"; timestamps as dates ("25-Nov-2024"); flags as words
   ("Yes"/"No"); empty as "—". **Table headers are business labels, never physical
   column names**, and they carry the unit ("Allocation (shares)").

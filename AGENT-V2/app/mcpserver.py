@@ -1,6 +1,8 @@
 import uvicorn
 import os
 import json
+import threading
+import time
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -233,6 +235,67 @@ def _require_caller_soeid() -> dict | None:
     }
 
 
+
+# ---------------------------------------------------------------------------
+# Discovery-hop diagnostics.
+#
+# A catalog costs ~0.45s of server time but a whole LLM turn (5-10s) to fetch
+# and read, so three discovery calls to answer one question is most of a minute.
+# Both config layers already say "once you hold a source's catalog, never fetch
+# it again" and the model does it anyway, so this measures it instead of
+# assuming. Two different faults look the same from the outside and need
+# different fixes:
+#   same source twice   -> the once-per-conversation rule is being ignored
+#   two sources at once -> the question named two grains and the routing table
+#                          did not resolve it to one object
+# There is no conversation id on a stateless request, so this keys on the SOEID
+# over a short window — close enough to attribute a burst to one turn.
+# ---------------------------------------------------------------------------
+_DISCOVERY_WINDOW_SECONDS = 120.0
+_DISCOVERY_LOG: dict[str, list[tuple[float, str]]] = {}
+_DISCOVERY_LOG_LOCK = threading.Lock()
+
+
+def _log_repeat_discovery(soeid: str | None, source: str | None) -> None:
+    """Warn when one caller fetches catalogs more than once in a short window."""
+    try:
+        key = (soeid or "<anon>").lower()
+        name = source or "<ALL FOUR>"
+        now = time.monotonic()
+        with _DISCOVERY_LOG_LOCK:
+            recent = [
+                (t, s) for t, s in _DISCOVERY_LOG.get(key, [])
+                if now - t < _DISCOVERY_WINDOW_SECONDS
+            ]
+            recent.append((now, name))
+            _DISCOVERY_LOG[key] = recent
+            if len(_DISCOVERY_LOG) > 500:  # bounded; purely diagnostic
+                for stale in [
+                    k for k, v in _DISCOVERY_LOG.items()
+                    if not v or now - v[-1][0] > _DISCOVERY_WINDOW_SECONDS
+                ]:
+                    _DISCOVERY_LOG.pop(stale, None)
+        if len(recent) < 2:
+            return
+        names = [s for _t, s in recent]
+        repeated = len(names) != len(set(names))
+        logger.warning(
+            "DISCOVERY HOPS: soeid=%s call #%d in %.0fs — sources=%s (%s). Each "
+            "call costs a full LLM turn; the catalog does not change between "
+            "them.",
+            soeid or "<anon>",
+            len(recent),
+            _DISCOVERY_WINDOW_SECONDS,
+            names,
+            "SAME source re-fetched — the once-per-conversation rule is being "
+            "ignored" if repeated else
+            "DIFFERENT sources — the question spanned grains and the routing "
+            "table did not resolve it to one object",
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics must never break a tool
+        logger.debug("discovery-hop diagnostics skipped: %s", exc)
+
+
 def _entitlement_preflight() -> tuple[dict | None, list[str]]:
     """Identity + entitlement, without touching a BQS request.
 
@@ -407,6 +470,7 @@ if _BQS_AVAILABLE:
                 "discover_business_terms: refused early (code=%s)", denial.get("code")
             )
             return denial
+        _log_repeat_discovery(_resolve_soeid(), source)
         logger.info("discover_business_terms: source=%s", source)
         return _get_bqs_service().discover(source)
 
@@ -423,6 +487,7 @@ if _BQS_AVAILABLE:
         time_dimension: str | None = None,
         order: list[dict] | None = None,
         limit: int | None = None,
+        offset: int | None = None,
     ) -> dict:
         """Run a governed Business Query Specification (BQS) against the database.
 
@@ -475,10 +540,18 @@ if _BQS_AVAILABLE:
             time_dimension: Date dimension to bucket for time_grain (defaults to the
                 source's default date dimension).
             order: List of {"field", "direction"} sort objects.
-            limit: Max rows to return (clamped to the source's max_limit).
-                NOTE: omitting this does NOT mean "no limit" — it defaults to the
-                source's max_limit (5000), so always set an explicit limit on a
-                listing.
+            limit: Max rows to return. Omitting it gives a small default page
+                (50), NOT everything — ask for more rows with `offset`, never by
+                raising the limit. The response is capped independently of this,
+                so a large limit costs warehouse time and returns no more rows
+                than the cap allows.
+            offset: Rows to skip — the paging cursor. Omit for the first page.
+                When a response comes back with "truncated": true it carries a
+                "next_offset"; to show the next page, repeat the SAME request
+                with offset set to that value and EVERY other field identical.
+                Changing a filter mid-page means paging through a different
+                result set. If the user wants a TOTAL rather than more rows, use
+                a count metric — that is one row instead of thousands.
         """
         request = {
             "source": source,
@@ -492,6 +565,7 @@ if _BQS_AVAILABLE:
             "time_dimension": time_dimension,
             "order": order or [],
             "limit": limit,
+            "offset": offset,
         }
         # Identity first: no caller SOEID, no data. Checked before the
         # entitlement gate so it applies even when the gate is flagged off.

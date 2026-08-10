@@ -223,5 +223,10 @@ def build_sql(plan: QueryPlan, dialect: BaseDialect) -> BuiltQuery:
         order_parts = [f'"{o.column_alias}" {o.direction}' for o in plan.orders]
         sql += " ORDER BY " + ", ".join(order_parts)
 
+    # OFFSET must precede LIMIT. The planner guarantees a deterministic ORDER BY
+    # whenever offset > 0 — without one, page 2 can repeat or skip rows from
+    # page 1, because nothing in SQL promises a stable order between runs.
+    if plan.offset:
+        sql += " " + dialect.offset_clause(plan.offset)
     sql += " " + dialect.limit_clause(plan.limit)
     return BuiltQuery(sql=sql, params=params)

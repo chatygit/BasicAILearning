@@ -1215,6 +1215,128 @@ if AUTH_MW.exists():
           "logs would say so")
 
 # ---------------------------------------------------------------------------
+# Response size — rows go straight into an LLM context.
+#
+# An omitted `limit` used to resolve to spec.max_limit (5000). A listing that
+# hit it ended the turn with RESOURCE_EXHAUSTED at ~300k tokens. Two bounds now
+# exist and they are NOT interchangeable: the planner's default bounds what the
+# warehouse does, the formatter's cap bounds what the model reads. Capping
+# without `offset` would be worse than neither — rows past the cap would be
+# unreachable, while the skill promises the user "ask for the next 50".
+# ---------------------------------------------------------------------------
+FORMATTER = ROOT / "app" / "bqs" / "formatter.py"
+PAGING_TEST = ROOT / "tests" / "test_response_paging.py"
+
+for p in [FORMATTER, PAGING_TEST]:
+    check(p.exists(), f"[python] {p.relative_to(ROOT)} is missing")
+
+if PLANNER.exists():
+    src = text(PLANNER)
+    check("req.limit or spec.max_limit" not in src,
+          "[context] planner.py: an omitted limit resolves to spec.max_limit "
+          "again — that is 5000 rows into an LLM context and the "
+          "RESOURCE_EXHAUSTED path at ~300k tokens")
+    check("_default_row_limit()" in src,
+          "[context] planner.py: the small default page is gone — an omitted "
+          "limit must mean a page, not everything the object allows")
+    check("offset" in src and "offset_without_order" in src,
+          "[correctness] planner.py: offset lost its deterministic-sort "
+          "guarantee — OFFSET without ORDER BY is sampling, not paging, and "
+          "page 2 can repeat or skip rows from page 1")
+
+if FORMATTER.exists():
+    src = text(FORMATTER)
+    check("max_response_rows" in src and "rows[:cap]" in src,
+          "[context] formatter.py: the response row cap is gone — this is the "
+          "last place before an LLM context and the only hard bound on what one "
+          "query can cost in tokens")
+    check("next_offset" in src and "truncated" in src,
+          "[correctness] formatter.py: a clipped result no longer says so — the "
+          "agent cannot tell a complete answer from a cut-off one, and the rows "
+          "it did not see become unreachable")
+    check("returned_rows" in src,
+          "[correctness] formatter.py: returned_rows is gone — row_count alone "
+          "cannot distinguish what the query returned from what the model got")
+
+if MCPSERVER.exists():
+    src = text(MCPSERVER)
+    _sig = src.split("def run_bqs_query(", 1)[-1].split(")", 1)[0]
+    check("offset" in _sig,
+          "[correctness] mcpserver.py: run_bqs_query has no `offset` parameter, "
+          "so paging is unreachable from the agent no matter what the engine "
+          "supports and what the skill promises")
+    check('"offset": offset' in src,
+          "[correctness] mcpserver.py: `offset` is accepted but never put in the "
+          "BQS request — every page would silently return page 1")
+
+# Both config layers must tell the agent to page with `offset`. Left saying
+# only "ask for the next 50", the model's instinct on a truncated result is to
+# re-run with a bigger limit — the exact move that exhausts the context.
+for _cfg in [ROOT / "adk" / "skills" / "text2sql-ecm-dcm" / "SKILL.md",
+             ROOT / "adk" / "config" / "agents.yaml"]:
+    if not _cfg.exists():
+        continue
+    _c = text(_cfg)
+    check("offset" in _c and "next_offset" in _c,
+          f"[context] {_cfg.name}: the paging rule no longer names `offset` / "
+          f"`next_offset` — the agent is told to offer a next page without being "
+          f"told the mechanism, and will reach for a bigger limit instead")
+    check("bigger" in _c.lower() and "limit" in _c.lower(),
+          f"[context] {_cfg.name}: the prohibition on re-running with a larger "
+          f"limit is gone — that is the RESOURCE_EXHAUSTED move")
+
+# ---------------------------------------------------------------------------
+# Cross-object field misses, and the hop count.
+#
+# Observed 2026-08-10 on "top 10 investors by allocation in Energy deals":
+# allocation/investor_category are on ecm_dcm_order, `sector` only on
+# ecm_dcm_deal, and one BQS request cannot span grains. The agent was told only
+# "Unknown filter field 'sector' ... Known filters: [...]", which reads as a
+# spelling problem — so it discovered all three objects, then made TEN
+# run_bqs_query calls, then hit 429 RESOURCE_EXHAUSTED.
+# ---------------------------------------------------------------------------
+SERVICE = ROOT / "app" / "services" / "domain_query_service.py"
+XOBJ_TEST = ROOT / "tests" / "test_cross_object_error.py"
+
+for p in [SERVICE, XOBJ_TEST]:
+    check(p.exists(), f"[python] {p.relative_to(ROOT)} is missing")
+
+if SERVICE.exists():
+    src = text(SERVICE)
+    check("_explain_cross_object" in src,
+          "[correctness] domain_query_service.py: a field miss no longer says "
+          "WHERE the field lives — 'unknown filter' alone reads as a typo and "
+          "the agent guesses again")
+    check("_explain_cross_object(e, request)" in src,
+          "[correctness] domain_query_service.py: the BQSError handler stopped "
+          "routing through the explainer, so the enrichment never runs")
+    check("cannot span" in src and "Do NOT" in src,
+          "[correctness] domain_query_service.py: the error no longer tells the "
+          "agent that one request cannot span grains and must not retry — that "
+          "retry loop is what reached 429")
+
+if MCPSERVER.exists():
+    src = text(MCPSERVER)
+    check("_log_repeat_discovery" in src,
+          "[latency] mcpserver.py: repeat-discovery diagnostics are gone. A "
+          "catalog costs 0.45s of server time but a whole LLM turn to fetch, and "
+          "three of them was most of a minute in the 2026-08-10 trace")
+
+if XOBJ_TEST.exists():
+    import subprocess
+    rc = subprocess.run([sys.executable, str(XOBJ_TEST)],
+                        capture_output=True, text=True).returncode
+    check(rc == 0, "[python] test_cross_object_error.py FAILED — run it directly "
+                   "to see which explanation regressed")
+
+if PAGING_TEST.exists():
+    import subprocess
+    rc = subprocess.run([sys.executable, str(PAGING_TEST)],
+                        capture_output=True, text=True).returncode
+    check(rc == 0, "[python] test_response_paging.py FAILED — run it directly to "
+                   "see which response bound regressed")
+
+# ---------------------------------------------------------------------------
 # Scope-aware undefined-name check.
 #
 # mcpserver.py cannot be imported here (fastmcp, uvicorn, mcp), so nothing in

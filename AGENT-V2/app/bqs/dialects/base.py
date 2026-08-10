@@ -27,6 +27,15 @@ class BaseDialect(ABC):
     def limit_clause(self, limit: int) -> str:
         """Return a row-limit clause appended after ORDER BY."""
 
+    def offset_clause(self, offset: int) -> str:
+        """Return a row-skip clause, emitted between ORDER BY and LIMIT.
+
+        Concrete by design: standard SQL spells this the same way in every
+        dialect we target, and an abstract method here would break any dialect
+        outside this repo the moment it was added.
+        """
+        return f"OFFSET {int(offset)}"
+
     @abstractmethod
     def connect(self, conn_spec: Any, password: str | None):
         """Open a READ-ONLY connection for this dialect."""

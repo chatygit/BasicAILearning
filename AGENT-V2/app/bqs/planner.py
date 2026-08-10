@@ -8,11 +8,24 @@ columns/aggregations — the only place where business<->schema mapping happens.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 
 from .models import BQSComputedFilter, BQSFilter, BQSRequest, BQSError
 from .ontology import Aggregation, OntologySpec
+
+# Rows an omitted `limit` resolves to. Deliberately small: see the note at the
+# limit clamp in plan_query. Tune with BQS_DEFAULT_LIMIT.
+_DEFAULT_ROW_LIMIT = 50
+
+
+def _default_row_limit() -> int:
+    try:
+        value = int(os.getenv("BQS_DEFAULT_LIMIT", str(_DEFAULT_ROW_LIMIT)))
+    except ValueError:
+        return _DEFAULT_ROW_LIMIT
+    return value if value > 0 else _DEFAULT_ROW_LIMIT
 
 
 @dataclass
@@ -98,6 +111,7 @@ class QueryPlan:
     time_grain: ResolvedTimeGrain | None = None
     orders: list[ResolvedOrder] = field(default_factory=list)
     limit: int = 0
+    offset: int = 0
 
 
 _VALID_GRAINS = {"day", "week", "month", "quarter", "year"}
@@ -424,11 +438,37 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
     orders = _resolve_orders(req, time_grain)
 
     # Limit clamp.
-    # NOTE: an omitted limit becomes spec.max_limit (5000 on our data objects),
-    # NOT "unlimited" and not a small default. A listing without an explicit
-    # limit can return 5000 rows. The skill instructs the agent to always set one.
-    limit = req.limit or spec.max_limit
+    #
+    # An omitted limit used to become spec.max_limit — 5000 rows. Those rows go
+    # into an LLM context, and a listing that resolved to a few thousand of them
+    # ended the turn with RESOURCE_EXHAUSTED at ~300k tokens. "No limit given"
+    # means the agent did not think about size, which is the case that most
+    # needs a small answer, not the largest one the object allows.
+    #
+    # This is the SQL limit. The response is capped again, independently, in
+    # domain_query_service — the two are different concerns: this one bounds
+    # what the warehouse does, that one bounds what the model reads.
+    limit = req.limit or _default_row_limit()
     limit = min(limit, spec.max_limit)
+
+    offset = max(0, int(req.offset or 0))
+    if offset and not orders:
+        # OFFSET without ORDER BY is not paging, it is sampling: nothing in SQL
+        # promises two runs order rows the same way, so page 2 can repeat or
+        # skip rows from page 1. A GROUP BY guarantees distinct dimension
+        # tuples, so ordering by every projected dimension is fully
+        # deterministic — do that rather than refuse.
+        orders = [
+            ResolvedOrder(column_alias=d.alias, direction="ASC") for d in dims
+        ]
+        if not orders:
+            raise BQSError(
+                "offset needs a deterministic sort, and this request has no "
+                "dimensions to order by. An aggregate with no dimensions "
+                "returns a single row, so there is nothing to page through — "
+                "drop the offset.",
+                code="offset_without_order",
+            )
 
     return QueryPlan(
         spec=spec,
@@ -441,4 +481,5 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
         time_grain=time_grain,
         orders=orders,
         limit=limit,
+        offset=offset,
     )

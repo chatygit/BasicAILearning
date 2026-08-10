@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 
 from pydantic import ValidationError
@@ -101,6 +102,67 @@ class DomainQueryService:
         logger.warning("BQS request validation failed: %s", problems)
         return BQSError(msg, code="invalid_request").to_dict()
 
+    _FIELD_MISS_CODES = ("unknown_filter", "unknown_dimension", "unknown_metric")
+
+    def _explain_cross_object(self, err: BQSError, request: dict) -> dict:
+        """Say WHERE a missing field actually lives, or that it exists nowhere.
+
+        A BQS request runs against ONE object, and the four objects are at
+        different grains — so a question like "top investors by allocation in
+        ENERGY deals" is not expressible: allocation and investor_category are
+        on ecm_dcm_order, `sector` only on ecm_dcm_deal. Told merely "unknown
+        filter 'sector', known filters: [...]", the agent guessed, failed,
+        guessed again — ten run_bqs_query calls and a 429 RESOURCE_EXHAUSTED.
+
+        The registry knows every object's fields, so the error can distinguish
+        the two cases the agent cannot: a field that exists at ANOTHER grain
+        (say so, and that one request cannot span them) versus one that exists
+        nowhere (say the data does not support it, and stop).
+        """
+        payload = err.to_dict()
+        try:
+            if err.code not in self._FIELD_MISS_CODES:
+                return payload
+            match = re.search(r"'([^']+)'", err.message or "")
+            if not match:
+                return payload
+            field = match.group(1)
+            here = str(request.get("source") or "").strip()
+            elsewhere = []
+            for name in self.registry.list_sources():
+                if name == here:
+                    continue
+                spec = self.registry.get(name)
+                if field in spec.filters or field in spec.dimensions:
+                    elsewhere.append(name)
+            if elsewhere:
+                payload["message"] = (
+                    f"{err.message} "
+                    f"'{field}' DOES exist on {', '.join(elsewhere)} — a different "
+                    f"grain. One request runs against ONE object and cannot span "
+                    f"them, so this question cannot be answered as asked. Do NOT "
+                    f"retry with a guessed field name. Either drop '{field}' and "
+                    f"answer what this object supports, or answer at the other "
+                    f"object's grain — then tell the user plainly which one you "
+                    f"did and what it leaves out."
+                )
+                payload["field_available_on"] = elsewhere
+            else:
+                payload["message"] = (
+                    f"{err.message} '{field}' is not available on ANY object, so "
+                    f"the data does not support this question. Do NOT retry with "
+                    f"another guess — say plainly that this attribute is not "
+                    f"tracked and offer what the listed fields can answer."
+                )
+                payload["field_available_on"] = []
+            logger.info(
+                "BQS field miss: field=%s source=%s available_on=%s",
+                field, here or "<unset>", elsewhere,
+            )
+        except Exception as exc:  # noqa: BLE001 - never break an error path
+            logger.debug("cross-object explanation skipped: %s", exc)
+        return payload
+
     @staticmethod
     def _enrich_result(result: dict, req, spec, dialect, row_count: int, plan=None) -> None:
         """Attach best-effort suggestions/disambiguation to ``result`` in place.
@@ -178,6 +240,8 @@ class DomainQueryService:
                 sql_audit=built.sql,
                 row_count=len(rows),
                 as_of_date=fetch_as_of_date(spec, dialect),
+                offset=plan.offset,
+                limit=plan.limit,
             )
             t_format = time.perf_counter()
             # NOTE: `sql_audit` puts the generated SQL INTO the response the
@@ -207,7 +271,7 @@ class DomainQueryService:
             return result
         except BQSError as e:
             logger.warning("BQS rejected: %s", e.message)
-            return e.to_dict()
+            return self._explain_cross_object(e, request)
         except Exception as e:  # noqa: BLE001
             # Never leak a raw stack/driver string to the agent — give a stable,
             # non-actionable message so it doesn't loop on the same request.

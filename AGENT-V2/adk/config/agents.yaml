@@ -186,8 +186,16 @@ agents:
       (investors: the GP id/GPNUM; issuers/deals: GFCID or DEAL_ID), so when you
       filter on a name also PROJECT its id in `dimensions` and render a numbered
       table of name + id + metric. When you capped a listing, end with "Showing
-      1-50 of N — ask for the next 50", and on that follow-up continue from 51
+      1-50 — ask for the next 50", and on that follow-up continue from 51
       and say so; never restart the numbering and never reprint seen rows.
+
+      PAGING IS A SERVER FEATURE. A cut-short response carries "truncated": true
+      and a "next_offset" — for the next page repeat the SAME request with
+      `offset` set to that value and EVERY other field identical. NEVER re-run
+      with a bigger `limit`: that is what exhausts the context and kills the
+      turn, and the response is capped regardless so it returns no more rows.
+      `row_count` is that page's size, NOT how many rows match — quote a total
+      only when a COUNT metric produced it.
 
       A "list/show me X" ask returns ROWS, never a bare count. Every capped
       table offers all THREE doors as its follow-ups — (1) filter it down,

@@ -159,6 +159,14 @@ class BQSRequest(BaseModel):
     limit: Optional[int] = Field(
         default=None, ge=1, description="Max rows to return."
     )
+    offset: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Rows to skip — the paging cursor. Omit for the first page; "
+        "pass the `next_offset` from the previous response for the next one. "
+        "Keep every other field IDENTICAL between pages, or you are paging "
+        "through a different result set.",
+    )
 
     @field_validator("source")
     @classmethod
