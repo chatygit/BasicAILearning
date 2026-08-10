@@ -1,437 +1,472 @@
 -- ===========================================================================
--- PRE-FIX DIAGNOSTICS — TRIMMED SET
+-- VALIDATION SET — proves the REWRITTEN view logic before anyone deploys it
 --
--- 21 queries. Everything answerable from the repo has been removed; what
--- remains needs the actual data. Original Q numbers are kept so results map
--- to _diagnostics-results.md.
+-- The views cannot be created yet, so every query below runs the new view
+-- body as a plain SELECT. Running one therefore proves two things at once:
+--   (a) it COMPILES  — syntax, type resolution, UNION ALL compatibility
+--   (b) it is CORRECT — the grain / value assertion in the outer SELECT
 --
--- ALREADY ANSWERED, DO NOT RE-RUN:
---   Q1  view columns          -> _reference/view-columns.md
---   Q2  base-table columns    -> _reference/base-table-columns.md
---   Q3  remaining base tables -> WITHDRAWN. Covered by V1/reference/columns.txt
---       (old single view) + the join-key table in
---       V1/docs/QA-FINDINGS-FOR-DATA-TEAM.md + the deployed DDL in this folder.
---   Q4,Q5,Q7  match-group structure -> answered by Q2.
---   Q15,Q16   view typing     -> Q1 already proves TRANCHE_SIZE is VARCHAR2(480)
---                                and SECURITIES_MATURITY is VARCHAR2(16000).
---                                Both bugs CONFIRMED; only Q13/Q14 remain.
---   Q22  LISTAGG overflow     -> deprioritised. Q1 shows the list columns are
---                                VARCHAR2(32767) extended, not 4000.
---   Q27,Q30,Q31,Q33 -> moot under the no-new-columns rule.
+-- All earlier diagnostics (Q1-Q37) are ANSWERED and recorded in
+-- _diagnostics-results.md. Do not re-run them. This file replaces them.
 --
--- Run against Oracle (DGSTREAM) directly, not through Starburst/Trino.
--- Paste results back labelled by Q number. Cost: [cheap] / [heavy].
+-- Cost: [cheap] seconds · [heavy] expect minutes, Q9 took ~11s and Q28 ~79s
+--
+--   V1-V4   does the rewrite compile, and does it hold grain
+--   V5-V6   the gap I could not close from the previous round
+--   V7-V9   type outcomes I asserted but never measured
+--   V10-V11 blast radius of the MAX() collapse I introduced
+--   V12     allocation fix, full population
+--   V13     list-column lengths under the new keying
+--   V14-V17 ECM issuer name — still open from Q28
+--
+-- PASS/FAIL is stated under each query. Please send the numbers plus any
+-- ORA- error verbatim; a compile error is as useful as a wrong count.
 -- ===========================================================================
 
 
 -- ===========================================================================
--- BLOCK A — THE DCM ALLOCATION BUG          (blocks the vw_order_detail fix)
---
--- Today: LEFT JOIN DGSTREAM.OB_ORDER_MATCH_GROUP OMT
---          ON OMT.ROOT_ID = O.ROOT_ID AND OMT.PARENT_ID = O.PARENT_ID
--- keyed on deal+tranche, never the order — so every order on a tranche gets
--- the same FINAL_ALLOC. Q2 showed OB_ORDER.FINAL_ALLOC (NUMBER) exists on the
--- order row itself, so the fix is probably to DELETE this join rather than
--- rewrite it. These three queries decide which source is authoritative.
+-- V1 [heavy] *** THE ONE THAT MATTERS ***
+-- The rewritten ECM branch of VW_DEAL_SUMMARY, wrapped in a grain assertion.
+-- Old behaviour (Q9b): 22,347 rows for 18,399 deals.
+-- PASS = rows_ equals deals_ equals 18,399-ish. Any excess means the
+--        GROUP BY did not collapse multi-transaction deals as intended.
 -- ===========================================================================
-
--- Q34 [cheap] Do the two FINAL_ALLOC columns agree where they overlap?
--- OB_ORDER_MATCH_GROUP.PRIMARY_ORDER_ID points at an order, so this is a
--- direct comparison. DECIDES: whether OB_ORDER.FINAL_ALLOC alone is sufficient.
-SELECT COUNT(*)                                                     AS primary_orders_matched,
-       COUNT(CASE WHEN NVL(o.FINAL_ALLOC,-1) =  NVL(m.FINAL_ALLOC,-1)
-                  THEN 1 END)                                       AS alloc_equal,
-       COUNT(CASE WHEN NVL(o.FINAL_ALLOC,-1) <> NVL(m.FINAL_ALLOC,-1)
-                  THEN 1 END)                                       AS alloc_differs,
-       COUNT(CASE WHEN o.FINAL_ALLOC IS     NULL
-                   AND m.FINAL_ALLOC IS NOT NULL THEN 1 END)        AS only_matchgroup_has,
-       COUNT(CASE WHEN o.FINAL_ALLOC IS NOT NULL
-                   AND m.FINAL_ALLOC IS     NULL THEN 1 END)        AS only_order_has
-FROM   DGSTREAM.OB_ORDER_MATCH_GROUP m
-JOIN   DGSTREAM.OB_ORDER o ON o.ORDER_ID = m.PRIMARY_ORDER_ID;
-
-
--- Q35 [cheap] *** NEW, ADDED AFTER Q34 ***
--- Q34 proved PRIMARY_ORDER_ID is the right join key. But joining on it only
--- works if it is UNIQUE in the match-group table — otherwise we swap one
--- fan-out for another. DECIDES: whether the new join needs pre-aggregation.
-SELECT COUNT(*)                             AS rows_with_primary,
-       COUNT(DISTINCT PRIMARY_ORDER_ID)     AS distinct_primary_orders,
-       MAX(c)                               AS worst_rows_per_primary_order
-FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
-CROSS  JOIN (SELECT MAX(COUNT(*)) c
-             FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
-             WHERE  PRIMARY_ORDER_ID IS NOT NULL
-             GROUP  BY PRIMARY_ORDER_ID)
-WHERE  PRIMARY_ORDER_ID IS NOT NULL
-GROUP  BY c;
-
-
--- Q36 [cheap] *** NEW, ADDED AFTER Q34 ***
--- The 34 rows where both sides are populated and disagree.
--- DECIDES: which side wins, and whether IS_ACTIVE/STATUS explains the split.
-SELECT m.ORDER_GROUP_ID, m.PRIMARY_ORDER_ID, m.ROOT_ID, m.PARENT_ID,
-       m.STATUS AS mg_status, m.IS_ACTIVE AS mg_is_active, m.FINAL_ALLOC AS mg_alloc,
-       o.STATUS AS ord_status, o.IS_ACTIVE AS ord_is_active, o.FINAL_ALLOC AS ord_alloc
-FROM   DGSTREAM.OB_ORDER_MATCH_GROUP m
-JOIN   DGSTREAM.OB_ORDER o ON o.ORDER_ID = m.PRIMARY_ORDER_ID
-WHERE  m.FINAL_ALLOC IS NOT NULL
-AND    o.FINAL_ALLOC IS NOT NULL
-AND    m.FINAL_ALLOC <> o.FINAL_ALLOC
-FETCH  FIRST 40 ROWS ONLY;
-
-
--- Q37 [cheap] *** NEW, ADDED AFTER Q34 ***
--- Coverage check. Q34 only saw orders that ARE a PRIMARY_ORDER_ID. How many
--- DCM orders are NOT one, and do they have an allocation of their own?
--- DECIDES: whether a PRIMARY_ORDER_ID-only join leaves orders unallocated.
-SELECT COUNT(*)                                                  AS all_orders,
-       COUNT(CASE WHEN m.PRIMARY_ORDER_ID IS NOT NULL THEN 1 END) AS is_a_primary_order,
-       COUNT(CASE WHEN m.PRIMARY_ORDER_ID IS NULL THEN 1 END)     AS not_a_primary_order,
-       COUNT(CASE WHEN m.PRIMARY_ORDER_ID IS NULL
-                   AND o.FINAL_ALLOC IS NOT NULL THEN 1 END)      AS non_primary_with_own_alloc
-FROM   DGSTREAM.OB_ORDER o
-LEFT   JOIN (SELECT DISTINCT PRIMARY_ORDER_ID
-             FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
-             WHERE  PRIMARY_ORDER_ID IS NOT NULL) m
-       ON m.PRIMARY_ORDER_ID = o.ORDER_ID;
-
-
--- Q6 [cheap] What IS a match group? Sample the meaningful columns.
--- DECIDES: whether FINAL_ALLOC there is a per-group total (in which case it
--- must never reach an order row) or a per-order value.
-SELECT ORDER_GROUP_ID, PRIMARY_ORDER_ID, ROOT_ID, PARENT_ID,
-       STATUS, IS_ACTIVE, FINAL_ALLOC, GB_ALLOC,
-       LENGTH(REF_SOURCE_SECONDARY_ORDER_LIST) AS secondary_list_len
-FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
-WHERE  FINAL_ALLOC IS NOT NULL
-FETCH  FIRST 20 ROWS ONLY;
-
-
--- Q8 [cheap] Reconcile both allocation sources against tranche size on the
--- five busiest DCM tranches. The correct source should land near TRANCHE_SIZE;
--- a per-tranche value fanned across orders will overshoot by ~order_cnt.
-WITH busiest AS (
-  SELECT ROOT_ID, PARENT_ID, COUNT(*) AS order_cnt
-  FROM   DGSTREAM.OB_ORDER
-  GROUP  BY ROOT_ID, PARENT_ID
-  ORDER  BY COUNT(*) DESC
-  FETCH  FIRST 5 ROWS ONLY
+WITH ecm_deal AS (
+SELECT
+    T.DEAL_TRANSACTION_ID AS DEAL_ID,
+    MAX(T.SYNDICATE_DEAL_NAME) AS DEAL_NAME,
+    MAX(T.DEAL_SIZE) AS DEAL_SIZE,
+    MAX(S.STATUS_VALUE) AS DEAL_STATUS,
+    MAX(OBT.DEAL_REGION) AS DEAL_REGION,
+    MAX(TR.TRANCHE_COUNT) AS TRANCHE_COUNT,
+    MAX(TR.FIRST_PRICED) AS FIRST_PRICED,
+    MAX(TR.LAST_PRICED) AS LAST_PRICED,
+    MAX(TC.CURRENCIES) AS CURRENCIES,
+    MAX(OD.ORDER_COUNT) AS ORDER_COUNT
+FROM (
+    SELECT X.*
+    FROM (
+        SELECT ET.*,
+               ROW_NUMBER() OVER (PARTITION BY ET.ECM_TRANSACTION_ID
+                                  ORDER BY ET.ROWID) AS RN_
+        FROM DGSTREAM.OPUS_ECM_TRANSACTION ET
+        WHERE ET.DEAL_TRANSACTION_ID IS NOT NULL
+    ) X
+    WHERE X.RN_ = 1
+) T
+INNER JOIN (
+    SELECT ECM_TRANSACTION_ID,
+           MAX(STATUS_VALUE) AS STATUS_VALUE
+    FROM DGSTREAM.OPUS_ECM_TRANSACTION_STATUS
+    WHERE STATUS_TYPE = 'Execution_Status'
+      AND STATUS_VALUE NOT IN ('Confidential', 'Withdrawn', 'Terminated')
+    GROUP BY ECM_TRANSACTION_ID
+) S
+    ON T.ECM_TRANSACTION_ID = S.ECM_TRANSACTION_ID
+LEFT JOIN (
+    SELECT TRANSACTION_ID, MAX(DEAL_REGION) AS DEAL_REGION
+    FROM DGSTREAM.OPUS_BASE_TRANSACTION
+    GROUP BY TRANSACTION_ID
+) OBT
+    ON T.DEAL_TRANSACTION_ID = OBT.TRANSACTION_ID
+LEFT JOIN (
+    SELECT ET.DEAL_TRANSACTION_ID,
+           COUNT(DISTINCT TT.ECM_TRANSACTION_ID || '~' ||
+                          TT.ECM_TRANSACTION_TRANCHE_ID) AS TRANCHE_COUNT,
+           MIN(TT.PRICING_TS) AS FIRST_PRICED,
+           MAX(TT.PRICING_TS) AS LAST_PRICED
+    FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TT
+    JOIN (SELECT DISTINCT ECM_TRANSACTION_ID, DEAL_TRANSACTION_ID
+          FROM DGSTREAM.OPUS_ECM_TRANSACTION) ET
+      ON ET.ECM_TRANSACTION_ID = TT.ECM_TRANSACTION_ID
+    GROUP BY ET.DEAL_TRANSACTION_ID
+) TR
+    ON TR.DEAL_TRANSACTION_ID = T.DEAL_TRANSACTION_ID
+LEFT JOIN (
+    SELECT C.DEAL_TRANSACTION_ID,
+           LISTAGG(C.TRANCHE_CURRENCY_ID, ' | ')
+             WITHIN GROUP (ORDER BY C.TRANCHE_CURRENCY_ID) AS CURRENCIES
+    FROM (
+        SELECT DISTINCT ET.DEAL_TRANSACTION_ID, TT.TRANCHE_CURRENCY_ID
+        FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TT
+        JOIN (SELECT DISTINCT ECM_TRANSACTION_ID, DEAL_TRANSACTION_ID
+              FROM DGSTREAM.OPUS_ECM_TRANSACTION) ET
+          ON ET.ECM_TRANSACTION_ID = TT.ECM_TRANSACTION_ID
+    ) C
+    GROUP BY C.DEAL_TRANSACTION_ID
+) TC
+    ON TC.DEAL_TRANSACTION_ID = T.DEAL_TRANSACTION_ID
+LEFT JOIN (
+    SELECT O.DEAL_ID,
+           COUNT(DISTINCT O.ORDER_ID) AS ORDER_COUNT
+    FROM DGSTREAM.OB_ECM_ORDER O
+    WHERE O.IS_OWNED = 'true'
+      AND O.ORDER_STATUS NOT IN ('CANCELLED', 'DELETED', 'PASS')
+      AND ((O.IS_MATCHED = 'true' AND O.IS_DOMINANT = 'true') OR O.IS_MATCHED = 'false')
+    GROUP BY O.DEAL_ID
+) OD
+    ON T.DEAL_TRANSACTION_ID = OD.DEAL_ID
+GROUP BY T.DEAL_TRANSACTION_ID
 )
-SELECT b.ROOT_ID, b.PARENT_ID, b.order_cnt,
-       t.TRANCHE_SIZE,
-       o.sum_order_alloc,
-       o.orders_with_alloc,
-       m.match_group_rows,
-       m.sum_matchgroup_alloc
-FROM   busiest b
-LEFT   JOIN DGSTREAM.OB_DEAL_TRANCHE t
-       ON t.DEAL_ID = b.ROOT_ID AND t.TRANCHE_ID = b.PARENT_ID
-LEFT   JOIN (SELECT ROOT_ID, PARENT_ID,
-                    SUM(FINAL_ALLOC)   AS sum_order_alloc,
-                    COUNT(FINAL_ALLOC) AS orders_with_alloc
-             FROM   DGSTREAM.OB_ORDER GROUP BY ROOT_ID, PARENT_ID) o
-       ON o.ROOT_ID = b.ROOT_ID AND o.PARENT_ID = b.PARENT_ID
-LEFT   JOIN (SELECT ROOT_ID, PARENT_ID,
-                    COUNT(*)         AS match_group_rows,
-                    SUM(FINAL_ALLOC) AS sum_matchgroup_alloc
-             FROM   DGSTREAM.OB_ORDER_MATCH_GROUP GROUP BY ROOT_ID, PARENT_ID) m
-       ON m.ROOT_ID = b.ROOT_ID AND m.PARENT_ID = b.PARENT_ID;
+SELECT COUNT(*)                   AS rows_,
+       COUNT(DISTINCT DEAL_ID)    AS deals_,
+       SUM(TRANCHE_COUNT)         AS total_tranches,
+       MAX(LENGTH(CURRENCIES))    AS max_currencies_len
+FROM   ecm_deal;
 
 
 -- ===========================================================================
--- BLOCK B — GRAIN INTEGRITY
--- If rows_ > grain_ the four-view split did not actually happen and the
--- duplicate-row bugs it was built to kill are back.
+-- V2 [cheap] The rewritten DCM currency list, isolated.
+-- Old behaviour rendered 'USD | USD | USD' on 6,940 deals (Q21).
+-- PASS = zero rows returned. Any row is a currency still repeating.
 -- ===========================================================================
+SELECT DEAL_ID, CURRENCIES
+FROM (
+    SELECT C.DEAL_ID,
+           LISTAGG(C.CURRENCY, ' | ')
+             WITHIN GROUP (ORDER BY C.CURRENCY) AS CURRENCIES
+    FROM (
+        SELECT DISTINCT DEAL_ID, CURRENCY
+        FROM DGSTREAM.OB_DEAL_TRANCHE
+        WHERE CURRENCY IS NOT NULL
+    ) C
+    GROUP BY C.DEAL_ID
+)
+WHERE REGEXP_LIKE(CURRENCIES, '(^|\| )([A-Za-z]+)( \|.*\| | \| )\2( \||$)')
+FETCH FIRST 10 ROWS ONLY;
 
--- Q9 [heavy] The headline check. Run this one above all others.
-SELECT 'deal'    AS obj, COUNT(*) AS rows_,
-       COUNT(DISTINCT PRODUCT||'~'||DEAL_ID) AS grain_
-FROM   DGSTREAM.VW_DEAL_SUMMARY
+
+-- ===========================================================================
+-- V3 [heavy] The rewritten VW_ORDER_DETAIL, ECM branch, grain assertion.
+-- Old whole-view behaviour (Q9): 11,881,246 rows / 5,874,386 distinct orders.
+-- PASS = rows_ equals orders_.
+-- ===========================================================================
+SELECT COUNT(*) AS rows_, COUNT(DISTINCT ORDER_ID) AS orders_
+FROM (
+    SELECT O.ORDER_ID
+    FROM (
+        SELECT E.*
+        FROM (
+            SELECT EO.*,
+                   ROW_NUMBER() OVER (PARTITION BY EO.ORDER_ID ORDER BY EO.ROWID) AS RN_
+            FROM DGSTREAM.OB_ECM_ORDER EO
+        ) E
+        WHERE E.RN_ = 1
+    ) O
+    INNER JOIN (
+        SELECT X.*
+        FROM (
+            SELECT ET.ECM_TRANSACTION_ID, ET.DEAL_TRANSACTION_ID,
+                   ROW_NUMBER() OVER (PARTITION BY ET.ECM_TRANSACTION_ID
+                                      ORDER BY ET.ROWID) AS RN_
+            FROM DGSTREAM.OPUS_ECM_TRANSACTION ET
+        ) X
+        WHERE X.RN_ = 1
+    ) T
+        ON O.DEAL_ID = T.DEAL_TRANSACTION_ID
+        AND O.IS_OWNED = 'true'
+        AND O.ORDER_STATUS NOT IN ('CANCELLED', 'DELETED', 'PASS')
+        AND ((O.IS_MATCHED = 'true' AND O.IS_DOMINANT = 'true') OR O.IS_MATCHED = 'false')
+    INNER JOIN (
+        SELECT ECM_TRANSACTION_ID, MAX(STATUS_VALUE) AS STATUS_VALUE
+        FROM DGSTREAM.OPUS_ECM_TRANSACTION_STATUS
+        WHERE STATUS_TYPE = 'Execution_Status'
+          AND STATUS_VALUE NOT IN ('Confidential', 'Withdrawn', 'Terminated')
+        GROUP BY ECM_TRANSACTION_ID
+    ) S
+        ON T.ECM_TRANSACTION_ID = S.ECM_TRANSACTION_ID
+    LEFT JOIN (
+        SELECT ORDER_ID, MAX(LIMIT_VALUE) AS LIMIT_VALUE
+        FROM DGSTREAM.OB_ECM_ORDER_IOI
+        GROUP BY ORDER_ID
+    ) OI
+        ON O.ORDER_ID = OI.ORDER_ID
+    LEFT JOIN DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TT
+        ON T.ECM_TRANSACTION_ID = TT.ECM_TRANSACTION_ID
+        AND TO_CHAR(TT.ECM_TRANSACTION_TRANCHE_ID) = O.TRANCHE_ID
+    LEFT JOIN (
+        SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID,
+               MAX(CURRENCY_NAME) AS CURRENCY_NAME
+        FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY
+        GROUP BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID
+    ) TDC
+        ON TT.ECM_TRANSACTION_ID = TDC.ECM_TRANSACTION_ID
+        AND TT.ECM_TRANSACTION_TRANCHE_ID = TDC.ECM_TRANSACTION_TRANCHE_ID
+        AND TT.TRANCHE_CURRENCY_ID = TDC.CURRENCY_ID
+);
+
+
+-- ===========================================================================
+-- V4 [heavy] The rewritten VW_ORDER_DETAIL, DCM branch, grain + allocation.
+-- PASS = rows_ equals orders_, AND sum_alloc is a large non-zero number.
+--        Today the deployed view reports 0 allocation for the busiest
+--        tranches, so a non-trivial sum here is the fix working.
+-- ===========================================================================
+SELECT COUNT(*)                AS rows_,
+       COUNT(DISTINCT ORDER_ID) AS orders_,
+       SUM(ORDER_ALLOCATION)   AS sum_alloc,
+       COUNT(CASE WHEN ORDER_ALLOCATION > 0 THEN 1 END) AS orders_with_alloc
+FROM (
+    SELECT O.ORDER_ID,
+           NVL(O.FINAL_ALLOC, 0) AS ORDER_ALLOCATION
+    FROM (
+        SELECT D.*
+        FROM (
+            SELECT DO.ORDER_ID, DO.ROOT_ID, DO.PARENT_ID, DO.FINAL_ALLOC,
+                   ROW_NUMBER() OVER (PARTITION BY DO.ORDER_ID ORDER BY DO.ROWID) AS RN_
+            FROM DGSTREAM.OB_ORDER DO
+        ) D
+        WHERE D.RN_ = 1
+    ) O
+    INNER JOIN (
+        SELECT Y.*
+        FROM (
+            SELECT DT.DEAL_ID, DT.TRANCHE_ID,
+                   ROW_NUMBER() OVER (PARTITION BY DT.DEAL_ID, DT.TRANCHE_ID
+                                      ORDER BY DT.ROWID) AS RN_
+            FROM DGSTREAM.OB_DEAL_TRANCHE DT
+        ) Y
+        WHERE Y.RN_ = 1
+    ) ODT
+        ON ODT.DEAL_ID = O.ROOT_ID AND ODT.TRANCHE_ID = O.PARENT_ID
+    LEFT JOIN (
+        SELECT ORDER_ID, MAX(AMT) AS AMT
+        FROM DGSTREAM.OB_ORDER_SIZE
+        GROUP BY ORDER_ID
+    ) OZ
+        ON O.ORDER_ID = OZ.ORDER_ID
+);
+
+
+-- ===========================================================================
+-- V5 [cheap] *** THE GAP I COULD NOT CLOSE ***
+-- The tranche view driving tables. I pre-aggregated six joins around them
+-- but never checked the spine itself. If either is non-unique the tranche
+-- grain still fails after my fix, and I would need to dedupe the FROM too.
+-- The Q12 OB_DEAL_TRANCHE line was the one the screenshot OCR could not read.
+-- PASS = both zero.
+-- ===========================================================================
+SELECT 'OPUS_ECM_TRANSACTION_TRANCHE per (txn,tranche)' AS spine_, COUNT(*) AS offenders
+FROM   (SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID
+        FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE
+        GROUP  BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID
+        HAVING COUNT(*) > 1)
 UNION ALL
-SELECT 'tranche', COUNT(*),
-       COUNT(DISTINCT PRODUCT||'~'||DEAL_ID||'~'||TRANCHE_ID)
-FROM   DGSTREAM.VW_TRANCHE_SUMMARY
-UNION ALL
-SELECT 'order',   COUNT(*),
-       COUNT(DISTINCT PRODUCT||'~'||ORDER_ID)
-FROM   DGSTREAM.VW_ORDER_DETAIL
-UNION ALL
-SELECT 'entity',  COUNT(*),
-       COUNT(DISTINCT ENTITY_TYPE||'~'||PRODUCT||'~'||ENTITY_ID)
-FROM   DGSTREAM.VW_ENTITY_SEARCH;
+SELECT 'OB_DEAL_TRANCHE per (deal,tranche)', COUNT(*)
+FROM   (SELECT DEAL_ID, TRANCHE_ID
+        FROM   DGSTREAM.OB_DEAL_TRANCHE
+        GROUP  BY DEAL_ID, TRANCHE_ID
+        HAVING COUNT(*) > 1);
 
 
--- Q9b [heavy] If any line above fails, split it by product so we know which
--- branch is at fault. Skip if Q9 is clean.
-SELECT PRODUCT, COUNT(*) AS rows_,
-       COUNT(DISTINCT DEAL_ID) AS deals_
-FROM   DGSTREAM.VW_DEAL_SUMMARY GROUP BY PRODUCT;
+-- ===========================================================================
+-- V6 [cheap] Does the ECM tranche id repeat ACROSS transactions?
+-- My deal-view TRANCHE_COUNT counts DISTINCT txn||'~'||tranche to be safe.
+-- If tranche ids are globally unique this is belt-and-braces; if they repeat
+-- per transaction it is load-bearing. Either way I want to know.
+-- ===========================================================================
+SELECT COUNT(*)                                        AS tranche_rows,
+       COUNT(DISTINCT ECM_TRANSACTION_TRANCHE_ID)      AS distinct_tranche_ids,
+       COUNT(DISTINCT ECM_TRANSACTION_ID || '~' ||
+                      ECM_TRANSACTION_TRANCHE_ID)      AS distinct_txn_tranche
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE;
 
 
--- Q10 [cheap] Is a "deal" one ECM transaction, or several?
--- The deal view keys on DEAL_TRANSACTION_ID but joins on ECM_TRANSACTION_ID.
--- If those are not 1:1, VW_DEAL_SUMMARY cannot hold PRODUCT+DEAL_ID grain.
-SELECT COUNT(*)                            AS rows_,
-       COUNT(DISTINCT DEAL_TRANSACTION_ID) AS deals_,
-       COUNT(DISTINCT ECM_TRANSACTION_ID)  AS txns_
+-- ===========================================================================
+-- V7 [cheap] Transactions with a NULL DEAL_TRANSACTION_ID.
+-- I added a guard that drops these. This says what the guard costs.
+-- ===========================================================================
+SELECT COUNT(*) AS txn_rows,
+       COUNT(CASE WHEN DEAL_TRANSACTION_ID IS NULL THEN 1 END) AS null_deal_id
 FROM   DGSTREAM.OPUS_ECM_TRANSACTION;
 
 
--- Q11 [cheap] Multiple Execution_Status rows per transaction?
--- This INNER JOIN appears in the deal, tranche AND order views — one bad row
--- multiplies all three at once.
-SELECT COUNT(*) AS txns_with_multiple_exec_status
-FROM   (SELECT ECM_TRANSACTION_ID
-        FROM   DGSTREAM.OPUS_ECM_TRANSACTION_STATUS
-        WHERE  STATUS_TYPE = 'Execution_Status'
-        GROUP  BY ECM_TRANSACTION_ID
-        HAVING COUNT(*) > 1);
-
-
--- Q12 [cheap] Every remaining unguarded join, one result set.
--- Any non-zero = a join that must be pre-aggregated before we ship.
--- Note OB_DEAL_ISSUER is already guarded by GROUP BY/MAX in vw_deal_summary
--- but joined raw in vw_tranche_summary — co-issued bonds duplicate tranches.
-SELECT 'OPUS_BASE_TRANSACTION per TRANSACTION_ID' AS check_, COUNT(*) AS offenders
-FROM   (SELECT TRANSACTION_ID FROM DGSTREAM.OPUS_BASE_TRANSACTION
-        GROUP BY TRANSACTION_ID HAVING COUNT(*) > 1)
-UNION ALL
-SELECT 'TRANCHE_PRODUCT_DETAIL per tranche', COUNT(*)
-FROM   (SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID
-        FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_PRODUCT_DETAIL
-        GROUP  BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID HAVING COUNT(*) > 1)
-UNION ALL
-SELECT 'TRANCHE_DEMAND_CURRENCY per tranche+ccy', COUNT(*)
-FROM   (SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID
-        FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY
-        GROUP  BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID
-        HAVING COUNT(*) > 1)
-UNION ALL
-SELECT 'OB_ECM_ORDER_IOI per ORDER_ID', COUNT(*)
-FROM   (SELECT ORDER_ID FROM DGSTREAM.OB_ECM_ORDER_IOI
-        GROUP BY ORDER_ID HAVING COUNT(*) > 1)
-UNION ALL
-SELECT 'OB_ECM_ORDER per ORDER_ID', COUNT(*)
-FROM   (SELECT ORDER_ID FROM DGSTREAM.OB_ECM_ORDER
-        GROUP BY ORDER_ID HAVING COUNT(*) > 1)
-UNION ALL
-SELECT 'OB_ORDER_SIZE per ORDER_ID', COUNT(*)
-FROM   (SELECT ORDER_ID FROM DGSTREAM.OB_ORDER_SIZE
-        GROUP BY ORDER_ID HAVING COUNT(*) > 1)
-UNION ALL
-SELECT 'OB_ORDER per ORDER_ID', COUNT(*)
-FROM   (SELECT ORDER_ID FROM DGSTREAM.OB_ORDER
-        GROUP BY ORDER_ID HAVING COUNT(*) > 1)
-UNION ALL
-SELECT 'OB_DEAL_ISSUER per DEAL_TRANCHE_ID', COUNT(*)
-FROM   (SELECT DEAL_TRANCHE_ID FROM DGSTREAM.OB_DEAL_ISSUER
-        GROUP BY DEAL_TRANCHE_ID HAVING COUNT(*) > 1)
-UNION ALL
-SELECT 'OB_DEAL_TRANCHE per DEAL_ID+TRANCHE_ID', COUNT(*)
-FROM   (SELECT DEAL_ID, TRANCHE_ID FROM DGSTREAM.OB_DEAL_TRANCHE
-        GROUP BY DEAL_ID, TRANCHE_ID HAVING COUNT(*) > 1);
-
-
 -- ===========================================================================
--- BLOCK C — TYPING
--- Q1 CONFIRMED: TRANCHE_SIZE deployed as VARCHAR2(480), SECURITIES_MATURITY as
--- VARCHAR2(16000). So "top N by tranche size" currently sorts lexically —
--- '900' beats '1000000' — and maturity is an unsortable NLS-formatted string.
--- Only one open question: is the ECM source safely convertible?
+-- V8 [cheap] Is DCM TRANCHE_SIZE already numeric?
+-- I reverted the DCM branch to NVL(ODT.TRANCHE_SIZE, 0) rather than risk
+-- TO_CHAR scientific notation zeroing real sizes. If the base column is
+-- NUMBER, removing the ECM cast alone yields a NUMBER view column.
+-- PASS = this runs without ORA-01722 and the numbers look like money.
 -- ===========================================================================
-
--- Q13 [cheap] Does TRANCHE_OFFER_SIZE hold anything non-numeric?
--- DECIDES: whether we can drop the VARCHAR2 cast for a numeric expression.
-SELECT COUNT(*)                                                   AS total_non_null,
-       COUNT(CASE WHEN NOT REGEXP_LIKE(TO_CHAR(TRANCHE_OFFER_SIZE),
-                   '^\s*-?[0-9]+(\.[0-9]+)?\s*$') THEN 1 END)     AS non_numeric_vals
-FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE
-WHERE  TRANCHE_OFFER_SIZE IS NOT NULL;
-
-
--- Q14 [cheap] Show the offenders if Q13 is non-zero — the shape of the bad
--- values decides between a plain cast and TO_NUMBER(... DEFAULT NULL ON
--- CONVERSION ERROR).
-SELECT DISTINCT TO_CHAR(TRANCHE_OFFER_SIZE) AS raw_value
-FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE
-WHERE  TRANCHE_OFFER_SIZE IS NOT NULL
-AND    NOT REGEXP_LIKE(TO_CHAR(TRANCHE_OFFER_SIZE), '^\s*-?[0-9]+(\.[0-9]+)?\s*$')
-FETCH  FIRST 25 ROWS ONLY;
-
-
--- ===========================================================================
--- BLOCK D — DCM STATUS, CONFIDENTIALITY, COUNT RECONCILIATION
--- ===========================================================================
-
--- Q17 [cheap] *** RUN THIS FIRST IF YOU RUN NOTHING ELSE ***
--- Every ECM branch excludes Confidential/Withdrawn/Terminated. No DCM branch
--- in any view excludes anything. If a confidential state exists here, those
--- deals are reaching users right now — a disclosure issue, not a data-quality
--- one, and it should not wait for the rest of this batch.
-SELECT STATUS, COUNT(*) AS rows_, COUNT(DISTINCT DEAL_ID) AS deals_
-FROM   DGSTREAM.OB_DEAL_TRANCHE
-GROUP  BY STATUS
-ORDER  BY rows_ DESC;
-
-
--- Q18 [cheap] Do DCM deals have tranches in mixed statuses?
--- DECIDES: whether vw_deal_summary's MAX(ODT.STATUS) can disagree with
--- vw_tranche_summary's per-tranche ODT.STATUS — today the same deal can report
--- two different statuses depending on which object you ask.
-SELECT COUNT(*) AS deals_with_mixed_tranche_status
-FROM   (SELECT DEAL_ID FROM DGSTREAM.OB_DEAL_TRANCHE
-        GROUP BY DEAL_ID HAVING COUNT(DISTINCT STATUS) > 1);
-
-
--- Q19 [cheap] ECM drops CANCELLED/DELETED/PASS and unowned/non-dominant
--- orders. DCM drops nothing, anywhere. Q2 confirmed OB_ORDER has STATUS,
--- IS_ACTIVE and IS_FIRM_ORDER.
--- DECIDES: which DCM order predicates the views are missing.
-SELECT STATUS, IS_ACTIVE, IS_FIRM_ORDER, COUNT(*) AS rows_
-FROM   DGSTREAM.OB_ORDER
-GROUP  BY STATUS, IS_ACTIVE, IS_FIRM_ORDER
-ORDER  BY rows_ DESC
-FETCH  FIRST 30 ROWS ONLY;
-
-
--- Q20 [heavy] Size the DCM order-count divergence.
--- vw_deal_summary counts OB_ORDER by ROOT_ID with NO filter; vw_order_detail
--- INNER JOINs OB_DEAL_TRANCHE on (deal, tranche). A deal card saying
--- "120 orders" then pages to fewer rows — breaks the count-honesty contract.
-SELECT COUNT(*)                                       AS orders_total,
-       COUNT(CASE WHEN t.DEAL_ID IS NULL THEN 1 END)  AS orders_without_tranche,
-       COUNT(DISTINCT o.ROOT_ID)                      AS deals_total,
-       COUNT(DISTINCT CASE WHEN t.DEAL_ID IS NULL
-                           THEN o.ROOT_ID END)        AS deals_affected
-FROM   DGSTREAM.OB_ORDER o
-LEFT   JOIN DGSTREAM.OB_DEAL_TRANCHE t
-       ON t.DEAL_ID = o.ROOT_ID AND t.TRANCHE_ID = o.PARENT_ID;
-
-
--- ===========================================================================
--- BLOCK E — LIST COLUMNS
--- ===========================================================================
-
--- Q21 [cheap] DCM CURRENCIES is not deduped. ECM hoists a SELECT DISTINCT into
--- the TC subquery; DCM LISTAGGs raw, so a 3-tranche USD deal renders
--- 'USD | USD | USD' where the same ECM deal renders 'USD'.
-SELECT COUNT(*) AS dcm_deals_with_repeated_currency
-FROM   (SELECT DEAL_ID FROM DGSTREAM.OB_DEAL_TRANCHE
-        GROUP BY DEAL_ID HAVING COUNT(CURRENCY) > COUNT(DISTINCT CURRENCY));
-
-
--- Q23 [cheap] Pipe lists must align BY POSITION (spec 3.1). The DCM identifier
--- subquery orders TYPE and VALUE by T.TYPE but orders DELIVERY_TYPE by
--- T.DELIVERY_TYPE — a different sort, so position N of delivery does not
--- correspond to position N of type/value.
--- DECIDES: re-sort by TYPE, or collapse delivery to a single deduped value.
-SELECT COUNT(*)                                          AS tranches,
-       SUM(CASE WHEN d_distinct = 1 THEN 1 ELSE 0 END)   AS single_delivery_type,
-       SUM(CASE WHEN d_distinct > 1 THEN 1 ELSE 0 END)   AS multi_delivery_type,
-       MAX(rows_)                                        AS max_identifiers_per_tranche
-FROM   (SELECT DEAL_TRANCHE_ID, COUNT(*) rows_,
-               COUNT(DISTINCT DELIVERY_TYPE) d_distinct
-        FROM   DGSTREAM.OB_TRANCHE GROUP BY DEAL_TRANCHE_ID);
-
-
--- Q24 [cheap] LISTAGG ties are non-deterministic. ECM identifiers sort by
--- IDENTIFIER_TYPE only, so a tranche with two identifiers of the SAME type can
--- zip type-to-value in the wrong order.
--- DECIDES: whether to add IDENTIFIER_VALUE as a tiebreaker.
-SELECT COUNT(*) AS tranches_with_duplicate_identifier_type
-FROM   (SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, IDENTIFIER_TYPE
-        FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_PRODUCT_DETAIL_IDENTIFIER
-        GROUP  BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, IDENTIFIER_TYPE
-        HAVING COUNT(*) > 1);
-
-
--- Q25 [cheap] BND_BANK is MAX(CASE WHEN BND_BROKER='true' ...) so it returns
--- ONE bank. Joint B&D roles would silently lose all but the last alphabetically.
-SELECT COUNT(*) AS tranches_with_multiple_bnd_true
-FROM   (SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID
-        FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE
-        WHERE  BND_BROKER = 'true'
-        GROUP  BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID
-        HAVING COUNT(*) > 1);
-
-
--- Q26 [cheap] TENORS is TENOR_VALUE || '-' || TENOR_PERIOD. Oracle treats NULL
--- as empty in concatenation, so a half-populated row renders '5-' or '-Y'
--- instead of NULL.
-SELECT COUNT(*) AS rows_,
-       COUNT(CASE WHEN TENOR_VALUE IS NULL AND TENOR_PERIOD IS NULL
-                  THEN 1 END) AS both_null,
-       COUNT(CASE WHEN TENOR_VALUE IS NULL AND TENOR_PERIOD IS NOT NULL
-                  THEN 1 END) AS value_null_only,
-       COUNT(CASE WHEN TENOR_VALUE IS NOT NULL AND TENOR_PERIOD IS NULL
-                  THEN 1 END) AS period_null_only
+SELECT MIN(NVL(TRANCHE_SIZE, 0))              AS min_size,
+       MAX(NVL(TRANCHE_SIZE, 0))              AS max_size,
+       SUM(NVL(TRANCHE_SIZE, 0))              AS sum_size,
+       COUNT(CASE WHEN TRANCHE_SIZE > 1000000000 THEN 1 END) AS over_1bn
 FROM   DGSTREAM.OB_DEAL_TRANCHE;
 
 
 -- ===========================================================================
--- BLOCK F — ENTITY VIEW
+-- V9 [cheap] Does the new ECM TRANCHE_SIZE expression agree with the raw
+-- value, and does it survive large numbers? This is the exact expression now
+-- in the view. PASS = mismatches is 0 and max_size looks like a real size.
 -- ===========================================================================
-
--- Q28 [heavy] Size, and the two known defects.
--- rows_ > distinct_ids confirms the declared grain [entity_type, product,
--- entity_id] is wrong — every branch also groups by NAME, so name variants
--- under one id produce several rows.
--- null_names on the DEAL branch = the missing IS NOT NULL guard.
-SELECT ENTITY_TYPE, PRODUCT, COUNT(*) AS rows_,
-       COUNT(DISTINCT ENTITY_ID) AS distinct_ids,
-       COUNT(CASE WHEN ENTITY_NAME IS NULL THEN 1 END) AS null_names
-FROM   DGSTREAM.VW_ENTITY_SEARCH
-GROUP  BY ENTITY_TYPE, PRODUCT
-ORDER  BY 1,2;
-
-
--- Q29 [heavy] Wall-clock for a realistic resolution — PLEASE REPORT THE TIMING,
--- not just the rows. This runs before the user's real question on every
--- entity-specific ask, so it is paid twice.
-SELECT ENTITY_ID, ENTITY_NAME, ENTITY_ACTIVITY_COUNT, LAST_ACTIVE
-FROM   DGSTREAM.VW_ENTITY_SEARCH
-WHERE  ENTITY_TYPE = 'INVESTOR'
-AND    UPPER(ENTITY_NAME) LIKE '%BLACKROCK%'
-ORDER  BY ENTITY_ACTIVITY_COUNT DESC, LAST_ACTIVE DESC, ENTITY_ID
-FETCH  FIRST 10 ROWS ONLY;
+SELECT COUNT(*) AS rows_,
+       MIN(CASE WHEN REGEXP_LIKE(TO_CHAR(TRANCHE_OFFER_SIZE), '^\s*-?[0-9]+(\.[0-9]+)?\s*$')
+                THEN TO_NUMBER(TRIM(TO_CHAR(TRANCHE_OFFER_SIZE))) ELSE 0 END) AS min_size,
+       MAX(CASE WHEN REGEXP_LIKE(TO_CHAR(TRANCHE_OFFER_SIZE), '^\s*-?[0-9]+(\.[0-9]+)?\s*$')
+                THEN TO_NUMBER(TRIM(TO_CHAR(TRANCHE_OFFER_SIZE))) ELSE 0 END) AS max_size,
+       COUNT(CASE WHEN TRANCHE_OFFER_SIZE IS NOT NULL
+                   AND NOT REGEXP_LIKE(TO_CHAR(TRANCHE_OFFER_SIZE), '^\s*-?[0-9]+(\.[0-9]+)?\s*$')
+                  THEN 1 END) AS would_become_zero
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE;
 
 
 -- ===========================================================================
--- BLOCK G — ONTOLOGY-ONLY (no view change)
+-- V10 [cheap] BLAST RADIUS of the MAX() collapse I introduced.
+-- Multi-transaction ECM deals now produce one row, with MAX() picking the
+-- winner per attribute. This counts deals where the transactions actually
+-- DISAGREE — those are the rows where MAX() silently chooses.
+-- If this is near zero the collapse is free. If it is large, tell me and I
+-- will pick a deliberate winner (latest transaction) instead of MAX.
+-- ===========================================================================
+SELECT COUNT(*)                                                   AS multi_txn_deals,
+       SUM(CASE WHEN name_variants  > 1 THEN 1 ELSE 0 END)        AS disagree_on_name,
+       SUM(CASE WHEN size_variants  > 1 THEN 1 ELSE 0 END)        AS disagree_on_size,
+       SUM(CASE WHEN issuer_variants > 1 THEN 1 ELSE 0 END)       AS disagree_on_issuer
+FROM   (SELECT DEAL_TRANSACTION_ID,
+               COUNT(DISTINCT ECM_TRANSACTION_ID)      AS txns,
+               COUNT(DISTINCT SYNDICATE_DEAL_NAME)     AS name_variants,
+               COUNT(DISTINCT DEAL_SIZE)               AS size_variants,
+               COUNT(DISTINCT ISSUER_NAME_FROM_SOURCE) AS issuer_variants
+        FROM   DGSTREAM.OPUS_ECM_TRANSACTION
+        WHERE  DEAL_TRANSACTION_ID IS NOT NULL
+        GROUP  BY DEAL_TRANSACTION_ID
+        HAVING COUNT(DISTINCT ECM_TRANSACTION_ID) > 1);
+
+
+-- ===========================================================================
+-- V11 [cheap] Same question for the pre-aggregations where I used MAX() on a
+-- previously-raw join: do the duplicate rows actually differ, or are they
+-- exact copies? Exact copies mean MAX() is lossless.
+-- ===========================================================================
+SELECT 'OPUS_BASE_TRANSACTION.DEAL_REGION' AS agg_, COUNT(*) AS keys_where_values_differ
+FROM   (SELECT TRANSACTION_ID FROM DGSTREAM.OPUS_BASE_TRANSACTION
+        GROUP BY TRANSACTION_ID HAVING COUNT(DISTINCT DEAL_REGION) > 1)
+UNION ALL
+SELECT 'TRANCHE_PRODUCT_DETAIL.SECURITY_TYPE_NAME', COUNT(*)
+FROM   (SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID
+        FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_PRODUCT_DETAIL
+        GROUP  BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID
+        HAVING COUNT(DISTINCT SECURITY_TYPE_NAME) > 1)
+UNION ALL
+SELECT 'TRANCHE_DEMAND_CURRENCY.CURRENCY_NAME', COUNT(*)
+FROM   (SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID
+        FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY
+        GROUP  BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID
+        HAVING COUNT(DISTINCT CURRENCY_NAME) > 1)
+UNION ALL
+SELECT 'OB_ECM_ORDER_IOI.LIMIT_VALUE', COUNT(*)
+FROM   (SELECT ORDER_ID FROM DGSTREAM.OB_ECM_ORDER_IOI
+        GROUP BY ORDER_ID HAVING COUNT(DISTINCT LIMIT_VALUE) > 1)
+UNION ALL
+SELECT 'OB_ORDER_SIZE.AMT', COUNT(*)
+FROM   (SELECT ORDER_ID FROM DGSTREAM.OB_ORDER_SIZE
+        GROUP BY ORDER_ID HAVING COUNT(DISTINCT AMT) > 1)
+UNION ALL
+SELECT 'OB_DEAL_ISSUER.NAME', COUNT(*)
+FROM   (SELECT DEAL_TRANCHE_ID FROM DGSTREAM.OB_DEAL_ISSUER
+        GROUP BY DEAL_TRANCHE_ID HAVING COUNT(DISTINCT NAME) > 1)
+UNION ALL
+SELECT 'EXEC_STATUS.STATUS_VALUE', COUNT(*)
+FROM   (SELECT ECM_TRANSACTION_ID FROM DGSTREAM.OPUS_ECM_TRANSACTION_STATUS
+        WHERE  STATUS_TYPE = 'Execution_Status'
+        GROUP  BY ECM_TRANSACTION_ID HAVING COUNT(DISTINCT STATUS_VALUE) > 1);
+-- Zero on a line = duplicates are exact copies, MAX() loses nothing.
+-- Non-zero = MAX() is picking, and I should say so in the ontology.
+
+
+-- ===========================================================================
+-- V12 [heavy] Allocation fix across the WHOLE DCM population, not 5 tranches.
+-- PASS = sum_order_alloc is the same order of magnitude as sum_tranche_size.
+--        The deployed view would score near zero on sum_matchgroup_alloc.
+-- ===========================================================================
+SELECT SUM(t.sz)                AS sum_tranche_size,
+       SUM(o.alloc)             AS sum_order_alloc,
+       SUM(m.alloc)             AS sum_matchgroup_alloc,
+       COUNT(*)                 AS tranches
+FROM   (SELECT DEAL_ID, TRANCHE_ID, MAX(NVL(TRANCHE_SIZE,0)) sz
+        FROM DGSTREAM.OB_DEAL_TRANCHE GROUP BY DEAL_ID, TRANCHE_ID) t
+LEFT   JOIN (SELECT ROOT_ID, PARENT_ID, SUM(FINAL_ALLOC) alloc
+             FROM DGSTREAM.OB_ORDER GROUP BY ROOT_ID, PARENT_ID) o
+       ON o.ROOT_ID = t.DEAL_ID AND o.PARENT_ID = t.TRANCHE_ID
+LEFT   JOIN (SELECT ROOT_ID, PARENT_ID, SUM(FINAL_ALLOC) alloc
+             FROM DGSTREAM.OB_ORDER_MATCH_GROUP GROUP BY ROOT_ID, PARENT_ID) m
+       ON m.ROOT_ID = t.DEAL_ID AND m.PARENT_ID = t.TRANCHE_ID;
+
+
+-- ===========================================================================
+-- V13 [cheap] List lengths under the NEW keying. I changed CURRENCIES from
+-- per-transaction to per-DEAL and BND_BANK from a scalar to a list, so both
+-- can only get longer. Columns are VARCHAR2(32767); LISTAGG overflow raises
+-- ORA-01489 and kills the whole query.
+-- PASS = all well under 32767.
+-- ===========================================================================
+SELECT 'deal currencies (new per-deal keying)' AS list_, MAX(len) AS max_chars
+FROM   (SELECT SUM(LENGTH(TRANCHE_CURRENCY_ID) + 3) len
+        FROM   (SELECT DISTINCT ET.DEAL_TRANSACTION_ID, TT.TRANCHE_CURRENCY_ID
+                FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TT
+                JOIN   (SELECT DISTINCT ECM_TRANSACTION_ID, DEAL_TRANSACTION_ID
+                        FROM DGSTREAM.OPUS_ECM_TRANSACTION) ET
+                  ON   ET.ECM_TRANSACTION_ID = TT.ECM_TRANSACTION_ID)
+        GROUP  BY DEAL_TRANSACTION_ID)
+UNION ALL
+SELECT 'bnd_bank (new list form)', MAX(len)
+FROM   (SELECT SUM(LENGTH(SYNDICATE_MEMBER_NAME) + 3) len
+        FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE
+        WHERE  BND_BROKER = 'true'
+        GROUP  BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID)
+UNION ALL
+SELECT 'dcm identifier values', MAX(len)
+FROM   (SELECT SUM(LENGTH(VALUE) + 3) len
+        FROM DGSTREAM.OB_TRANCHE GROUP BY DEAL_TRANCHE_ID);
+
+
+-- ===========================================================================
+-- V14-V17 — ECM ISSUER NAME, still open from Q28
+--
+-- Q28 returned FIVE groups, not six: ISSUER/ECM is absent from
+-- VW_ENTITY_SEARCH entirely, so ECM issuer name resolution returns nothing.
+-- V1/domain/dictionary-official.md records ISSUER_NAME as present on BOTH
+-- products in V1, so either the source column changed or it stopped being
+-- populated. The old view is still deployed, so we can diff directly.
 -- ===========================================================================
 
--- Q32 [cheap] SETTLEMENT_TS is on VW_DEAL_SUMMARY but unmodeled in the
--- ontology, while the agent's refusal text promises "pricing and settlement
--- dates". DECIDES: model it, or change the refusal text to stop promising it.
-SELECT COUNT(*) AS ecm_deals, COUNT(SETTLEMENT_TS) AS with_settlement_ts
-FROM   DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'ECM';
+-- V14 [cheap] Which ECM issuer fields are populated at source?
+SELECT COUNT(*)                       AS ecm_txn_rows,
+       COUNT(ISSUER_NAME_FROM_SOURCE) AS with_issuer_name,
+       COUNT(ISSUER_GFCID)            AS with_gfcid,
+       COUNT(ISSUER_TICKER)           AS with_ticker,
+       COUNT(ISSUER_INDUSTRY_SECTOR)  AS with_sector,
+       COUNT(SYNDICATE_DEAL_NAME)     AS with_deal_name
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION;
 
 
--- ===========================================================================
--- STILL OPEN — DECISIONS, NOT QUERIES
---
--- D1. MATERIALIZED VIEW for entity search: in scope this cycle, or a separate
---     DBA track? Biggest latency win available, but it is infra, not DDL.
---     If out of scope, say so and I will stop recommending it and optimise the
---     plain view instead.
---
--- D3. Is DGSTREAM Oracle 12.2+? Only matters if Q23/Q24 push a list column
---     near its limit. Low priority now that Q1 shows 32767-byte columns.
---
--- D4. Who owns the DCM confidentiality question (Q17)? If confidential DCM
---     deals are visible today that should not wait for this batch.
---
--- D5. Ontology blast radius when the views change — confirm this is complete:
---       ecm_dcm_deal.yaml     model settlement_ts (Q32)
---       ecm_dcm_tranche.yaml  model deal_region, deal_status, execution_status,
---                             settlement_currency, use_of_proceeds — all
---                             ALREADY on the view, just unmodeled; modelling
---                             them deletes a class of two-object questions
---       ecm_dcm_entity.yaml   correct the declared grain (Q28)
---       SKILL.md              retire the B&D pipe-index arithmetic, now that
---                             BND_BANK is a resolved column
---
---     D2 CLOSED: fixes only, no new columns, no removals.
--- ===========================================================================
+-- V15 [cheap] *** DECISIVE *** the old V1 view vs the new one, same question.
+-- If V1 has ECM issuer names and V2 does not, the V1 source is the right one.
+SELECT 'V1 VW_DEAL_ORDER_SUMMARY' AS view_, PRODUCT,
+       COUNT(*) AS rows_, COUNT(ISSUER_NAME) AS with_issuer, COUNT(GFCID) AS with_gfcid
+FROM   DGSTREAM.VW_DEAL_ORDER_SUMMARY GROUP BY PRODUCT
+UNION ALL
+SELECT 'V2 VW_DEAL_SUMMARY', PRODUCT,
+       COUNT(*), COUNT(ISSUER_NAME), COUNT(GFCID)
+FROM   DGSTREAM.VW_DEAL_SUMMARY GROUP BY PRODUCT;
+
+
+-- V16 [cheap] Your hypothesis: does the ECM deal name carry the issuer?
+-- Measured on the OLD view where both columns are known to be populated.
+-- Below ~80% contained means deal name is correlated, not a substitute.
+SELECT COUNT(*)                                                        AS ecm_rows_both,
+       COUNT(CASE WHEN UPPER(DEAL_NAME) LIKE '%'||UPPER(ISSUER_NAME)||'%'
+                  THEN 1 END)                                          AS name_contains_issuer,
+       COUNT(CASE WHEN UPPER(DEAL_NAME) = UPPER(ISSUER_NAME) THEN 1 END) AS exactly_equal
+FROM   DGSTREAM.VW_DEAL_ORDER_SUMMARY
+WHERE  PRODUCT = 'ECM'
+AND    ISSUER_NAME IS NOT NULL AND DEAL_NAME IS NOT NULL;
+
+
+-- V17 [cheap] Eyeball 30 ECM deals: deal name beside every issuer field.
+SELECT DEAL_TRANSACTION_ID, SYNDICATE_DEAL_NAME,
+       ISSUER_NAME_FROM_SOURCE, ISSUER_GFCID, ISSUER_TICKER, ISSUER_INDUSTRY_SECTOR
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION
+WHERE  SYNDICATE_DEAL_NAME IS NOT NULL
+FETCH  FIRST 30 ROWS ONLY;

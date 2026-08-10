@@ -1,3 +1,58 @@
+-- ===========================================================================
+-- VW_TRANCHE_SUMMARY — grain: one row per PRODUCT + DEAL_ID + TRANCHE_ID
+--
+-- FIXES IN THIS REVISION (evidence: views/_diagnostics-results.md)
+--   1. TRANCHE_SIZE deployed as VARCHAR2(480) (Q1) because the ECM branch cast
+--      it to VARCHAR2(120). Q13/Q14: 66,571 non-null values, ZERO non-numeric.
+--      The cast was never justified by the data, and it made "top N by tranche
+--      size" sort lexically — '900' beat '1000000'.
+--      -> ECM is now a regex-guarded TO_NUMBER (the identical TO_CHAR+regex
+--         is what Q13 ran, so it is proven safe on current data; a future bad
+--         value yields 0 rather than ORA-01722). DCM is left as
+--         NVL(ODT.TRANCHE_SIZE, 0) ON PURPOSE — the base type was never
+--         measured, and wrapping it in TO_CHAR could hit scientific notation
+--         on large values, fail the regex and silently zero real tranche
+--         sizes. The deployed column is VARCHAR2(480) = 120 CHAR x 4 bytes,
+--         i.e. exactly the old ECM cast, so DCM did not widen it and is
+--         almost certainly already NUMBER. Removing the ECM cast should
+--         therefore yield a NUMBER column. VERIFY with Q1 after deploy.
+--   2. SECURITIES_MATURITY deployed as VARCHAR2(16000) (Q1) because the ECM
+--      placeholder was CAST(NULL AS VARCHAR2) against a DCM DATE, so maturity
+--      was an NLS-formatted string — unsortable, unfilterable as a date.
+--      -> ECM placeholder is now CAST(NULL AS DATE); the column stays a DATE.
+--   3. TENORS was TENOR_VALUE || '-' || TENOR_PERIOD. Oracle concatenation
+--      treats NULL as empty, so Q26's 4,808 fully-null rows rendered as a lone
+--      '-'.  -> both-null now yields NULL.
+--   4. DELIVERY_TYPE was LISTAGG'd across identifier rows, but Q23 shows only
+--      17 of 32,862 tranches have more than one distinct value — it is
+--      per-tranche, not per-identifier. With up to 1,304 identifiers on a
+--      single tranche it rendered the same word 1,304 times and risked
+--      ORA-01489.  -> MAX(), not LISTAGG.
+--   5. Q24: 6,223 tranches carry two or more identifiers of the SAME type, and
+--      both LISTAGGs ordered by IDENTIFIER_TYPE alone, so within a tie the
+--      type list and value list could zip in different orders — silently
+--      pairing a CUSIP with the wrong ISIN.
+--      -> IDENTIFIER_VALUE added as tiebreaker on both, both products.
+--   6. Q25: 850 tranches have more than one syndicate member flagged
+--      BND_BROKER='true'; MAX(CASE ...) kept only the alphabetically last.
+--      -> BND_BANK is now the full pipe list of flagged banks on ECM.
+--   7. Q12 unguarded joins, all now pre-aggregated or deduped:
+--        TRANCHE_PRODUCT_DETAIL   1,737 dups -> pre-aggregated
+--        TRANCHE_DEMAND_CURRENCY  4,547 dups -> pre-aggregated
+--        OPUS_BASE_TRANSACTION   ~39.6k dups -> pre-aggregated
+--        OB_DEAL_ISSUER             156 dups -> ROWID dedupe (was raw here
+--                                   while vw_deal_summary already guarded it,
+--                                   so co-issued bonds duplicated tranches)
+--        OPUS_ECM_TRANSACTION   dup txn ids  -> ROWID dedupe
+--        OPUS_ECM_TRANSACTION_STATUS  1,356  -> pre-aggregated
+--
+-- DELIBERATELY UNCHANGED: row-exclusion policy, verbatim, both products.
+-- ALSO UNCHANGED: DCM sources both TRANCHE_STATUS and DEAL_STATUS from
+-- ODT.STATUS, so a DCM deal can report a different status here than on
+-- vw_deal_summary (which takes MAX across tranches). Q17 shows the column has
+-- case-variant duplicates (priced/Priced), making MAX() unsound either way.
+-- Deferred with the other status work.
+-- ===========================================================================
 CREATE OR REPLACE VIEW "DGSTREAM"."VW_TRANCHE_SUMMARY" AS
 SELECT
     'ECM' AS PRODUCT,
@@ -10,7 +65,10 @@ SELECT
     OBT.DEAL_REGION AS DEAL_REGION,
     TO_CHAR(TT.ECM_TRANSACTION_TRANCHE_ID) AS TRANCHE_ID,
     TT.TRANCHE_NAME AS TRANCHE_NAME,
-    NVL(CAST(TT.TRANCHE_OFFER_SIZE AS VARCHAR2(120)), 0) AS TRANCHE_SIZE,
+    CASE WHEN REGEXP_LIKE(TO_CHAR(TT.TRANCHE_OFFER_SIZE),
+                          '^\s*-?[0-9]+(\.[0-9]+)?\s*$')
+         THEN TO_NUMBER(TRIM(TO_CHAR(TT.TRANCHE_OFFER_SIZE)))
+         ELSE 0 END AS TRANCHE_SIZE,
     CAST(TT.PRICING_TS AS TIMESTAMP(3)) AS PRICING_TS,
     TDC.CURRENCY_NAME AS CURRENCY,
     TT.REGION AS TRANCHE_REGION,
@@ -37,21 +95,54 @@ SELECT
     CAST(NULL AS VARCHAR2(4000)) AS DELIVERY_TYPE,
     CAST(NULL AS VARCHAR2(4000)) AS ISSUER_RATINGS,
     CAST(NULL AS VARCHAR2(4000)) AS TENORS,
-    CAST(NULL AS VARCHAR2(4000)) AS SECURITIES_MATURITY,
+    CAST(NULL AS DATE) AS SECURITIES_MATURITY,
     NVL(DST.DEAL_SHARING_TYPE, 'SHARED') AS DEAL_SHARING_TYPE
 FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TT
-INNER JOIN DGSTREAM.OPUS_ECM_TRANSACTION T
+INNER JOIN (
+    SELECT X.*
+    FROM (
+        SELECT ET.ECM_TRANSACTION_ID, ET.DEAL_TRANSACTION_ID,
+               ET.SYNDICATE_DEAL_NAME, ET.ISSUER_NAME_FROM_SOURCE,
+               ET.ISSUER_GFCID, ET.ISSUER_TICKER, ET.ISSUER_INDUSTRY_SECTOR,
+               ET.USE_OF_PROCEEDS, ET.SETTLEMENT_CURRENCY_NAME,
+               ROW_NUMBER() OVER (PARTITION BY ET.ECM_TRANSACTION_ID
+                                  ORDER BY ET.ROWID) AS RN_
+        FROM DGSTREAM.OPUS_ECM_TRANSACTION ET
+    ) X
+    WHERE X.RN_ = 1
+) T
     ON TT.ECM_TRANSACTION_ID = T.ECM_TRANSACTION_ID
-INNER JOIN DGSTREAM.OPUS_ECM_TRANSACTION_STATUS S
+INNER JOIN (
+    SELECT ECM_TRANSACTION_ID,
+           MAX(STATUS_VALUE) AS STATUS_VALUE,
+           MAX(STATUS_TYPE)  AS STATUS_TYPE
+    FROM DGSTREAM.OPUS_ECM_TRANSACTION_STATUS
+    WHERE STATUS_TYPE = 'Execution_Status'
+      AND STATUS_VALUE NOT IN ('Confidential', 'Withdrawn', 'Terminated')
+    GROUP BY ECM_TRANSACTION_ID
+) S
     ON T.ECM_TRANSACTION_ID = S.ECM_TRANSACTION_ID
-    AND S.STATUS_TYPE = 'Execution_Status'
-    AND S.STATUS_VALUE NOT IN ('Confidential', 'Withdrawn', 'Terminated')
-LEFT JOIN DGSTREAM.OPUS_BASE_TRANSACTION OBT
+LEFT JOIN (
+    SELECT TRANSACTION_ID, MAX(DEAL_REGION) AS DEAL_REGION
+    FROM DGSTREAM.OPUS_BASE_TRANSACTION
+    GROUP BY TRANSACTION_ID
+) OBT
     ON T.DEAL_TRANSACTION_ID = OBT.TRANSACTION_ID
-LEFT JOIN DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_PRODUCT_DETAIL TPD
+LEFT JOIN (
+    SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID,
+           MAX(SECURITY_TYPE_NAME) AS SECURITY_TYPE_NAME,
+           MAX(EXCHANGE)           AS EXCHANGE
+    FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_PRODUCT_DETAIL
+    GROUP BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID
+) TPD
     ON TT.ECM_TRANSACTION_ID = TPD.ECM_TRANSACTION_ID
     AND TT.ECM_TRANSACTION_TRANCHE_ID = TPD.ECM_TRANSACTION_TRANCHE_ID
-LEFT JOIN DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY TDC
+LEFT JOIN (
+    SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID,
+           MAX(CURRENCY_NAME) AS CURRENCY_NAME
+    FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY
+    GROUP BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID
+) TDC
     ON TT.ECM_TRANSACTION_ID = TDC.ECM_TRANSACTION_ID
     AND TT.ECM_TRANSACTION_TRANCHE_ID = TDC.ECM_TRANSACTION_TRANCHE_ID
     AND TT.TRANCHE_CURRENCY_ID = TDC.CURRENCY_ID
@@ -63,7 +154,8 @@ LEFT JOIN (
         LISTAGG(S.SYNDICATE_ROLE, ' | ') WITHIN GROUP (ORDER BY S.BND_BROKER DESC, S.SYNDICATE_MEMBER_NAME) AS SYNDICATE_ROLE,
         LISTAGG(S.BROKER_CODE, ' | ') WITHIN GROUP (ORDER BY S.BND_BROKER DESC, S.SYNDICATE_MEMBER_NAME) AS BROKER_CODE,
         LISTAGG(S.BND_BROKER, ' | ') WITHIN GROUP (ORDER BY S.BND_BROKER DESC, S.SYNDICATE_MEMBER_NAME) AS BND_BROKER,
-        MAX(CASE WHEN S.BND_BROKER = 'true' THEN S.SYNDICATE_MEMBER_NAME END) AS BND_BANK
+        LISTAGG(CASE WHEN S.BND_BROKER = 'true' THEN S.SYNDICATE_MEMBER_NAME END, ' | ')
+          WITHIN GROUP (ORDER BY S.SYNDICATE_MEMBER_NAME) AS BND_BANK
     FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE S
     GROUP BY
         S.ECM_TRANSACTION_ID,
@@ -75,8 +167,10 @@ LEFT JOIN (
     SELECT
         I.ECM_TRANSACTION_ID,
         I.ECM_TRANSACTION_TRANCHE_ID,
-        LISTAGG(I.IDENTIFIER_TYPE, ' | ') WITHIN GROUP (ORDER BY I.IDENTIFIER_TYPE) AS IDENTIFIER_TYPE,
-        LISTAGG(I.IDENTIFIER_VALUE, ' | ') WITHIN GROUP (ORDER BY I.IDENTIFIER_TYPE) AS IDENTIFIER_VALUE
+        LISTAGG(I.IDENTIFIER_TYPE, ' | ')
+          WITHIN GROUP (ORDER BY I.IDENTIFIER_TYPE, I.IDENTIFIER_VALUE) AS IDENTIFIER_TYPE,
+        LISTAGG(I.IDENTIFIER_VALUE, ' | ')
+          WITHIN GROUP (ORDER BY I.IDENTIFIER_TYPE, I.IDENTIFIER_VALUE) AS IDENTIFIER_VALUE
     FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_PRODUCT_DETAIL_IDENTIFIER I
     GROUP BY
         I.ECM_TRANSACTION_ID,
@@ -145,18 +239,30 @@ SELECT
     IDN.IDENTIFIER_VALUE AS IDENTIFIER_VALUE,
     IDN.DELIVERY_TYPE AS DELIVERY_TYPE,
     RAT.ISSUER_RATINGS AS ISSUER_RATINGS,
-    ODT.TENOR_VALUE || '-' || ODT.TENOR_PERIOD AS TENORS,
+    CASE WHEN ODT.TENOR_VALUE IS NULL AND ODT.TENOR_PERIOD IS NULL
+         THEN NULL
+         ELSE ODT.TENOR_VALUE || '-' || ODT.TENOR_PERIOD
+    END AS TENORS,
     ODT.MATURITY_DATE AS SECURITIES_MATURITY,
     NVL(DST.DEAL_SHARING_TYPE, 'SHARED') AS DEAL_SHARING_TYPE
 FROM DGSTREAM.OB_DEAL_TRANCHE ODT
-LEFT JOIN DGSTREAM.OB_DEAL_ISSUER ODI
+LEFT JOIN (
+    SELECT Z.*
+    FROM (
+        SELECT DI.DEAL_TRANCHE_ID, DI.NAME, DI.GFCID, DI.TICKER,
+               ROW_NUMBER() OVER (PARTITION BY DI.DEAL_TRANCHE_ID
+                                  ORDER BY DI.ROWID) AS RN_
+        FROM DGSTREAM.OB_DEAL_ISSUER DI
+    ) Z
+    WHERE Z.RN_ = 1
+) ODI
     ON ODI.DEAL_TRANCHE_ID = ODT.DEAL_ID || '-' || ODT.TRANCHE_ID
 LEFT JOIN (
     SELECT
         T.DEAL_TRANCHE_ID,
-        LISTAGG(T.TYPE, ' | ') WITHIN GROUP (ORDER BY T.TYPE) AS IDENTIFIER_TYPE,
-        LISTAGG(T.VALUE, ' | ') WITHIN GROUP (ORDER BY T.TYPE) AS IDENTIFIER_VALUE,
-        LISTAGG(T.DELIVERY_TYPE, ' | ') WITHIN GROUP (ORDER BY T.DELIVERY_TYPE) AS DELIVERY_TYPE
+        LISTAGG(T.TYPE, ' | ') WITHIN GROUP (ORDER BY T.TYPE, T.VALUE) AS IDENTIFIER_TYPE,
+        LISTAGG(T.VALUE, ' | ') WITHIN GROUP (ORDER BY T.TYPE, T.VALUE) AS IDENTIFIER_VALUE,
+        MAX(T.DELIVERY_TYPE) AS DELIVERY_TYPE
     FROM DGSTREAM.OB_TRANCHE T
     GROUP BY T.DEAL_TRANCHE_ID
 ) IDN
@@ -164,7 +270,9 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT
         R.DEAL_TRANCHE_ID,
-        LISTAGG(R.AGENCY || ' - ' || R.VALUE || '(' || R.OUTLOOK || ')', ', ')
+        LISTAGG(R.AGENCY || ' - ' || R.VALUE ||
+                CASE WHEN R.OUTLOOK IS NOT NULL
+                     THEN '(' || R.OUTLOOK || ')' END, ', ')
             WITHIN GROUP (ORDER BY R.AGENCY) AS ISSUER_RATINGS
     FROM DGSTREAM.OB_TRANCHE_RATING R
     GROUP BY R.DEAL_TRANCHE_ID

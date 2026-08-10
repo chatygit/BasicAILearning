@@ -1,3 +1,33 @@
+-- ===========================================================================
+-- VW_ORDER_DETAIL — grain: one row per PRODUCT + ORDER_ID
+--
+-- FIXES IN THIS REVISION (evidence: views/_diagnostics-results.md)
+--   1. DCM ORDER_ALLOCATION was sourced from OB_ORDER_MATCH_GROUP joined on
+--      (ROOT_ID, PARENT_ID) — deal+tranche, never the order. Q37: only 0.47%
+--      of orders are reachable that way; Q8: the table has NO rows for the
+--      busiest tranches, so NVL(...,0) reported allocation as ZERO for them,
+--      while Q8 showed SUM(OB_ORDER.FINAL_ALLOC) reconciles to TRANCHE_SIZE.
+--      -> join deleted, allocation read from OB_ORDER.FINAL_ALLOC.
+--   2. Q9: 11,881,246 rows for 5,874,386 distinct orders (~2x duplication).
+--      Every unguarded join below is now pre-aggregated or deduped:
+--        OB_ECM_ORDER_IOI      20,739 dup ORDER_IDs  -> MAX(LIMIT_VALUE)
+--        OB_ECM_ORDER             101 dup ORDER_IDs  -> ROWID dedupe
+--        OB_ORDER                   6 dup ORDER_IDs  -> ROWID dedupe
+--        OB_ORDER_SIZE            314 dup ORDER_IDs  -> MAX(AMT)
+--        OPUS_ECM_TRANSACTION   dup ECM_TRANSACTION_ID (Q10) -> ROWID dedupe
+--        OPUS_ECM_TRANSACTION_STATUS 1,356 multi-row (Q11) -> pre-aggregated
+--        TRANCHE_DEMAND_CURRENCY 4,547 dups          -> MAX(CURRENCY_NAME)
+--        OB_DEAL_TRANCHE        dup (DEAL_ID,TRANCHE_ID) -> ROWID dedupe
+-- DELIBERATELY UNCHANGED: row-exclusion policy. Every predicate that was in
+-- the deployed view is preserved verbatim, and no new exclusion is added.
+-- Q19 shows DCM applies no order-status filter while ECM drops
+-- CANCELLED/DELETED/PASS, and Q17 shows DCM carries a `confidential` status
+-- nothing filters — both are real, both are cheap, both are a LATER batch.
+-- This revision changes only grain and value correctness.
+--
+-- Dedupes order by ROWID: deterministic, and no assumption about which
+-- columns exist for a "latest row" tiebreak. Duplicate counts are small.
+-- ===========================================================================
 CREATE OR REPLACE VIEW "DGSTREAM"."VW_ORDER_DETAIL" AS
 SELECT
     'ECM' AS PRODUCT,
@@ -20,22 +50,54 @@ SELECT
     NVL(O.PRIVATE_ALLOC, 0) AS ORDER_ALLOCATION,
     CAST(TT.PRICING_TS AS TIMESTAMP(3)) AS PRICING_TS,
     TDC.CURRENCY_NAME AS CURRENCY
-FROM DGSTREAM.OB_ECM_ORDER O
-INNER JOIN DGSTREAM.OPUS_ECM_TRANSACTION T
+FROM (
+    SELECT E.*
+    FROM (
+        SELECT EO.*,
+               ROW_NUMBER() OVER (PARTITION BY EO.ORDER_ID ORDER BY EO.ROWID) AS RN_
+        FROM DGSTREAM.OB_ECM_ORDER EO
+    ) E
+    WHERE E.RN_ = 1
+) O
+INNER JOIN (
+    SELECT X.*
+    FROM (
+        SELECT ET.ECM_TRANSACTION_ID, ET.DEAL_TRANSACTION_ID,
+               ET.SYNDICATE_DEAL_NAME,
+               ROW_NUMBER() OVER (PARTITION BY ET.ECM_TRANSACTION_ID
+                                  ORDER BY ET.ROWID) AS RN_
+        FROM DGSTREAM.OPUS_ECM_TRANSACTION ET
+    ) X
+    WHERE X.RN_ = 1
+) T
     ON O.DEAL_ID = T.DEAL_TRANSACTION_ID
     AND O.IS_OWNED = 'true'
     AND O.ORDER_STATUS NOT IN ('CANCELLED', 'DELETED', 'PASS')
     AND ((O.IS_MATCHED = 'true' AND O.IS_DOMINANT = 'true') OR O.IS_MATCHED = 'false')
-INNER JOIN DGSTREAM.OPUS_ECM_TRANSACTION_STATUS S
+INNER JOIN (
+    SELECT ECM_TRANSACTION_ID,
+           MAX(STATUS_VALUE) AS STATUS_VALUE
+    FROM DGSTREAM.OPUS_ECM_TRANSACTION_STATUS
+    WHERE STATUS_TYPE = 'Execution_Status'
+      AND STATUS_VALUE NOT IN ('Confidential', 'Withdrawn', 'Terminated')
+    GROUP BY ECM_TRANSACTION_ID
+) S
     ON T.ECM_TRANSACTION_ID = S.ECM_TRANSACTION_ID
-    AND S.STATUS_TYPE = 'Execution_Status'
-    AND S.STATUS_VALUE NOT IN ('Confidential', 'Withdrawn', 'Terminated')
-LEFT JOIN DGSTREAM.OB_ECM_ORDER_IOI OI
+LEFT JOIN (
+    SELECT ORDER_ID, MAX(LIMIT_VALUE) AS LIMIT_VALUE
+    FROM DGSTREAM.OB_ECM_ORDER_IOI
+    GROUP BY ORDER_ID
+) OI
     ON O.ORDER_ID = OI.ORDER_ID
 LEFT JOIN DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TT
     ON T.ECM_TRANSACTION_ID = TT.ECM_TRANSACTION_ID
     AND TO_CHAR(TT.ECM_TRANSACTION_TRANCHE_ID) = O.TRANCHE_ID
-LEFT JOIN DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY TDC
+LEFT JOIN (
+    SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID,
+           MAX(CURRENCY_NAME) AS CURRENCY_NAME
+    FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY
+    GROUP BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID
+) TDC
     ON TT.ECM_TRANSACTION_ID = TDC.ECM_TRANSACTION_ID
     AND TT.ECM_TRANSACTION_TRANCHE_ID = TDC.ECM_TRANSACTION_TRANCHE_ID
     AND TT.TRANCHE_CURRENCY_ID = TDC.CURRENCY_ID
@@ -60,18 +122,38 @@ SELECT
     CAST(NULL AS VARCHAR2(400)) AS IOI_TYPE,
     NVL(OZ.AMT, 0) AS ORDER_AMOUNT,
     NVL(OZ.AMT, 0) AS ORDER_DEMAND_QTY,
-    NVL(OMT.FINAL_ALLOC, 0) AS ORDER_ALLOCATION,
+    NVL(O.FINAL_ALLOC, 0) AS ORDER_ALLOCATION,
     ODT.PRICING_TS AS PRICING_TS,
     ODT.CURRENCY AS CURRENCY
-FROM DGSTREAM.OB_ORDER O
-INNER JOIN DGSTREAM.OB_DEAL_TRANCHE ODT
+FROM (
+    SELECT D.*
+    FROM (
+        SELECT DO.ORDER_ID, DO.ROOT_ID, DO.PARENT_ID, DO.NAME, DO.GPID,
+               DO.FINAL_ALLOC,
+               ROW_NUMBER() OVER (PARTITION BY DO.ORDER_ID ORDER BY DO.ROWID) AS RN_
+        FROM DGSTREAM.OB_ORDER DO
+    ) D
+    WHERE D.RN_ = 1
+) O
+INNER JOIN (
+    SELECT Y.*
+    FROM (
+        SELECT DT.DEAL_ID, DT.TRANCHE_ID, DT.DEAL_NAME, DT.NAME,
+               DT.PRICING_TS, DT.CURRENCY,
+               ROW_NUMBER() OVER (PARTITION BY DT.DEAL_ID, DT.TRANCHE_ID
+                                  ORDER BY DT.ROWID) AS RN_
+        FROM DGSTREAM.OB_DEAL_TRANCHE DT
+    ) Y
+    WHERE Y.RN_ = 1
+) ODT
     ON ODT.DEAL_ID = O.ROOT_ID
     AND ODT.TRANCHE_ID = O.PARENT_ID
-LEFT JOIN DGSTREAM.OB_ORDER_SIZE OZ
-    ON O.ORDER_ID = OZ.ORDER_ID
-LEFT JOIN DGSTREAM.OB_ORDER_MATCH_GROUP OMT
-    ON OMT.ROOT_ID = O.ROOT_ID
-    AND OMT.PARENT_ID = O.PARENT_ID;
+LEFT JOIN (
+    SELECT ORDER_ID, MAX(AMT) AS AMT
+    FROM DGSTREAM.OB_ORDER_SIZE
+    GROUP BY ORDER_ID
+) OZ
+    ON O.ORDER_ID = OZ.ORDER_ID;
 
 GRANT SELECT ON "DGSTREAM"."VW_ORDER_DETAIL" TO "DGLOBE_ORAAS_TABLEAU_ROLE";
 GRANT SELECT ON "DGSTREAM"."VW_ORDER_DETAIL" TO "DGLOBE_ORAAS_RO_ROLE";

@@ -38,14 +38,14 @@ Every conclusion below is written as a structural yes/no for that reason.
 | Q34 allocation source | ✅ captured below |
 | Q6 match-group sample | ✅ captured below |
 | Q8 allocation reconcile | ✅ captured below |
-| Q35–Q37 allocation | ⏳ pending |
+| Q34–Q37 allocation | ✅ complete |
 | Q9–Q12 grain integrity | ✅ captured below |
 | Q13–Q14 typing | ✅ captured below |
 | Q17 DCM status | ✅ captured below |
-| Q18–Q20 DCM counts | ⏳ pending |
-| Q21–Q27 list columns | ⏳ pending |
-| Q28–Q29 entity view | ⏳ pending |
-| Q30–Q33 dead columns | ⏳ pending |
+| Q19–Q20 DCM counts | ✅ | Q18 NOT RUN (not needed) |
+| Q21–Q26 list columns | ✅ complete |
+| Q28–Q29 entity view | ✅ complete |
+| Q32 settlement_ts | ✅ complete |
 
 ---
 
@@ -577,3 +577,150 @@ only reason to keep a coalesce; Q35/Q37 decide whether that is worth a join.
 Incidental: DCM ids come in two formats — `I-230109-080151011684` and bare
 numerics like `1500009396`. Consistent with `TRANCHE_SIZE` being NULL on the
 `I-`-prefixed rows. Two source systems behind `OB_DEAL_TRANCHE`.
+
+---
+
+## Q35 / Q36 / Q37 — allocation source, settled
+
+**Q35** `OB_ORDER_MATCH_GROUP`: 78,027 rows with a primary order / 76,085
+distinct / **worst case 4 rows per primary order**. So `PRIMARY_ORDER_ID` is
+NOT unique — joining on it would still fan out.
+
+**Q37 — the decisive one.**
+
+| Metric | Count |
+|---|---|
+| all DCM orders | 5,863,603 |
+| is a PRIMARY_ORDER_ID | 27,739 (**0.47%**) |
+| not a primary order | 5,835,864 |
+| non-primary orders carrying their OWN FINAL_ALLOC | 5,266,360 |
+
+The match-group table is reachable from **less than half a percent** of DCM
+orders, while 5.27M non-primary orders carry their own allocation. Combined
+with Q8 (order-side sums reconcile to tranche size; match group absent entirely
+for the busiest tranches), this is conclusive:
+
+> **Delete the `OB_ORDER_MATCH_GROUP` join. Source `ORDER_ALLOCATION` from
+> `OB_ORDER.FINAL_ALLOC`.** No coalesce, no replacement join — the fix removes
+> SQL rather than adding it.
+
+**Q36** — the 34 conflicts are mostly `ORD_ALLOC = 0` against a populated
+`MG_ALLOC`, i.e. `0` is sometimes used where no allocation was recorded. 34
+rows against 5.27M; not worth a join. One row shows `mg_status = 'pending'`
+where the rest are `updated`.
+
+## Q19 — DCM order statuses are unfiltered
+
+25 combinations of `STATUS` / `IS_ACTIVE` / `IS_FIRM_ORDER`. Dominated by two
+opaque codes — `XB` (2,675,885) and `B` (2,038,170) — which together are ~80%
+of all DCM orders. Also present and **not excluded anywhere**: `cancelled`
+(9,869), `deleted` (2,903 + 275 + 24), plus `A`, `D`, `R`, `FR`, `PN`, `F`,
+`XR`, `new`, `booked`, `accepted`, `updated`, `subject`, and NULL.
+
+ECM excludes `CANCELLED`/`DELETED`/`PASS` and requires `IS_OWNED = 'true'`.
+DCM applies no equivalent. `IS_FIRM_ORDER` (true/false/null) and `IS_ACTIVE`
+(Y/null) exist and are also unused.
+
+## Q20 — DCM order counts genuinely diverge
+
+5,863,603 orders total; **37,517 have no matching `(DEAL_ID, TRANCHE_ID)` row**
+in `OB_DEAL_TRANCHE`, spanning 586 deals, out of 19,155 deals with orders.
+
+Those 37,517 are dropped by the order view's INNER JOIN but still counted by
+the deal view's unfiltered `OB_ORDER` subquery. Confirms the count-honesty
+break: the deal card and the paged order list disagree on 586 deals.
+
+## Q21 — DCM repeated currencies: 6,940 deals
+
+Confirmed at scale. Those deals render `CURRENCIES` as `USD | USD | USD`.
+
+## Q23 — DELIVERY_TYPE should not be a LISTAGG at all
+
+| Metric | Value |
+|---|---|
+| tranches | 32,862 |
+| exactly one distinct DELIVERY_TYPE | 6,054 |
+| more than one | **17** |
+| max identifier rows per tranche | **1,304** |
+
+Only 17 tranches out of 32,862 have more than one distinct delivery type, so
+`DELIVERY_TYPE` is effectively **per-tranche, not per-identifier**. But it is
+`LISTAGG`-ed across identifier rows, so a tranche with 1,304 identifiers
+renders the same value **1,304 times**, pipe-separated. That is both unreadable
+and a genuine ORA-01489 risk even against the 32,767 limit.
+
+Fix: `MAX(T.DELIVERY_TYPE)`, not `LISTAGG`.
+
+## Q24 — identifier zip misalignment: 6,223 tranches
+
+Tranches with two or more identifiers sharing one `IDENTIFIER_TYPE`. The ECM
+LISTAGGs order by `IDENTIFIER_TYPE` alone, so within those ties the type list
+and value list can zip in different orders. Needs `IDENTIFIER_VALUE` as a
+tiebreaker on both LISTAGGs.
+
+## Q25 — BND_BANK drops co-B&D banks: 850 tranches
+
+850 tranches have more than one syndicate member flagged `BND_BROKER = 'true'`.
+`MAX(CASE WHEN ...)` silently keeps only the alphabetically-last.
+
+## Q26 — TENORS renders a bare hyphen
+
+| Metric | Value |
+|---|---|
+| rows | 36,371 |
+| both TENOR_VALUE and TENOR_PERIOD null | **4,808** |
+| value null only | 21 |
+| period null only | 21 |
+
+`NULL || '-' || NULL` is `'-'`, so **4,808 tranches show a lone hyphen** where
+the answer is "not recorded", plus 42 rows rendering `'5-'` or `'-Y'`.
+
+## Q28 / Q29 — entity view
+
+**Q28 returned FIVE groups, not six.**
+
+| ENTITY_TYPE | PRODUCT | rows_ | distinct_ids | null_names |
+|---|---|---|---|---|
+| DEAL | DCM | 21,068 | 21,068 | 1 |
+| DEAL | ECM | 22,347 | 18,399 | 343 |
+| INVESTOR | DCM | 124,668 | 9,871 | 0 |
+| INVESTOR | ECM | 2,982 | 1,157 | 0 |
+| ISSUER | DCM | 6,907 | 671 | 0 |
+| **ISSUER** | **ECM** | **— absent —** | | |
+
+Findings:
+
+1. **There are no ECM issuer entities at all.** Issuer name resolution silently
+   returns nothing for ECM users. The ISSUER branch filters
+   `WHERE D.ISSUER_NAME IS NOT NULL` against `VW_DEAL_SUMMARY`, so ECM's
+   `ISSUER_NAME_FROM_SOURCE` appears to be entirely NULL.
+2. **Grain violation confirmed** — INVESTOR/DCM has 124,668 rows for 9,871 ids
+   (12.6 name variants per investor); DEAL/ECM 22,347 rows for 18,399 ids.
+3. **343 NULL entity names** on the DEAL/ECM branch — the missing
+   `IS NOT NULL` guard, exactly as predicted.
+4. This query took **79.4 seconds**.
+
+**Q29** — the BlackRock lookup took **9.4 seconds** and returned:
+
+- `ENTITY_ID` is **NULL** on 2 of 10 candidates (`BlackRock London`,
+  `BlackRock (Singapore) Limited`) — useless as drill-down handles.
+- Duplicate ids across rows: `00918` for both `BlackRock` and `BLACKROCK`;
+  `41364` for both `Blackrock Financial Mgmt - NY` and
+  `Blackrock Financial Management, Inc.`
+
+Case-variant and punctuation-variant names under one id are exactly the
+`entity_count` vs `row_count` problem in the ontology.
+
+## Q32 — SETTLEMENT_TS is empty
+
+22,347 ECM deals, **0 with a settlement timestamp**. It is a placeholder like
+`SETTLEMENT_CURRENCY`. Do not model it — instead correct the ontology refusal
+text that currently promises "pricing and settlement dates".
+
+## Q18 — NOT RUN, and not needed
+
+Q18 would have counted DCM deals with tranches in mixed statuses, to judge
+whether `MAX(ODT.STATUS)` is safe on the deal view. Q17 already settles it:
+`STATUS` contains case-variant duplicates (`priced`/`Priced`,
+`announced`/`Announced`), and `MAX()` on text picks lowercase over uppercase by
+codepoint. So the aggregate is unsound regardless of how often statuses differ.
