@@ -297,6 +297,14 @@ dimensions:
   order_amount: {column: order_amount, description: "Order/indication amount. DCM: the order amount (money). ECM: the HIGHEST limit point on that order's IOI curve — label it 'highest IOI limit', never 'order size'."}
   currency: {column: currency, description: "Pricing currency (scalar). Required alongside any DCM money figure. Can be NULL on ECM when the order's tranche id matches no tranche."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field). NULL on ECM orders whose tranche id matches no tranche — those rows drop out of every date-bounded query."}
+  # --- DENORMALISED from the deal/tranche grain (added 2026-08-11). These do
+  # NOT multiply order rows: one order belongs to exactly one deal and tranche.
+  # They exist so that an investor ask scoped by sector or issuer is ONE
+  # request on this object instead of deal-then-order. Before them, "top 10
+  # investors of Healthcare companies" cost two catalogs and four LLM turns.
+  issuer_name: {column: issuer_name, description: "Issuer of the deal this order belongs to — carried here so investor asks can scope by issuer with NO hop to the deal object. Match with like; it is a display name, not an id."}
+  sector: {column: sector, description: "Issuer industry sector of the deal this order belongs to — carried here so investor asks can scope by sector with NO hop. Same value set as capital_markets_deal.sector."}
+  tranche_size: {column: tranche_size, description: "Size of the TRANCHE this order was placed into, as a NUMBER (ECM shares / DCM notional). Deal-level context for an order; do NOT sum it across orders — every order on a tranche repeats the same tranche size."}
 
 # -------------------------------- FILTERS ----------------------------------
 filters:
@@ -309,6 +317,31 @@ filters:
   deal_id: {column: deal_id, operators: [eq, ne, in, not_in], description: "Filter by deal id (TEXT — quote it). 0 rows for a labelled id means no data for that id; never substitute a lookalike."}
   tranche_id: {column: tranche_id, operators: [eq, ne, in, not_in], description: "Filter by tranche id (TEXT — quote it)."}
   order_id: {column: order_id, operators: [eq, ne, in, not_in], description: "Filter by order id (TEXT — quote it)."}
+  issuer_name:
+    column: issuer_name
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Scope orders by the deal's ISSUER without leaving this object. Prefer
+      like with '%NAME%'. Project it alongside so an over-matching name is
+      visible in the rows you already hold.
+  sector:
+    column: sector
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Scope orders by the deal's SECTOR without leaving this object — this is
+      what makes "top investors in <sector>" a single request. Values match
+      capital_markets_deal.sector. ECM-populated; can be NULL on DCM.
+  tranche_size:
+    column: tranche_size
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    numeric: true
+    description: >-
+      Threshold on the size of the tranche the order was placed into — e.g.
+      orders into tranches over 1bn. A ROW-LEVEL filter, not an aggregate.
   investor_id:
     column: investor_gp_id
     operators: [eq, ne, in, not_in, is_null, is_not_null]

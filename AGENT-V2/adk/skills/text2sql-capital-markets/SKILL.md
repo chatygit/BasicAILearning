@@ -109,12 +109,18 @@ question with metric `deal_count`.
 |---|---|---|
 | deal | roll-ups: tranche/order/investor counts, `currencies`, first/last priced | any tranche or order attribute |
 | tranche | the deal's `issuer_name`, `sector`, `deal_name`, `deal_status`, `deal_region`, `use_of_proceeds`, `settlement_currency` | any investor/order attribute |
-| order | only `deal_id`, `deal_name`, `tranche_id`, `tranche_name`, `currency`, `pricing_date` | **issuer, sector, deal status, deal size, tranche size** |
+| order | `deal_id`, `deal_name`, `tranche_id`, `tranche_name`, `currency`, `pricing_date`, **`issuer_name`, `sector`, `tranche_size`** | **deal status, deal size, equity/offering type, use of proceeds** |
 
 A tranche ask that also scopes on sector, issuer, deal status, deal region or use
-of proceeds is **ONE request on the tranche object**. An ORDER ask scoping on
-sector, issuer or deal status is genuinely **two**: request 1 on the deal object
-returns `deal_id`s, request 2 filters `deal_id in [...]`. There are NO joins; if
+of proceeds is **ONE request on the tranche object**.
+
+**An ORDER ask scoping on SECTOR, ISSUER or TRANCHE SIZE is now also ONE
+request** — those three are carried on the order object, so
+"top 10 investors in Healthcare over the last 5 years" is a single
+`capital_markets_order` request with a `sector` filter. Do NOT fetch the deal
+catalog for it. Only **deal status, deal size, equity/offering type and use of
+proceeds** still need the two-step: request 1 on the deal object returns
+`deal_id`s, request 2 filters `deal_id in [...]`. There are NO joins; if
 neither route works, say what you can answer.
 
 **Three names mean two different measures — check which object you are on.**
