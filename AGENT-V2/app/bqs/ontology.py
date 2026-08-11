@@ -400,7 +400,7 @@ class OntologyRegistry:
         self._by_source: dict[str, _LoadedOntology] = {}
         # Allow-list of source ids that may be registered/served. When set, any
         # ontology whose `source` is not listed is ignored — so the agent can
-        # only ever query the enabled use case(s) (e.g. ecm_dcm / Trino).
+        # only ever query the enabled use case(s) (e.g. capital_markets / Trino).
         self._enabled_sources = enabled_sources
         self.reload()
         self._log_enablement_summary()
@@ -523,9 +523,9 @@ class OntologyRegistry:
         """Map a (possibly loose or omitted) source to a registered source id.
 
         - None/empty -> the sole registered source when there is exactly one.
-        - Case/separator-insensitive match (e.g. "ECM-DCM" -> "ecm_dcm").
+        - Case/separator-insensitive match (e.g. "ECM-DCM" -> "capital_markets").
         - A recognized sub-scope of a single source (e.g. "ecm"/"dcm" when only
-          "ecm_dcm" exists) resolves to that source.
+          "capital_markets" exists) resolves to that source.
         Raises BQSError when it cannot be resolved unambiguously.
         """
         with self._lock:
@@ -541,10 +541,18 @@ class OntologyRegistry:
         if source in self._by_source:
             return source
         norm = self._normalize(source)
+        # MIGRATION SHIM (2026-08-10, ecm_dcm -> capital_markets rename): keep
+        # accepting the old source ids so a caller pinned to the previous names
+        # still resolves instead of getting unknown_source. Remove once no
+        # caller sends them.
+        if norm.startswith("ecm_dcm_"):
+            legacy = "capital_markets_" + norm[len("ecm_dcm_"):]
+            if legacy in self._by_source:
+                return legacy
         by_norm = {self._normalize(s): s for s in known}
         if norm in by_norm:
             return by_norm[norm]
-        # Sub-scope match: e.g. "ecm"/"dcm" are parts of the single "ecm_dcm".
+        # Sub-scope match: e.g. "ecm"/"dcm" are parts of the single "capital_markets".
         matches = [s for s in known if norm in self._normalize(s).split("_")]
         if len(matches) == 1:
             return matches[0]

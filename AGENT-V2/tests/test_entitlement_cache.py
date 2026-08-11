@@ -231,8 +231,8 @@ def test_ttl_zero_disables_the_cache():
 def test_denial_is_not_cached():
     global BEHAVIOUR
     BEHAVIOUR = ("json", {"entitled_products": []})
-    assert check()["reason"] == "no_ecm_dcm_entitlement"
-    assert check()["reason"] == "no_ecm_dcm_entitlement"
+    assert check()["reason"] == "no_capital_markets_entitlement"
+    assert check()["reason"] == "no_capital_markets_entitlement"
     assert len(CALLS) == 2, "a denial must be re-checked, not pinned for the TTL"
 
 
@@ -341,7 +341,7 @@ def test_unparseable_200_is_transient_not_misconfigured():
 
 _STABLE_REASONS = {
     "missing_soeid",
-    "no_ecm_dcm_entitlement",
+    "no_capital_markets_entitlement",
     "entitlement_misconfigured",
     "entitlement_unavailable",
 }
@@ -424,7 +424,7 @@ def test_genuinely_empty_is_a_denial():
     # Observed for real against QAT 2026-08-09: a SOEID with no ECM/DCM grant.
     # This must stay a denial no matter how forgiving the parser gets.
     BEHAVIOUR = ("json", {"soeid": "bk42867", "clauses": []})
-    assert check()["reason"] == "no_ecm_dcm_entitlement"
+    assert check()["reason"] == "no_capital_markets_entitlement"
 
 
 def test_unknown_envelope_is_a_denial_not_a_guess():
@@ -432,7 +432,7 @@ def test_unknown_envelope_is_a_denial_not_a_guess():
     # A shape we do not recognise must DENY and log its shape — never go
     # hunting for an ECM/DCM token somewhere inside it.
     BEHAVIOUR = ("json", {"result": {"entitledProducts": ["ECM"]}})
-    assert check()["reason"] == "no_ecm_dcm_entitlement", (
+    assert check()["reason"] == "no_capital_markets_entitlement", (
         "the parser is digging into unrecognised envelopes — that is how a "
         "grant gets read out of text that never granted anything"
     )
@@ -441,13 +441,13 @@ def test_unknown_envelope_is_a_denial_not_a_guess():
 def test_top_level_array_is_a_denial_not_a_guess():
     global BEHAVIOUR
     BEHAVIOUR = ("json", ["PRODUCT IN ('ECM','DCM')"])
-    assert check()["reason"] == "no_ecm_dcm_entitlement"
+    assert check()["reason"] == "no_capital_markets_entitlement"
 
 
 def test_unrelated_products_are_not_matched():
     global BEHAVIOUR
     BEHAVIOUR = ("json", {"products": ["FX", "RATES"]})
-    assert check()["reason"] == "no_ecm_dcm_entitlement"
+    assert check()["reason"] == "no_capital_markets_entitlement"
 
 
 def test_shape_is_described_without_values():

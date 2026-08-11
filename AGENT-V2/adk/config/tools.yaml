@@ -17,7 +17,7 @@
 # THIS FILE IS THE LOCAL RUNTIME'S ONLY SOURCE FOR THE MCP TOOLSET.
 #
 # Local `adk` runs read the toolset from here. Higher environments do NOT read
-# this file at all — there the toolset is the `ecm_dcm_oracle_mcp` entry created
+# this file at all — there the toolset is the `capital_markets_oracle_mcp` entry created
 # in the Ask Banking onboarding UI, and promotion means copying the agent
 # description/instructions into that UI by hand.
 #
@@ -39,16 +39,16 @@
 # ---------------------------------------------------------------------------
 
 tools:
-  - name: ecm_dcm_oracle_mcp                   # referenced by capital_markets_agent_v2 (agents.yaml) and both skills
+  - name: capital_markets_oracle_mcp                   # referenced by capital_markets_agent_v2 (agents.yaml) and both skills
     description: >
       Ontology-based text-to-SQL MCP server for ECM/DCM. Exposes governed,
       read-only tools: `discover_business_terms(source=...)` and
       `run_bqs_query` (runs a structured Business Query Specification against
       ONE object; you never write raw SQL).
-      DISCOVERY IS SCOPED: there are FOUR grain-aligned objects — `ecm_dcm_deal`
-      (one row per deal), `ecm_dcm_tranche` (per tranche: syndicate, B&D,
-      identifiers, coupon), `ecm_dcm_order` (per order: investors, demand,
-      allocation), `ecm_dcm_entity` (name → id). Choose by grain, then pass that
+      DISCOVERY IS SCOPED: there are FOUR grain-aligned objects — `capital_markets_deal`
+      (one row per deal), `capital_markets_tranche` (per tranche: syndicate, B&D,
+      identifiers, coupon), `capital_markets_order` (per order: investors, demand,
+      allocation), `capital_markets_entity` (name → id). Choose by grain, then pass that
       name as `source` so you get ONE catalog. Omitting `source` returns all
       four — four times the context for one answer.
       RULES THAT ALWAYS APPLY: (1) Pick the object by the grain of the thing

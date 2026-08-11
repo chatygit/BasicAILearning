@@ -1,4 +1,4 @@
-# Review 02 — `ecm_dcm_entity.yaml` (entity resolution object)
+# Review 02 — `capital_markets_entity.yaml` (entity resolution object)
 
 Source `dataglobe_oraas.dgstream.vw_entity_search`, `grain: [entity_type, product,
 entity_id]`, `max_limit: 50`.

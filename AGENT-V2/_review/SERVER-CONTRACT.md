@@ -348,7 +348,7 @@ def get(self, source):
 
 > **Ontology changes take effect without redeploying the server.** In v1 a
 > promote meant an app restart because bootstrap ran once. Here, dropping a
-> corrected `ecm_dcm_order.yaml` into the ontology directory is live on the next
+> corrected `capital_markets_order.yaml` into the ontology directory is live on the next
 > query. That materially changes how we ship the config half of this work — and
 > it means a bad YAML is live just as fast, so `ontology_check.py` before every
 > copy is not optional.
@@ -360,7 +360,7 @@ that object. Promote-checklist item.
 
 **Source resolution is forgiving but never silent** (`resolve`): omitted +
 exactly one registered → that one; otherwise `Missing 'source'. Available
-sources: [...]`. Case/separator folding (`ECM-DCM` → `ecm_dcm`), and a
+sources: [...]`. Case/separator folding (`ECM-DCM` → `capital_markets`), and a
 sub-scope match on `_`-split parts — so `deal`, `tranche`, `order`, `entity`
 each resolve uniquely, while `ecm` matches all four and raises.
 

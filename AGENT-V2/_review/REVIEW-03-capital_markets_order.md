@@ -1,4 +1,4 @@
-# Review 03 — `ecm_dcm_order.yaml` (order object)
+# Review 03 — `capital_markets_order.yaml` (order object)
 
 Source `dataglobe_oraas.dgstream.vw_order_detail`, `grain: [product, order_id]`.
 
@@ -73,7 +73,7 @@ Suggested replacement:
 ```yaml
 - question: Orders for a specific deal (paged listing)
   request:
-    source: ecm_dcm_order
+    source: capital_markets_order
     metric: order_count
     dimensions: [order_id, investor_name, investor_id, tranche_name,
                  order_type, ioi_type]

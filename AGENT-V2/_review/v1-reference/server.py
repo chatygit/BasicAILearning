@@ -48,7 +48,7 @@ mcp = FastMCP(
         "Provides text-to-SQL tools for entity search, "
         "query generation context, SQL validation, query execution, "
         "fuzzy resolution, and data analysis context. "
-        "Supported domains: credit_facility, wallet, revenue_returns, ecm_dcm. "
+        "Supported domains: credit_facility, wallet, revenue_returns, capital_markets. "
         "Tools: text2sql_capabilities, text2sql_entity_search, text2sql_query_context, text2sql_query_generator, "
         "text2sql_validate_sql, text2sql_query_executor, text2sql_data_context, "
         "text2sql_fuzzy_resolve. "
@@ -172,7 +172,7 @@ def text2sql_capabilities() -> dict:
             "credit_facility",
             "wallet",
             "revenue_returns",
-            "ecm_dcm",
+            "capital_markets",
         ],
     }
 
@@ -192,12 +192,12 @@ def text2sql_entity_search(
     Includes disambiguation when multiple results found and entitlement checking.
 
     Args:
-        domain: Domain identifier (credit_facility, revenue_returns, wallet, ecm_dcm).
+        domain: Domain identifier (credit_facility, revenue_returns, wallet, capital_markets).
         entity_name: Entity/company name to search for.
         gfcid: Direct GFCID (issuer) identifier lookup. Do NOT pass a DEAL_ID here.
         cagid: Direct CAGID lookup (credit_facility only).
         entity_type: Optional intent hint (investor_name, issuer_name, deal_name).
-        deal_id: Direct DEAL_ID lookup (ecm_dcm). Use this — not gfcid — when the
+        deal_id: Direct DEAL_ID lookup (capital_markets). Use this — not gfcid — when the
             user gives an explicit deal id. Takes precedence over entity_name.
     """
     user_id = get_soeid()
@@ -228,7 +228,7 @@ def text2sql_query_executor(
     post-query calculations, stores results keyed by execution_key.
 
     Args:
-        domain: Domain identifier (credit_facility, revenue_returns, wallet, ecm_dcm).
+        domain: Domain identifier (credit_facility, revenue_returns, wallet, capital_markets).
         sql_query: Validated SQL query to execute.
         result_headers: Comma-separated expected column headers.
         columns: JSON-encoded column metadata.
@@ -262,7 +262,7 @@ def text2sql_fuzzy_resolve(
     Calls ingestion API for vector similarity candidates and returns ranked matches.
 
     Args:
-        domain: Domain identifier (credit_facility, revenue_returns, wallet, ecm_dcm).
+        domain: Domain identifier (credit_facility, revenue_returns, wallet, capital_markets).
         column_name: Column to resolve against (e.g. COMPANY_NAME).
         fuzzy_input: Approximate value to resolve.
         top_k: Maximum candidates to return.

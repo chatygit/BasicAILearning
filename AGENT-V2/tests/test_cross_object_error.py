@@ -3,13 +3,13 @@
 Observed 2026-08-10, "Who are the top 10 investors by allocation in Energy deals
 over the last 2 years, grouped by Investor Type?":
 
-  #4/#6/#8  discover ecm_dcm_order, then _deal, then _tranche  (3 LLM turns)
+  #4/#6/#8  discover capital_markets_order, then _deal, then _tranche  (3 LLM turns)
   #10..#19  ten run_bqs_query calls, cycling unknown_filter 'sector' and
             bad_order_field 'pricing_date'
   #20       429 RESOURCE_EXHAUSTED
 
-`allocation` and `investor_category` are on ecm_dcm_order; `sector` is only on
-ecm_dcm_deal. One BQS request runs against ONE object, so the question is not
+`allocation` and `investor_category` are on capital_markets_order; `sector` is only on
+capital_markets_deal. One BQS request runs against ONE object, so the question is not
 expressible — but "Unknown filter field 'sector' ... Known filters: [...]" reads
 like a spelling problem, so the agent kept guessing.
 
@@ -100,25 +100,25 @@ class FakeSpec:
 class FakeRegistry:
     """The real four-object shape, reduced to the fields these cases need.
 
-    ecm_dcm_order's filter list is copied verbatim from the `unknown_filter`
+    capital_markets_order's filter list is copied verbatim from the `unknown_filter`
     error in the 2026-08-10 trace, so `deal_name` really is on three objects and
     `sector` really is on one.
     """
 
     SPECS = {
-        "ecm_dcm_order": FakeSpec(
+        "capital_markets_order": FakeSpec(
             {"currency", "deal_id", "deal_name", "investor_category", "investor_id",
              "investor_name", "investor_region", "ioi_type", "meeting_type",
              "order_allocation", "order_amount", "order_demand_qty", "order_id",
              "order_type", "pricing_date", "product", "tranche_id"},
             {"investor_name", "investor_category", "order_allocation"},
         ),
-        "ecm_dcm_deal": FakeSpec(
+        "capital_markets_deal": FakeSpec(
             {"sector", "deal_name", "product", "pricing_date"},
             {"sector", "deal_name", "issuer_name"},
         ),
-        "ecm_dcm_tranche": FakeSpec({"deal_name", "product"}, {"tranche_id"}),
-        "ecm_dcm_entity": FakeSpec({"entity_name"}, {"entity_id"}),
+        "capital_markets_tranche": FakeSpec({"deal_name", "product"}, {"tranche_id"}),
+        "capital_markets_entity": FakeSpec({"entity_name"}, {"entity_id"}),
     }
 
     def list_sources(self):
@@ -140,19 +140,19 @@ def explain(message, code, source):
 
 
 SECTOR_ERR = (
-    "Unknown filter field 'sector' for source 'ecm_dcm_order'. "
+    "Unknown filter field 'sector' for source 'capital_markets_order'. "
     "Known filters: ['currency', 'deal_id', 'investor_name']"
 )
 
 
 def test_field_on_another_object_is_named():
-    res = explain(SECTOR_ERR, "unknown_filter", "ecm_dcm_order")
-    assert res["field_available_on"] == ["ecm_dcm_deal"]
-    assert "ecm_dcm_deal" in res["message"]
+    res = explain(SECTOR_ERR, "unknown_filter", "capital_markets_order")
+    assert res["field_available_on"] == ["capital_markets_deal"]
+    assert "capital_markets_deal" in res["message"]
 
 
 def test_it_says_one_request_cannot_span_grains():
-    msg = explain(SECTOR_ERR, "unknown_filter", "ecm_dcm_order")["message"].lower()
+    msg = explain(SECTOR_ERR, "unknown_filter", "capital_markets_order")["message"].lower()
     assert "cannot span" in msg, (
         "without this the agent reads a grain problem as a spelling problem"
     )
@@ -161,10 +161,10 @@ def test_it_says_one_request_cannot_span_grains():
 
 def test_field_that_exists_nowhere_says_so():
     res = explain(
-        "Unknown filter field 'esg_rating' for source 'ecm_dcm_order'. "
+        "Unknown filter field 'esg_rating' for source 'capital_markets_order'. "
         "Known filters: ['currency']",
         "unknown_filter",
-        "ecm_dcm_order",
+        "capital_markets_order",
     )
     assert res["field_available_on"] == []
     assert "not available on any object" in res["message"].lower()
@@ -173,39 +173,39 @@ def test_field_that_exists_nowhere_says_so():
 
 def test_a_field_present_on_several_objects_lists_them_all():
     res = explain(
-        "Unknown filter field 'deal_name' for source 'ecm_dcm_entity'. "
+        "Unknown filter field 'deal_name' for source 'capital_markets_entity'. "
         "Known filters: ['entity_name']",
         "unknown_filter",
-        "ecm_dcm_entity",
+        "capital_markets_entity",
     )
-    assert res["field_available_on"] == ["ecm_dcm_deal", "ecm_dcm_order", "ecm_dcm_tranche"]
+    assert res["field_available_on"] == ["capital_markets_deal", "capital_markets_order", "capital_markets_tranche"]
 
 
 def test_the_source_asked_for_is_never_suggested_back():
-    res = explain(SECTOR_ERR, "unknown_filter", "ecm_dcm_order")
-    assert "ecm_dcm_order" not in res["field_available_on"], (
+    res = explain(SECTOR_ERR, "unknown_filter", "capital_markets_order")
+    assert "capital_markets_order" not in res["field_available_on"], (
         "suggesting the object that just rejected the field is a retry loop"
     )
 
 
 def test_dimension_misses_are_explained_too():
     res = explain(
-        "Unknown dimension 'sector' for source 'ecm_dcm_order'.",
+        "Unknown dimension 'sector' for source 'capital_markets_order'.",
         "unknown_dimension",
-        "ecm_dcm_order",
+        "capital_markets_order",
     )
-    assert res["field_available_on"] == ["ecm_dcm_deal"]
+    assert res["field_available_on"] == ["capital_markets_deal"]
 
 
 def test_unrelated_errors_pass_through_untouched():
     original = "Order field 'pricing_date' must be the metric or a selected dimension."
-    res = explain(original, "bad_order_field", "ecm_dcm_order")
+    res = explain(original, "bad_order_field", "capital_markets_order")
     assert res["message"] == original, "only field-miss codes are rewritten"
     assert "field_available_on" not in res
 
 
 def test_a_message_with_no_quoted_field_is_left_alone():
-    res = explain("Unknown filter field.", "unknown_filter", "ecm_dcm_order")
+    res = explain("Unknown filter field.", "unknown_filter", "capital_markets_order")
     assert res["message"] == "Unknown filter field."
 
 
@@ -219,7 +219,7 @@ def test_explainer_never_raises():
     svc = object.__new__(DomainQueryService)
     svc.registry = Exploding()
     res = DomainQueryService._explain_cross_object(
-        svc, FakeError(SECTOR_ERR, "unknown_filter"), {"source": "ecm_dcm_order"}
+        svc, FakeError(SECTOR_ERR, "unknown_filter"), {"source": "capital_markets_order"}
     )
     assert res["code"] == "unknown_filter", "an error path must never add an error"
 

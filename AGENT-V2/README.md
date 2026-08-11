@@ -6,14 +6,14 @@ already have.
 
 ```
 adk/config/agents.yaml                     adk/config/skills.yaml
-adk/config/tools.yaml                      adk/skills/text2sql-ecm-dcm/SKILL.md
+adk/config/tools.yaml                      adk/skills/text2sql-capital-markets/SKILL.md
 app/config.py                              app/mcpserver.py
 app/services/domain_query_service.py       app/services/entitlement_service.py
 app/middleware/soeid_middleware.py         app/middleware/auth_middleware.py
 app/utils/cyberark_integration/secrets.py
 app/bqs/{models,ontology,planner,sql_builder,sql_validator,suggestions,executor,formatter}.py
 app/bqs/entity/zen_entity_search.py
-app/bqs/ontology/ecm_dcm_{deal,tranche,order,entity}.yaml
+app/bqs/ontology/capital_markets_{deal,tranche,order,entity}.yaml
 tests/test_{entitlement_scope,entitlement_cache,soeid_resolution}.py   (new)
 tests/test_{cyberark_cache,disambiguation_scope}.py                    (new)
 ```

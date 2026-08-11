@@ -937,3 +937,63 @@ the V5 line the OCR could not read. -> deduped by ROWID.
 
 Both are single rows, but a view whose declared grain is violated at all is a
 view the planner cannot trust, which is the entire premise of the split.
+
+---
+
+# ROUND 4 — V25/V26/V27: ALL PASS
+
+| Query | Result | Verdict |
+|---|---|---|
+| V25 TRANCHE_SIZE | 34,861 non-null · **43** e-notation converted · **1** unconvertible · max 10,000,000,000,000 | ✅ |
+| V26 ECM tranche grain | 33,010 = 33,010 | ✅ |
+| V27 DCM tranche grain | 36,370 = 36,370 | ✅ |
+
+All four views now hold their declared grain on QA:
+
+| Object | rows = grain | evidence |
+|---|---|---|
+| deal (ECM) | 18,399 = 18,399 | V1 |
+| order (ECM) | 48,302 = 48,302 | V22 |
+| order (DCM) | 5,826,084 = 5,826,084 | V4 |
+| tranche (ECM) | 33,010 = 33,010 | V26 |
+| tranche (DCM) | 36,370 = 36,370 | V27 |
+
+## ⚠️ THESE NUMBERS ARE QA. THEY ARE NOT THE ACCEPTANCE CRITERIA.
+
+The acceptance criterion is the **invariant** `rows_ = grain_`, not any of the
+figures above. PROD is larger and more varied; every count here will differ.
+Re-run V26/V27 and the Q9 grain check against PROD before and after deploy.
+
+Specifically, QA under-represents:
+
+- **Volume.** PROD deals carry ~2,000 orders. QA's largest tranche had 2,870
+  orders across the whole book.
+- **Variety.** QA had exactly ONE unparseable tranche size (`1k`) and ONE
+  duplicate `(deal, tranche)` key. Both are certain to be more common in PROD.
+  Both are handled by construction — unparseable becomes NULL, duplicates are
+  deduped — so the design scales even though the counts do not.
+- **List lengths.** V13 measured 531 chars max. A PROD tranche with far more
+  identifiers or syndicate members could approach the 32,767 ceiling, where
+  LISTAGG raises ORA-01489 and kills the entire query.
+  -> **all 12 LISTAGGs now carry `ON OVERFLOW TRUNCATE '...' WITH COUNT`**, so
+     an oversized list truncates visibly instead of failing the query.
+     Requires Oracle 12.2+; if the data team hits a compile error on that
+     clause, deleting it is a safe one-line revert per LISTAGG.
+
+## Open PROD-scale risks that the SQL cannot solve on its own
+
+1. **The ROW_NUMBER dedupes sort large tables.** `OB_ORDER` (5.86M in QA,
+   more in PROD) and `OB_ECM_ORDER` are each wrapped in a window function to
+   remove 6 and 101 duplicate rows respectively. If `ORDER_ID` is indexed
+   Oracle can satisfy this without a full sort; if not, every query against
+   the order view — and therefore every entity-search resolution, which sits
+   on top of it — pays a sort of the whole table.
+   **Ask the data team to confirm an index on `ORDER_ID`, and to fix the
+   source duplicates so the window can be removed entirely.**
+2. **`MAX()` is choosing, not deduplicating, in four places** (V11), the
+   largest being 14,341 ECM orders whose IOI rows hold different
+   `LIMIT_VALUE`s — a demand curve. `ORDER_AMOUNT` currently reports the
+   highest limit. That ratio will hold or grow in PROD. Still an open
+   business decision: highest, lowest, or latest.
+3. **`max_size` of 10,000,000,000,000** on a DCM tranche (V25) is either a
+   large JPY notional or a data error. Not blocking, worth a look.

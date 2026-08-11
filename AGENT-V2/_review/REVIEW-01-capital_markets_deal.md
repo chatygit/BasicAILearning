@@ -1,4 +1,4 @@
-# Review 01 — `ecm_dcm_deal.yaml` (deal object)
+# Review 01 — `capital_markets_deal.yaml` (deal object)
 
 Reviewed from screenshots, 2026-08-07. Physical source
 `dataglobe_oraas.dgstream.vw_deal_summary`, `grain: [product, deal_id]`.

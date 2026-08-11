@@ -1,0 +1,632 @@
+# ---------------------------------------------------------------------------
+# COLUMN NAMES VERIFIED against the deployed view, not assumed. All 20 physical
+# columns of DGSTREAM.VW_ORDER_DETAIL are modelled below; there is nothing on
+# the view this file does not name, and nothing here the view does not carry.
+# Evidence: views/vw_order_detail.sql + views/_diagnostics-results.md (2026-08-10).
+# ---------------------------------------------------------------------------
+# Governed ontology — ECM/DCM ORDER object (Oracle via Starburst/Trino).
+#
+# Grain: ONE row per PRODUCT + ORDER_ID. Investor demand/allocation/order facts
+# live here. Deal and tranche attributes are denormalised down (deal_id,
+# deal_name, tranche_id, tranche_name, pricing_date, currency) so investor asks
+# stay single-object and join-free — but tranche pricing/coupon/identifiers and
+# deal sizing are NOT here (use the tranche/deal objects for those).
+#
+# THE GRAIN NOW HOLDS. V22: ECM 48,302 rows = 48,302 distinct orders.
+# V4: DCM 5,826,084 = 5,826,084. Before the rewrite the view returned
+# 11,881,246 rows for 5,874,386 orders (Q9, ~2x duplication). So order listings
+# and order counts need NO deduplication — do not add any, and do not let a
+# downstream edit reintroduce a dedupe rule. (Monitored invariant, not a
+# defect: the ECM branch joins O.DEAL_ID to a transaction spine deduped by
+# ECM_TRANSACTION_ID, and Q10 shows one deal can map to several transactions
+# (43,718 txns / 41,779 deals). V10 measured only ~20 such ECM deals in QA and
+# V22 passes; PROD is larger, so re-run the rows-vs-orders check there.)
+#
+# Physical source: DGSTREAM.VW_ORDER_DETAIL (UNION ALL ECM + DCM) via the
+# Starburst catalog dataglobe_oraas.dgstream.
+#
+# WHAT CHANGED IN THE VIEW UNDER THIS OBJECT (all evidence-cited):
+#   * DCM order_allocation is REAL DATA NOW. It was NVL(OB_ORDER_MATCH_GROUP
+#     .FINAL_ALLOC, 0) joined on (ROOT_ID, PARENT_ID); Q8 found that table has
+#     NO rows at all for the five busiest DCM tranches, so allocation was
+#     reported as ZERO for every order on them, and Q37 found the table is
+#     reachable from 0.47% of DCM orders while 5.27M non-primary orders carry
+#     their own allocation. The join is deleted; the source is
+#     OB_ORDER.FINAL_ALLOC, which Q8 reconciles to TRANCHE_SIZE (exact on one
+#     tranche, 98.6% / 99.5% on two others).
+#   * ECM order_amount is POPULATED (NVL(MAX(OB_ECM_ORDER_IOI.LIMIT_VALUE), 0)),
+#     and V11 measured 14,341 ECM orders whose IOI rows hold DIFFERENT limit
+#     values — a demand curve that MAX() collapses to its highest point. The
+#     four "DCM." labels this object used to carry on order_amount were wrong.
+#   * DCM order_amount and order_demand_qty are the SAME expression
+#     (NVL(OB_ORDER_SIZE.AMT, 0)) — one number, two names.
+#
+# ROUTING NOTE: "how many deals did <investor> buy?" is an ORDER question — it
+# filters on an investor and aggregates COUNT(DISTINCT deal_id). The grain is
+# orders; the metric counts deals. Keep that distinction.
+# ---------------------------------------------------------------------------
+source: capital_markets_order
+version: "3"
+dialect: trino
+
+connection:
+  catalog: dataglobe_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: dataglobe_oraas.dgstream.vw_order_detail
+
+grain: [product, order_id]
+
+max_limit: 5000
+query_timeout_seconds: 60
+
+default_time_dimension: pricing_date
+
+how_to_use:
+  - "USE THIS OBJECT for order-grain asks: investors/accounts, demand, allocation,
+     order/IOI type, meeting type, investor category/region, 'top investors', and
+     'how many deals/tranches did <investor> touch' (COUNT DISTINCT on deal/tranche
+     while filtering the investor)."
+  - "ALWAYS set 'product'. ECM allocations/demand are SHARE COUNTS; DCM order
+     amounts are notional MONEY — scope one 'currency' or group by 'currency' for
+     DCM money totals. State the unit in the answer."
+  - "PRODUCT APPLICABILITY IS A LOOKUP, NOT A JUDGEMENT. Seven fields are
+     ECM-ONLY — the view hard-casts them to NULL on every DCM row, so the list is
+     complete and closed: investor_region, investor_category,
+     investor_category_key, meeting_type, meeting_type_key, order_type, ioi_type.
+     Everything else works on BOTH products: deal_id, deal_name, tranche_id,
+     tranche_name, order_id, investor_name, investor_id, order_allocation,
+     order_demand_qty, order_amount, currency, pricing_date. NOTHING here is
+     DCM-only. Combining product 'DCM' with an ECM-only field returns ZERO rows —
+     that is an empty answer, not a narrow one. DO NOT RUN IT: say the field is
+     not captured for bonds, and offer either the same ask on ECM or an
+     equivalent built from the both-product fields (investor_name / investor_id /
+     allocation / demand / currency)."
+  - "Investor-side scoping: use investor_id (GP id) for a picked entity or
+     investor_name like '%NAME%' for a family/name. Umbrella names (BlackRock,
+     Fidelity) mean the whole family — group by investor_name and show ids.
+     investor_id is NULLABLE at source, so investor_count (COUNT DISTINCT) skips
+     those orders and grouping by investor_id drops them — group by
+     investor_name alongside it when the total has to reconcile."
+  - "Investor region mixes full names and codes plus stored typos. The values
+     seen so far are 'United States', Germany, France, Belgium, Sweden, Brazil,
+     Mexico, Canada, 'Columbia' (sic, for Colombia), and the codes US, UK, JP,
+     EU, AP, LA, CA, AZ, CEEMEA/CEEMA — treat that list as indicative, not
+     closed. USA is in ['United States','US']. NEVER like '%US%' — it matches
+     RUSSIA, AUSTRIA and AUSTRALIA. Filters are ANDed, so an OR of two patterns
+     is not expressible: use 'in' with every spelling that qualifies. A
+     NOT-region predicate drops null-region rows — count them with is_null and
+     say how many were excluded. WHEN A REGION GUESS RETURNS 0 ROWS, know
+     exactly what the server will and will not do for you: did_you_mean fires
+     ONLY on a 0-row result AND only when the value is a SINGLE string, and it
+     ranks values that share a word-stem with your guess. So the multi-value
+     'in' above gets NO suggestions, and neither do not_in or is_null. To
+     recover, re-ask with ONE spelling (eq or a single-item in) — that is the
+     shape the server can answer — rather than grouping by investor_region to
+     dump the domain, which the list above already gives you."
+  - "Metric routing: demand/indication → total_demand; allocation/'got shares' →
+     total_allocation; DCM order size/amount → total_order_amount; ECM order size
+     → total_allocation (NOT total_order_amount — see the next note)."
+  - "ORDER_AMOUNT IS NOT AN ORDER SIZE ON ECM. It is the HIGHEST limit point on
+     that order's IOI curve, and 14,341 ECM orders carry several points, so the
+     figure is one reading of a curve, not a total. Its business meaning is
+     unconfirmed (it may be a limit PRICE rather than an amount). Never SUM it
+     on ECM and never call it 'the order size' there: use total_allocation or
+     total_demand. Showing it row-by-row beside allocation is fine if you label
+     it 'highest IOI limit'. On DCM it is a plain order amount and totals
+     normally."
+  - "ON DCM, total_demand AND total_order_amount ARE THE SAME NUMBER (both read
+     the order's amount), and max_demand equals max_order_amount. Report ONE of
+     them. Presenting demand and order amount as two DCM facts is a fabricated
+     distinction."
+  - "FILL RATE (allocation ÷ demand) IS NOW MEANINGFUL ON DCM — allocation stopped
+     being a copy of demand and is real allocation data. Any inherited rule that
+     says DCM fill rate is trivially 1x, or refuses it, is obsolete. It costs two
+     requests on THIS object: total_allocation then total_demand with IDENTICAL
+     filters, dimensions and order, then divide row by row. Caveat every DCM
+     average: only 1,747,582 of 5,826,084 DCM orders carry an allocation, and the
+     rest read 0 because 'allocated nothing' and 'no allocation recorded' are
+     stored the same way — so average_allocation is diluted by roughly 4m
+     structural zeros. Filter order_allocation gt 0 for 'investors who were
+     allocated' and say you did."
+  - "COVERAGE / oversubscription = demand ÷ SIZE. Demand is here; SIZE IS NOT ON
+     THIS OBJECT — it lives on capital_markets_tranche (total_tranche_size, now a real
+     NUMBER). Answering costs two requests plus your own division; say the ratio
+     and both inputs. (Denormalising TRANCHE_SIZE down onto this view would make
+     it single-object and is legal at this grain — raised with the view owner,
+     not yet available.)"
+  - "COUNTS ARE NOT COMPARABLE ACROSS OBJECTS OR ACROSS PRODUCTS, so never
+     reconcile them silently. (a) 37,517 DCM orders across 586 deals have no
+     matching deal+tranche row and are absent from THIS object while the deal
+     object's order_count still counts them — if a deal card's order count and
+     this listing disagree, that is why; say so rather than reconciling. (b) The
+     ECM book is NARROWER than the DCM book in four fixed ways, none of them a
+     filter you can change: ECM keeps only OWNED orders, drops order status
+     CANCELLED / DELETED / PASS, drops MATCHED orders that are not the dominant
+     one, and drops every order whose transaction execution status is
+     Confidential / Withdrawn / Terminated. The DCM book excludes NOTHING — it
+     still contains cancelled and deleted orders, and orders on deals whose
+     status is 'confidential'. 'Number of orders' therefore means a materially
+     different population per product — disclose it whenever the two products
+     are compared side by side, and never present the two as the same measure."
+  - "VALUE TRAPS on this object: meeting_type's stored literal is '1x1', NOT
+     'One-to-One' (that spelling exists only in meeting_type_key, as
+     ONE_TO_ONE); 'other than 1x1' must exclude BOTH '1x1' and 'No Meeting', and
+     the answer must say the no-meeting orders were excluded. investor_category
+     is a CATEGORY — 'classification' is a different, untracked taxonomy whose
+     values do not overlap it; see unsupported_intents."
+
+# ------------------------------- METRICS -----------------------------------
+# UNITS GUARD: every metric over a per-product-unit column declares
+# requires_filters: [product]. ECM allocation/demand are SHARE COUNTS and DCM
+# order amounts are notional MONEY — an unguarded SUM adds shares to dollars.
+# This object is where that failure actually reached a user ("1,000.0bn shares").
+metrics:
+  total_allocation:
+    column: order_allocation
+    aggregation: SUM
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Total final allocation to investors. Investor-side — pair with an investor
+      filter. ECM=shares, DCM=money (scope one currency for DCM). Populated on
+      BOTH products; the DCM figure used to be zero on the busiest tranches and
+      is now real.
+  max_allocation:
+    column: order_allocation
+    aggregation: MAX
+    numeric: true
+    requires_filters: [product]
+    description: Largest single allocation. "Who got the most".
+  average_allocation:
+    column: order_allocation
+    aggregation: AVG
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Average allocation across matched orders. DILUTED BY STRUCTURAL ZEROS —
+      unallocated orders are stored as 0, and on DCM roughly 70% of orders are.
+      Add a filter order_allocation gt 0 for the average among investors who were
+      actually allocated, and say which of the two you computed.
+  total_demand:
+    column: order_demand_qty
+    aggregation: SUM
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Total investor demand ("the book"). ECM=shares, DCM=money. Pair with an
+      investor filter for a specific account. On DCM this is the SAME underlying
+      number as total_order_amount — report one, never both.
+  max_demand:
+    column: order_demand_qty
+    aggregation: MAX
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Largest single investor demand/indication ("anchor order"). On DCM this
+      equals max_order_amount.
+  total_order_amount:
+    column: order_amount
+    aggregation: SUM
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Total order/indication amount (money on DCM — scope one currency). DCM
+      ONLY as a money total: on ECM this column is the highest limit point of
+      each order's IOI curve, so a SUM there is a plausible but meaningless
+      number — use total_allocation or total_demand for ECM order size.
+  max_order_amount:
+    column: order_amount
+    aggregation: MAX
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Largest single investor order amount (DCM). Equals max_demand on DCM. On
+      ECM it returns the highest IOI limit point in scope — label it that way or
+      do not use it.
+  order_count:
+    column: order_id
+    aggregation: COUNT_DISTINCT
+    description: >-
+      Number of distinct investor orders. Unit-free — the ONE metric here where
+      a single request may cover both products, but only if you PUT product IN
+      'dimensions'. Dropping the product filter without grouping by product
+      returns one blended number over two differently-scoped books. The ECM and
+      DCM books apply different exclusions — see how_to_use before comparing.
+  investor_count:
+    column: investor_gp_id
+    aggregation: COUNT_DISTINCT
+    description: >-
+      Number of distinct investors (by GP id). GP id is nullable at source, and
+      COUNT DISTINCT skips nulls — so this can undercount. Project investor_name
+      too when the number has to be defended.
+  deal_count:
+    column: deal_id
+    aggregation: COUNT_DISTINCT
+    description: >-
+      Number of distinct deals touched by the matched orders. Use for "how many
+      deals did <investor> buy" (filter the investor, metric deal_count). Counts
+      only deals reachable from this object — the deal object's own order_count
+      includes 37,517 DCM orders on 586 deals that never appear here.
+  tranche_count:
+    column: tranche_id
+    aggregation: COUNT_DISTINCT
+    description: Number of distinct tranches touched by the matched orders.
+  row_count:
+    column: order_id
+    aggregation: COUNT
+    description: >-
+      Total matched rows. At this grain that equals order_count — prefer
+      order_count in any answer shown to a user.
+
+# ------------------------------ DIMENSIONS ---------------------------------
+# PER-PRODUCT APPLICABILITY IS MECHANICAL AND CLOSED. Exactly seven fields are
+# ECM-only, and they are exactly the seven the DCM branch of the view casts to
+# NULL (vw_order_detail.sql L127-L133): investor_region, investor_category_key,
+# investor_category, meeting_type_key, meeting_type, order_type, ioi_type.
+# Every one is tagged "ECM-ONLY (hard NULL on DCM)" below — that prefix is the
+# marker to match on. Filtering one under product 'DCM' returns nothing at all.
+#
+# NOTE TO THE PLATFORM OWNER: today this is only declarable in prose, because
+# DimensionSpec/FilterSpec carry no product field and the planner has nothing to
+# check. Adding `products: [ECM]` to those two specs plus one check in
+# planner._resolve_dimensions/_resolve_filters (reject when an eq/in `product`
+# filter names only products absent from that list, with a governed message)
+# would turn all seven into an up-front rejection instead of an empty result.
+# Raised, not yet available — and deliberately NOT declared here, because an
+# inert key that looks enforced is worse than no key at all.
+dimensions:
+  product: {column: product, description: "Product — 'ECM' or 'DCM'."}
+  deal_id: {column: deal_id, description: "Deal id (denormalised). TEXT — quote it. Project it in listings: it is the drill-down handle."}
+  deal_name: {column: deal_name, description: "Deal name (display)."}
+  tranche_id: {column: tranche_id, description: "Tranche id (denormalised). TEXT — quote it."}
+  tranche_name: {column: tranche_name, description: "Tranche name (display). Include it whenever several tranches of one deal are listed, or the rows read as duplicates. Can be NULL on ECM when the order's tranche id matches no tranche."}
+  order_id: {column: order_id, description: "Unique order id — the unique key at this grain, on BOTH products. Use it as the final sort key on every paged listing."}
+  investor_name: {column: investor_name, description: "Investor/account name (display). NOT unique — several ids can share a name, and one investor is spelled several ways."}
+  investor_id: {column: investor_gp_id, description: "Investor GP id (investor-side key). TEXT — quote it, leading zeros matter. NULLABLE at source: grouping by it silently drops those orders."}
+  investor_region: {column: investor_region, description: "ECM-ONLY (hard NULL on DCM). Investor's own geography — never the deal's target region. Mixes full names and codes ('United States' and 'US')."}
+  investor_category: {column: investor_category, description: "ECM-ONLY (hard NULL on DCM). Investor category (Long Only, Hedge Fund, Asset Manager…). This is CATEGORY — 'classification' is a different, untracked taxonomy; see unsupported_intents."}
+  investor_category_key: {column: investor_category_key, description: "ECM-ONLY (hard NULL on DCM). Coded investor category key (LONG_ONLY, HEDGE_FUND, OUTRIGHT…). Display uses investor_category, not this."}
+  meeting_type: {column: meeting_type, description: "ECM-ONLY (hard NULL on DCM). Investor/issuer meeting type. The stored literal is '1x1' (not 'One-to-One'); 'No Meeting' is also a value. There is no stored 'roadshow' value — reading 'roadshow'/'met the issuer' as 'anything but No Meeting' is an INTERPRETATION, so say so in the answer."}
+  meeting_type_key: {column: meeting_type_key, description: "ECM-ONLY (hard NULL on DCM). Coded meeting type (NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING). 'One-to-One' exists ONLY here — the displayed value is '1x1'."}
+  order_type: {column: order_type, description: "ECM-ONLY (hard NULL on DCM). Order HANDLING type (OTT/Regular). LIMIT/MARKET/SCALED are ioi_type values, not these."}
+  ioi_type: {column: ioi_type, description: "ECM-ONLY (hard NULL on DCM). Indication-of-interest type (LIMIT/MARKET/SCALED — the confirmed subset, not an exhaustive list). 'Scaled back' in a sentence about allocation is NOT this field — that is demand minus allocation."}
+  order_allocation: {column: order_allocation, description: "Allocation on this order (ECM shares / DCM money) — project it in order listings. 0 means 'allocated nothing' OR 'nothing recorded'; the two are indistinguishable."}
+  order_demand_qty: {column: order_demand_qty, description: "Demand on this order (ECM shares / DCM money) — project it in order listings. On DCM it is the same stored number as order_amount."}
+  order_amount: {column: order_amount, description: "Order/indication amount. DCM: the order amount (money). ECM: the HIGHEST limit point on that order's IOI curve — label it 'highest IOI limit', never 'order size'."}
+  currency: {column: currency, description: "Pricing currency (scalar). Required alongside any DCM money figure. Can be NULL on ECM when the order's tranche id matches no tranche."}
+  pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field). NULL on ECM orders whose tranche id matches no tranche — those rows drop out of every date-bounded query."}
+
+# -------------------------------- FILTERS ----------------------------------
+filters:
+  product:
+    column: product
+    operators: [eq, in]
+    suggestable: true
+    values: ["ECM", "DCM"]
+    description: "Product scope — 'ECM' or 'DCM'. Set on every query."
+  deal_id: {column: deal_id, operators: [eq, ne, in, not_in], description: "Filter by deal id (TEXT — quote it). 0 rows for a labelled id means no data for that id; never substitute a lookalike."}
+  tranche_id: {column: tranche_id, operators: [eq, ne, in, not_in], description: "Filter by tranche id (TEXT — quote it)."}
+  order_id: {column: order_id, operators: [eq, ne, in, not_in], description: "Filter by order id (TEXT — quote it)."}
+  investor_id:
+    column: investor_gp_id
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    description: "Investor-side filter (GP id). Quote it — leading zeros matter. GP id is nullable, so is_null counts the orders no id-based grouping can reach."
+  investor_name:
+    column: investor_name
+    operators: [like, eq, in]
+    suggestable: true
+    entity_name: true
+    entity_id_column: investor_gp_id
+    case_insensitive: true
+    description: "Filter by investor/account name — like '%NAME%'. No id lookup needed. Project it too, or the server pays a second database round-trip to disambiguate."
+  deal_name:
+    column: deal_name
+    operators: [like, eq, in]
+    suggestable: true
+    entity_name: true
+    entity_id_column: deal_id
+    case_insensitive: true
+    description: "Filter by deal name — like '%NAME%'. Project it too, or the server pays a second database round-trip to disambiguate."
+  investor_region:
+    column: investor_region
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM-ONLY (hard NULL on DCM). Investor geography — mixes full names and
+      codes. USA → in ['United States','US']; NEVER like '%US%' (it matches
+      RUSSIA, AUSTRIA and AUSTRALIA). "Non-USA" is not_in on that same pair, not
+      like '%NON%'. Codes seen: US UK JP EU AP LA CA AZ CEEMEA (also stored
+      CEEMA); names seen: United States, Germany, France, Belgium, Sweden,
+      Brazil, Mexico, Canada, Columbia (sic). NULL is a large bucket, and a
+      NOT-region predicate silently drops those rows — count them with is_null
+      and disclose the number. RECOVERY ON 0 ROWS: the server's did_you_mean
+      block fires only when the value is a SINGLE string, so a multi-value 'in'
+      (the recommended USA form), not_in and is_null all get nothing back. Use
+      the value list above first; if you must probe, probe with ONE spelling.
+  investor_category:
+    column: investor_category
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM-ONLY (hard NULL on DCM). Investor category. The vocabulary carried
+      over from v1 is Outright · Long Only · Hedge Fund · Long/Hedge ·
+      Outright/Hedge · Central Bank · Official Institution · Insurance/Pension ·
+      Asset Manager · Corporate Treasury · Bank Treasury · Private Bank ·
+      Co-lead Retention · Co-lead Trading · Co-lead Order · Co-lead Pot ·
+      Other Trading · Broker · Syndicate · JLM Trading · Other — match one of
+      those rather than the user's phrasing. Synonyms: 'pot' → Co-lead Pot;
+      'retention' → Co-lead Retention; 'sovereign'/'official' → Official
+      Institution; 'pension' → Insurance/Pension. 'Broker' and 'Syndicate' here
+      are investor categories, not the syndicate fields on the tranche object.
+      This is CATEGORY — 'classification' is a different, untracked taxonomy
+      (Strategic, Family Office, Retail, SWF, DSP, Index, Quant never appear
+      here); see unsupported_intents.
+  meeting_type:
+    column: meeting_type
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM-ONLY (hard NULL on DCM). Meeting type — the stored set is 'No Meeting',
+      '1x1', 'Conference Call', 'Small Group', 'Group Meeting'. The literal is '1x1' —
+      'One-to-One' matches NOTHING (it exists only in meeting_type_key, as
+      ONE_TO_ONE). "Other than 1x1" must exclude BOTH '1x1' AND 'No Meeting'
+      (not_in ['1x1','No Meeting']), and the answer must say the no-meeting
+      orders were excluded, or the count reads as if everyone met. There is NO
+      stored 'roadshow' value: treating 'roadshow' / 'met the issuer' as
+      not_in ['No Meeting'] is an interpretation — use it, but state it.
+  order_type:
+    column: order_type
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM-ONLY (hard NULL on DCM). Order HANDLING type — 'OTT' or 'Regular'.
+      LIMIT / MARKET / SCALED
+      are ioi_type values and return nothing here — that mis-route is the
+      commonest error on this field.
+  ioi_type:
+    column: ioi_type
+    operators: [like, eq, in, not_in]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM-ONLY (hard NULL on DCM). IOI type — how the indication is priced:
+      'LIMIT', 'MARKET', 'SCALED'. That list is NOT exhaustive (v1 flagged it as
+      the confirmed subset), so treat a 0-row result as "not that spelling",
+      not as "no such orders", and probe with one value to get did_you_mean.
+      'Scaled orders' is this field; 'scaled back' / 'scaled-down allocation'
+      is an allocation cut, ranked by demand minus allocation instead.
+  order_allocation:
+    column: order_allocation
+    operators: [gt, gte, lt, lte, between, eq]
+    description: >-
+      ROW-LEVEL allocation threshold ("orders larger than 1m shares"). Distinct
+      from a HAVING on total_allocation, which thresholds an investor's TOTAL.
+      Pair with product — the unit differs. There is no is_null here because the
+      view stores an absent allocation as 0: use eq 0 for "got nothing recorded"
+      and gt 0 for "was allocated", and say which reading you used.
+  order_demand_qty:
+    column: order_demand_qty
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    description: >-
+      ROW-LEVEL demand threshold. Pair with product — the unit differs. is_null
+      works on ECM only; on DCM an absent demand is stored as 0, so use eq 0
+      there.
+  order_amount:
+    column: order_amount
+    operators: [gt, gte, lt, lte, between, eq]
+    description: >-
+      ROW-LEVEL order-amount threshold. On DCM this is money — pair it with a
+      currency scope. On ECM it thresholds the highest IOI limit point, not an
+      order size. Absent values are stored as 0, so there is no is_null.
+  currency:
+    column: currency
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Pricing currency. Required for comparable DCM money totals — there is no
+      FX column, so totals in different currencies must never be added. Can be
+      NULL on ECM (the order's tranche id matched no tranche); ne/not_in drop
+      those rows silently, so count them with is_null when the total matters.
+  pricing_date:
+    column: pricing_ts
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      Default time filter — pricing date/time. Trailing windows need BOTH bounds
+      (gte start AND lt tomorrow-midnight) so future-dated pricings are excluded
+      and today's are not. NULL on ECM orders whose tranche id matched no
+      tranche: every date-bounded ECM order query silently drops them, so count
+      them with is_null before quoting a book total as complete.
+
+unsupported_intents:
+  matched_orders:
+    patterns: ["matched orders", "orders that were matched", "show matched"]
+    reason: No order match status column is exposed on the order view.
+    user_message: >-
+      Matched-order status isn't available here. I can filter by deal status or
+      investor category instead.
+  away_orders:
+    patterns: ["away orders", "orders from other banks"]
+    reason: No away-order flag / originating-bank attribution exists.
+    user_message: >-
+      Away orders (placed by other syndicate banks) aren't captured. I can show
+      all orders for a deal, or filter the syndicate on the tranche object.
+  ttw_orders:
+    patterns: ["TTW", "selected as TTW", "take the wall", "take-the-wall"]
+    reason: No take-the-wall flag is exposed on the order view.
+    user_message: >-
+      TTW (Take the Wall) order information isn't available in this dataset. I
+      can show the orders for the deal with their demand and allocation instead.
+  cancelled_deleted_orders:
+    patterns: ["cancelled orders", "deleted orders", "orders that were cancelled",
+               "orders that were deleted", "show all cancelled", "show all deleted"]
+    reason: >-
+      No order-level status is exposed on the order view. The two books are also
+      built differently — ECM already excludes unowned orders, CANCELLED /
+      DELETED / PASS orders, non-dominant matched orders and orders on
+      Confidential / Withdrawn / Terminated transactions, while DCM excludes
+      nothing — so an order-status ask cannot be answered consistently across
+      products.
+    user_message: >-
+      Order-level cancellation/deletion status isn't available. Deal-level status
+      is — I can filter deals by a cancelled or deleted status if that's what you
+      meant. Would that work?
+  other_syndicate_allocation:
+    patterns: ["allocation given by other syndicate", "per-bank allocation",
+               "bank-level allocation", "which bank allocated"]
+    reason: Allocation is investor-side only; there is no per-bank attribution.
+    user_message: >-
+      Per-bank allocation attribution isn't available — I can't say how much each
+      syndicate bank allocated. I can show total allocation per investor for the
+      deal, or which banks were in the syndicate.
+  investor_classification:
+    patterns: ["investor classification", "investor classifications",
+               "classification of investor", "classification of investors",
+               "classify investors", "investor class"]
+    reason: >-
+      'Classification' is a different, untracked taxonomy from investor_category.
+      Its values (Strategic, Family Office, Retail, SWF, DSP, Index, Quant) do
+      not appear in investor_category at all, so substituting one for the other
+      returns a WRONG population, not an approximate one.
+    user_message: >-
+      Investor "classification" isn't tracked as a separate taxonomy. I can group
+      or filter by investor_category (Long Only, Hedge Fund, Asset Manager…) —
+      would that work?
+
+usage_notes:
+  - "Always set a product filter. One row per order — no deduplication."
+  - "REJECTED WITHOUT A 'product' FILTER (the server raises
+    missing_required_filter — putting product in dimensions does NOT satisfy
+    it): total_allocation, max_allocation, average_allocation, total_demand,
+    max_demand, total_order_amount, max_order_amount. Every OTHER metric here —
+    order_count, investor_count, deal_count, tranche_count, row_count — is
+    unit-free; drop the filter on those only if you put 'product' in dimensions."
+  - "Seven fields are ECM-only and NULL on every DCM row: investor_region,
+     investor_category, investor_category_key, meeting_type, meeting_type_key,
+     order_type, ioi_type. Do not run a knowably-empty query — refuse the
+     combination and offer the ECM version or a both-product field."
+  - "Investor asks scope by investor_id (picked) or investor_name like '%NAME%'."
+  - "DCM money totals need a single currency scope or group by currency."
+  - "For 'how many deals did <investor> buy', filter the investor and use metric deal_count."
+  - "On DCM, demand and order amount are the same stored number, and allocation
+     is a genuinely different one — so fill rate works on DCM but 'demand vs
+     order amount' is not a comparison."
+  - "Allocation of 0 means either nothing allocated or nothing recorded; about
+     70% of DCM orders read 0. Say which reading an average or a 'who got
+     nothing' answer used."
+  - "ECM orders whose tranche id matches no tranche carry NULL tranche_name,
+     NULL currency and NULL pricing_date — every date-bounded ECM query drops
+     them. Count them with is_null before calling a book total complete."
+  - "EVERY ranking or paged request ends its 'order' with a UNIQUE key (order_id
+     here). investor_name is NOT unique — paging on it repeats or drops rows, and
+     ties reshuffle between turns."
+  - "A listing request projects the row-level facts (order_id, allocation/demand);
+     an aggregate request projects the group keys. 'Show me the orders' is a
+     listing, not a per-investor count."
+  - "Ids (order_id, deal_id, tranche_id, investor GP id) are TEXT — quote them and
+     keep leading zeros."
+
+examples:
+  - question: Top 15 investors by allocation on ECM deals in 2024
+    request:
+      source: capital_markets_order
+      metric: total_allocation
+      dimensions: [investor_name, investor_id]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: pricing_date, op: gte, value: "2024-01-01"}
+        - {field: pricing_date, op: lt, value: "2025-01-01"}
+      order: [{field: total_allocation, direction: desc}, {field: investor_id, direction: asc}]
+      limit: 15
+  - question: How many deals did BlackRock buy in 2025 (ECM)
+    request:
+      source: capital_markets_order
+      metric: deal_count
+      dimensions: [investor_name]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: investor_name, op: like, value: "%BLACKROCK%"}
+        - {field: pricing_date, op: gte, value: "2025-01-01"}
+        - {field: pricing_date, op: lt, value: "2026-01-01"}
+      order: [{field: deal_count, direction: desc}, {field: investor_name, direction: asc}]
+  - question: Orders for a specific deal (paged listing)
+    request:
+      source: capital_markets_order
+      metric: order_count
+      dimensions: [order_id, investor_name, investor_id, tranche_name,
+                   order_allocation, order_demand_qty, order_type, ioi_type]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: deal_id, op: eq, value: "REPLACE_WITH_DEAL_ID"}
+      # Unique final sort key — without order_id the pages are unstable.
+      order: [{field: investor_name, direction: asc}, {field: order_id, direction: asc}]
+      limit: 50
+  - question: US investors in a deal, excluding null-region orders
+    request:
+      source: capital_markets_order
+      metric: total_allocation
+      dimensions: [investor_name, investor_id, investor_region, investor_category]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: deal_id, op: eq, value: "REPLACE_WITH_DEAL_ID"}
+        # Never like '%US%' — it matches RUSSIA and AUSTRIA.
+        - {field: investor_region, op: in, value: ["United States", "US"]}
+      order: [{field: total_allocation, direction: desc}, {field: investor_id, direction: asc}]
+  - question: Investors who met the issuer other than 1x1 (ECM)
+    request:
+      source: capital_markets_order
+      metric: order_count
+      dimensions: [investor_name, investor_id, meeting_type]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: deal_id, op: eq, value: "REPLACE_WITH_DEAL_ID"}
+        # Excludes BOTH the 1x1 literal and No Meeting — disclose the exclusion.
+        - {field: meeting_type, op: not_in, value: ["1x1", "No Meeting"]}
+      order: [{field: order_count, direction: desc}, {field: investor_id, direction: asc}]
+  - question: Top 10 investors on a DCM deal by allocation, USD only
+    request:
+      source: capital_markets_order
+      metric: total_allocation
+      dimensions: [investor_name, investor_id]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        - {field: deal_id, op: eq, value: "REPLACE_WITH_DEAL_ID"}
+        # No FX column — one currency per money total.
+        - {field: currency, op: eq, value: USD}
+        # Excludes the structural zeros so the ranking is of real allocations.
+        - {field: order_allocation, op: gt, value: 0}
+      order: [{field: total_allocation, direction: desc}, {field: investor_id, direction: asc}]
+      limit: 10
+  - question: DCM fill rate for an investor — request 1 of 2 (allocation)
+    request:
+      source: capital_markets_order
+      metric: total_allocation
+      dimensions: [investor_name, investor_id]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        - {field: investor_name, op: like, value: "%BLACKROCK%"}
+        - {field: currency, op: eq, value: USD}
+        - {field: pricing_date, op: gte, value: "2025-01-01"}
+        - {field: pricing_date, op: lt, value: "2026-01-01"}
+      order: [{field: total_allocation, direction: desc}, {field: investor_id, direction: asc}]
+      # Request 2 is IDENTICAL with metric total_demand. Divide row by row; the
+      # ratio is meaningful on DCM now that allocation is no longer a copy of
+      # demand. Never use total_order_amount as the denominator on DCM — it is
+      # the same number as total_demand.
+  - question: How many ECM orders have no pricing date (dropped by every date filter)
+    request:
+      source: capital_markets_order
+      metric: order_count
+      dimensions: [deal_id, deal_name]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        # is_null / is_not_null take no value — omit it.
+        - {field: pricing_date, op: is_null}
+      order: [{field: order_count, direction: desc}, {field: deal_id, direction: asc}]
+      limit: 20

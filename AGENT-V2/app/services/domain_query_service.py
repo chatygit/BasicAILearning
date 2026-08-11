@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # NOTE: this is the *revenue returns* use case, NOT ours. Only a
 # source literally named "revenue_returns_entities" is served from zen_api.
-# `ecm_dcm_entity` therefore goes down the normal SQL path against
+# `capital_markets_entity` therefore goes down the normal SQL path against
 # VW_ENTITY_SEARCH — which is exactly the design intent ("SQL-backed
 # replacement for the old zen-API entity path FOR ECM/DCM").
 ENTITY_SOURCE = "revenue_returns_entities"
@@ -50,9 +50,9 @@ class DomainQueryService:
         # ---------------------------------------------------------------------
         # DEPLOYMENT LANDMINE. This allow-list is an EXACT match on
         # each ontology's `source`. The four-view migration renamed the single
-        # `ecm_dcm` source into FOUR: ecm_dcm_deal / _tranche / _order / _entity.
+        # `capital_markets` source into FOUR: capital_markets_deal / _tranche / _order / _entity.
         # If BQS_ENABLED_SOURCES (or settings.bqs_enabled_sources) still says
-        # "ecm_dcm", ALL FOUR objects are loaded and then silently ignored, and
+        # "capital_markets", ALL FOUR objects are loaded and then silently ignored, and
         # discovery returns nothing. Set it to the four names, or to "*".
         # This is a promote-checklist item, not a code change.
         # ---------------------------------------------------------------------
@@ -110,7 +110,7 @@ class DomainQueryService:
         A BQS request runs against ONE object, and the four objects are at
         different grains — so a question like "top investors by allocation in
         ENERGY deals" is not expressible: allocation and investor_category are
-        on ecm_dcm_order, `sector` only on ecm_dcm_deal. Told merely "unknown
+        on capital_markets_order, `sector` only on capital_markets_deal. Told merely "unknown
         filter 'sector', known filters: [...]", the agent guessed, failed,
         guessed again — ten run_bqs_query calls and a 429 RESOURCE_EXHAUSTED.
 
@@ -206,7 +206,7 @@ class DomainQueryService:
         try:
             spec = self.registry.get(req.source)
             # Use the canonical source id downstream (req.source may be a loose
-            # alias like "ecm"/"ECM-DCM" that resolved to "ecm_dcm").
+            # alias like "ecm"/"ECM-DCM" that resolved to "capital_markets").
             resolved_source = spec.source
 
             # revenue_returns_entities ALWAYS resolves via zen_api (zen-client

@@ -32,7 +32,7 @@ routing list is in `static_instruction` rule 2 and in SKILL §2. So it can choos
 the object *without any tool call*, then fetch **one** catalog:
 
 ```
-discover_business_terms(source="ecm_dcm_order")
+discover_business_terms(source="capital_markets_order")
 ```
 
 That is the two-stage design, with the "thin index" being the routing table we

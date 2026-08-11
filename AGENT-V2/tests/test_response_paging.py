@@ -55,7 +55,7 @@ def make_rows(n: int, start: int = 0):
 
 
 def fmt(rows, **kw):
-    kw.setdefault("source", "ecm_dcm_deal")
+    kw.setdefault("source", "capital_markets_deal")
     kw.setdefault("metric", "total_deal_size")
     kw.setdefault("sql_audit", "SELECT ...")
     kw.setdefault("row_count", len(rows))

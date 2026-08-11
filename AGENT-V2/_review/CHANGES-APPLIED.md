@@ -219,7 +219,7 @@ Changes:
   per turn.
 
 Confirmed from this file, not inferred: `skills:` attaches **only**
-`text2sql-ecm-dcm`, so the old *"load it alongside `ontology-text-to-sql`"*
+`text2sql-capital-markets`, so the old *"load it alongside `ontology-text-to-sql`"*
 instruction was unsatisfiable. The self-contained fix was correct.
 `ontology-text-to-sql` now has no consumer — attach or drop it.
 
@@ -273,7 +273,7 @@ site*, not the *tool*. Corrected in REVIEW-07 and here.
 **The fix is config-only and now applied.** The agent already carries the
 four-object routing table in its own instruction and in SKILL §2, so it can pick
 the object with **no tool call at all**, then fetch exactly one catalog:
-`discover_business_terms(source="ecm_dcm_order")`. That is the two-stage design,
+`discover_business_terms(source="capital_markets_order")`. That is the two-stage design,
 using the routing table we already ship as the thin index. A wrong pick costs one
 extra scoped call — still far cheaper than four catalogs on every turn.
 
@@ -364,15 +364,15 @@ bankers actually ask.
 
 **DEPLOYMENT LANDMINE — `BQS_ENABLED_SOURCES` (open item 0 below).** The
 allow-list is an **exact match** on each ontology's `source`. The four-view
-migration renamed the single `ecm_dcm` source into **four**. If that env var (or
-`settings.bqs_enabled_sources`) still says `ecm_dcm`, all four objects are loaded
+migration renamed the single `capital_markets` source into **four**. If that env var (or
+`settings.bqs_enabled_sources`) still says `capital_markets`, all four objects are loaded
 and then **silently ignored** — discovery returns nothing and every query fails
 to resolve a source. Nothing in the config can detect it; the fix is one
 environment value, and it belongs on the promote checklist before anything else.
 
 **Confirmed: the zen-API path is not ours.** `ENTITY_SOURCE =
 "revenue_returns_entities"` — only a source with that exact name is served from
-zen. `ecm_dcm_entity` goes down the normal SQL path against `VW_ENTITY_SEARCH`,
+zen. `capital_markets_entity` goes down the normal SQL path against `VW_ENTITY_SEARCH`,
 which is the design intent.
 
 **Confirmed: the suggestion contract, authoritatively.** `_enrich_result` calls
@@ -423,7 +423,7 @@ Both found after the copy-over, both now fixed in this tree.
 **(a) `usage_notes` item parsed as a MAPPING, killing the entity source.**
 `- ONE request: contains-match…` is *valid YAML* that loads as a `Hash`, so
 `usage_notes: list[str]` failed pydantic validation, `_refresh_file` logged and
-skipped, and **`ecm_dcm_entity` was never registered**. One missing pair of
+skipped, and **`capital_markets_entity` was never registered**. One missing pair of
 quotes removed a whole object. The gate missed it because it only checked that
 the YAML *parsed* — it did. Now checked structurally: any unquoted prose-list
 item containing `": "` fails. Swept all four; that was the only instance.
@@ -448,8 +448,8 @@ New referential-integrity check: no example may name an undeclared computed
 filter, and neither the skill nor the agent instruction may recommend one
 without stating it is unavailable.
 
-> **Port the `computed_filters` block from the v1 `ecm_dcm.yaml` into
-> `ecm_dcm_tranche.yaml`.** It is worth real effort: a computed filter is the
+> **Port the `computed_filters` block from the v1 `capital_markets.yaml` into
+> `capital_markets_tranche.yaml`.** It is worth real effort: a computed filter is the
 > ONLY place this system can express an **OR** (an alias's codes are OR-joined
 > into one regex) and the only **NULL-safe negation**. That single block would
 > fix non-B&D properly *and* give us the clean form of the exchange, refi and
@@ -462,7 +462,7 @@ without stating it is unavailable.
 
 | # | Item | Who |
 |---|---|---|
-| 0 | **`BQS_ENABLED_SOURCES` must list the four new source names** (or `*`). It is an exact-match allow-list and the migration renamed `ecm_dcm` into four. If stale, all four objects load and are silently ignored — discovery returns nothing. Check this FIRST | deploy |
+| 0 | **`BQS_ENABLED_SOURCES` must list the four new source names** (or `*`). It is an exact-match allow-list and the migration renamed `capital_markets` into four. If stale, all four objects load and are silently ignored — discovery returns nothing. Check this FIRST | deploy |
 | 1 | **THE ENTITLEMENT GATE DISCARDS THE USER'S PRODUCT FILTER.** A dual-entitled user who asks for ECM gets ECM+DCM, and size/allocation metrics then sum shares with money. One-line fix: intersect `requested` with `entitled` instead of replacing. **No config change can work around this.** REVIEW-08 H2 | POC team — urgent |
 | 2 | Three entitlement fail-open paths: import failure skips the gate, gate-ok-with-no-products runs unscoped, and `RUN_MODE` defaults to `"local"` which disables it. Decide which should fail closed; put `RUN_MODE` on the promote checklist. REVIEW-08 H3 | POC team |
 | 3 | ~~Does discovery return all four catalogs?~~ **Resolved, and better than expected: `discover_business_terms(source=...)` is scopeable.** The `(no arguments)` call was a config choice. Two-stage discovery is now applied — the agent picks the object from its own routing table, then fetches ONE catalog. Still worth **measuring `promptTokenCount`** before and after to size the win | us — applied |
@@ -474,7 +474,7 @@ without stating it is unavailable.
 | 9 | `MATCH_RANK` column on `VW_ENTITY_SEARCH` → one-hop exact-first resolution | view owner |
 | 10 | `TRANCHE_SIZE` denormalised down onto `VW_ORDER_DETAIL` → coverage becomes single-object. Legal at that grain (coarser), like `tranche_name`/`currency` already are | view owner |
 | 11 | **Function-based indexes on `UPPER(col)`** — every case-insensitive filter compiles to `UPPER(col) op UPPER(?)`, so plain b-trees are unusable on ~25 filtered columns across the four views. Or normalise the values (`Open`/`OPEN`) so case-insensitivity isn't needed. Added as an addendum to `QA-FINDINGS-FOR-DATA-TEAM.md` | data team |
-| 12 | Every `[VERIFY]` marker in `ecm_dcm_tranche.yaml` — the file is a draft written to the other three objects' conventions, not introspected from the physical view | user |
+| 12 | Every `[VERIFY]` marker in `capital_markets_tranche.yaml` — the file is a draft written to the other three objects' conventions, not introspected from the physical view | user |
 
 ## 14. `sql_builder.py` — what it confirmed, and one trap it revealed
 

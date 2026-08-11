@@ -1,0 +1,728 @@
+# ---------------------------------------------------------------------------
+# Column names are VERIFIED against the deployed view (diagnostics Q1 — 22
+# columns) and against views/vw_deal_summary.sql. Every factual claim in this
+# file traces to views/_diagnostics-results.md; the query id is quoted inline.
+# Counts quoted are QA existence proofs, never PROD sizing.
+# ---------------------------------------------------------------------------
+# Governed ontology — ECM/DCM DEAL object (Oracle via Starburst/Trino).
+#
+# Grain: ONE row per PRODUCT + DEAL_ID. THIS NOW HOLDS — it did not when the
+# first version of this file was written. The rewritten view collapses the ECM
+# branch to DEAL_TRANSACTION_ID (V1: 18,399 rows = 18,399 deals, was 22,347 for
+# 18,399; Q9b: DCM 21,068 = 21,068, already 1:1). So deal listings and deal
+# counts need NO deduplication, and total_deal_size no longer double-counts ECM.
+# Do NOT re-introduce dedup advice, and do NOT "correct" the one-row-per-deal
+# statements back to hedges — they are measured, not aspirational.
+#
+# Tranche- and order-level attributes are deliberately ABSENT: ask the tranche
+# or order object for those. What IS here are the per-deal PRE-COMPUTED
+# roll-ups (tranche_count, order_count, investor_count, currencies) — they are
+# the mechanism that keeps deal questions single-object, and they are now
+# FILTERABLE, so "deals with more than one tranche" and "deals that priced in
+# USD" cost zero extra hops.
+#
+# SETTLEMENT_TS — DECIDED: it is column 15 on the view and is deliberately NOT
+# modelled here. Q32 measured 22,347 ECM deals with ZERO settlement timestamps,
+# and the DCM branch is CAST(NULL AS TIMESTAMP(6)) — the column is 100% NULL on
+# both products. Modelling it would hand the agent a date filter that returns
+# zero rows for every question ever asked of it: a silent-wrong-answer path
+# dressed as a capability. It stays in the VIEW (diagnostics scope rule 2 — an
+# exposed column is never removed) and is handled here by the 'settlement_date'
+# unsupported intent. Do NOT "restore the missing dimension"; the absence is the
+# design. SETTLEMENT_CURRENCY is a DIFFERENT column and is modelled — do not
+# conflate the two.
+#
+# Physical source: DGSTREAM.VW_DEAL_SUMMARY (UNION ALL of ECM + DCM), exposed
+# through the Starburst catalog dataglobe_oraas.dgstream. PRODUCT ('ECM'/'DCM')
+# separates the two; callers scope with a product filter (entitlement injects it
+# too). Only business names below are ever shown to the agent.
+# ---------------------------------------------------------------------------
+source: capital_markets_deal
+version: "3"
+dialect: trino
+
+connection:
+  catalog: dataglobe_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: dataglobe_oraas.dgstream.vw_deal_summary
+
+# Object grain (business names). One physical row per this combination.
+grain: [product, deal_id]
+
+max_limit: 5000
+query_timeout_seconds: 60
+
+# Deals are priced over a window; the deal row carries FIRST_PRICED/LAST_PRICED.
+default_time_dimension: last_priced
+
+how_to_use:
+  - "USE THIS OBJECT for deal-grain asks: 'list deals', 'how many deals', deal
+     size/value, issuer, sector, offering type, use of proceeds, deal status, and
+     the pre-computed per-deal roll-ups (tranche_count, order_count,
+     investor_count, currencies). One row per deal — never deduplicate."
+  - "DO NOT ask this object for tranche attributes (coupon, tenor, identifiers,
+     syndicate, ratings, exchange, seniority) — use capital_markets_tranche. DO NOT ask it
+     for investor/allocation/demand/order attributes — use capital_markets_order."
+  - "ALWAYS set a 'product' filter — 'ECM' for equity, 'DCM' for debt. ECM sizes
+     are SHARE COUNTS; DCM sizes are notional MONEY. Never total ECM and DCM
+     together — scope one product or group by 'product'. COUNT metrics are
+     unit-free, so one request with 'product' in dimensions covers both."
+  - "DCM money caveat: this object's DEAL_SIZE is a single deal-level figure and
+     is NOT scoped to one currency (a deal may price in several — see
+     'currencies'). For currency-comparable DCM money totals, use the
+     capital_markets_tranche object's total_tranche_size scoped/grouped by 'currency'.
+     That advice was unexecutable before the view rewrite (tranche size was text
+     and a numeric SUM raised an invalid-number error); it works now."
+  - "PRICING DATES — a deal has NO single pricing date. first_priced is the MIN
+     and last_priced the MAX of its tranches' pricing timestamps, so a
+     ONE-TRANCHE deal, and any deal whose tranches all priced on the same day,
+     has first_priced = last_priced. PRESENT THAT AS ONE DATE — 'Priced
+     25-Nov-2024' — and as a RANGE only when they differ — 'Priced 25-27 Nov
+     2024'. Never print two identical date columns, and never label one of them
+     'the pricing date' when they differ. Filter last_priced by default; use
+     first_priced only when the user says 'first priced' or asks when pricing
+     STARTED."
+  - "Deal date filters: for a calendar year use two filters — gte Jan 1 and lt
+     Jan 1 of the next year. TRAILING windows ('last 12 months') need BOTH bounds
+     too: gte the start AND lt TOMORROW-MIDNIGHT — an upper bound of 'today'
+     silently drops deals priced today, and no upper bound at all lets
+     future-dated (2027/2028) rows in. Both failure modes shipped."
+  - "ONE-OBJECT ANSWERS — the pre-computed roll-ups are FILTERABLE, so these cost
+     no hop to another object: 'deals with more than one tranche' → tranche_count
+     gt 1; 'deals with 100+ orders' → order_count gte 100; 'deals with more than
+     50 investors' → investor_count gt 50; 'DCM deals that priced in USD' →
+     currencies like '%USD%'. Project the roll-up you filtered on so the number
+     is visible in the table. The currency one is DCM-SAFE ONLY — on ECM the
+     list is built from a currency IDENTIFIER column, so '%USD%' may match
+     nothing; see the currencies filter and use the tranche object's 'currency'
+     for ECM until that is checked."
+  - "NULL IS NOT ZERO on the roll-ups. order_count and investor_count reach this
+     view through a LEFT JOIN, so a deal with NO orders carries NULL, not 0 — a
+     'fewer than 10 orders' threshold silently drops those deals. Count them with
+     is_null and disclose the number. Same for ECM tranche_count."
+  - "COUNT HONESTY ACROSS OBJECTS — the roll-ups on this card are NOT the same
+     populations the other objects return, and they cannot be made to reconcile.
+     order_count on DCM counts every order on the deal, including 37,517 orders
+     across 586 deals that have no matching deal+tranche row and are therefore
+     absent from capital_markets_order (Q20); tranche_count is counted before the status
+     exclusion the tranche view applies (34,599 here against 33,010 tranche rows
+     on ECM — V1 vs V26). Quote ONE of them and say which; never present a deal
+     card total and a paged list from another object as agreeing."
+  - "STATUS — always match case-insensitively and UPPER() both sides, then MERGE
+     the case variants before reporting any breakdown or the buckets will not sum
+     to the stated total. The MEASURED case-variant pairs on DCM are 'priced' vs
+     'Priced' and 'announced' vs 'Announced' (Q17). On DCM this column is MAX()
+     across the deal's tranche statuses, which picks lowercase over uppercase by
+     codepoint, so a deal whose tranches are 'Settled' and 'announced' reports
+     'announced' — the deal card and the tranche object can legitimately
+     disagree; disclose it rather than trying to reconcile it. On ECM the view
+     excludes Confidential, Withdrawn and Terminated, so an ECM 'confidential
+     deals' ask returns zero BY CONSTRUCTION — say that, do not report 'none
+     found'. DCM excludes nothing and does carry 'confidential' rows (Q17)."
+  - "Multi-currency deals: metric currency_count with a HAVING threshold (group
+     by deal_name, metric currency_count, having currency_count gt 1). The
+     CURRENCIES list is deduped now (Q21 found 6,940 DCM deals rendering
+     'USD | USD | USD'; V2 confirms none remain), so this count is trustworthy."
+  - "VALUE TRAPS on this object (the stored literal is not the word the user
+     says): sector 'Oil & Gas' is a SEPARATE value from 'Energy'; use_of_proceeds
+     spells it 'M & A' WITH SPACES and splits refinancing across THREE literals —
+     'Refinance', 'Debt Repayment' and DCM's 'Repay Outstanding Borrowings';
+     offering_type holds ONLY 'IPO' and 'FO'; equity_type stores 'Exchangable
+     Notes' misspelled. Match these with 'like'/'in', never a single eq, and say
+     which values the answer covered."
+
+# ------------------------------- METRICS -----------------------------------
+# UNITS GUARD: every metric over DEAL_SIZE declares requires_filters: [product].
+# ECM deal_size is a SHARE COUNT and DCM deal_size is notional MONEY — an
+# unguarded MAX/MIN compares 40,000,000 shares against USD 40,000,000 and picks
+# a winner. This is how "1,000.0bn shares" reached a user in v1.
+metrics:
+  total_deal_size:
+    column: deal_size
+    aggregation: SUM
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Total deal size (DEAL_SIZE), summed over deals. One row per deal already,
+      so no dedup — this SUM double-counted ECM before the view rewrite (V1).
+      ECM=shares, DCM=notional money (not currency-scoped here).
+  largest_deal_size:
+    column: deal_size
+    aggregation: MAX
+    numeric: true
+    requires_filters: [product]
+    description: Largest single deal size. Use for "biggest deal".
+  smallest_deal_size:
+    column: deal_size
+    aggregation: MIN
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Smallest single deal size. ON DCM THIS RETURNS 0 for almost any scope: the
+      view coalesces a missing DCM deal size to 0, so size-less deals sink to the
+      bottom of every ranking. Add a 'deal_size gt 0' filter when you want the
+      smallest REAL size, and say you excluded the deals with no size recorded.
+      On ECM a missing size stays NULL and MIN ignores it, so no guard is needed.
+  average_deal_size:
+    column: deal_size
+    aggregation: AVG
+    numeric: true
+    requires_filters: [product]
+    description: >-
+      Average deal size across deals. On DCM the size-less deals contribute 0 and
+      drag the average down — pair with 'deal_size gt 0' if that matters, and say
+      which population the average covers.
+  deal_count:
+    column: deal_id
+    aggregation: COUNT_DISTINCT
+    description: Number of distinct deals. Use for "how many deals".
+  issuer_count:
+    column: gfcid
+    aggregation: COUNT_DISTINCT
+    description: Number of distinct issuers (by GFCID).
+  total_tranche_count:
+    column: tranche_count
+    aggregation: SUM
+    numeric: true
+    description: >-
+      Total tranches across the matched deals (sum of the per-deal pre-computed
+      TRANCHE_COUNT). For tranche-grain analysis use capital_markets_tranche — and note
+      the two do NOT reconcile: this roll-up is counted before the execution-status
+      exclusion the tranche view applies (34,599 here against 33,010 rows on the
+      ECM tranche object, V1 vs V26). Quote one figure, and say which object
+      produced it.
+  total_order_count:
+    column: order_count
+    aggregation: SUM
+    numeric: true
+    description: >-
+      Total orders across the matched deals (sum of the per-deal pre-computed
+      ORDER_COUNT). For order-grain analysis use capital_markets_order. COUNT HONESTY:
+      this is NOT the population capital_markets_order returns. The DCM roll-up counts
+      every order on the deal, including the 37,517 orders across 586 deals with
+      no matching deal+tranche row that the order object drops (Q20); the ECM
+      roll-up applies the order-status predicates but not the transaction join.
+      So this number can EXCEED the paged order list for the same deal. Never
+      present the two as reconciling.
+  average_investor_count:
+    column: investor_count
+    aggregation: AVG
+    numeric: true
+    description: >-
+      Average distinct investors per deal (per-deal pre-computed INVESTOR_COUNT).
+      Do NOT sum it across deals — investors overlap between deals, so a sum
+      double-counts and will not reconcile with capital_markets_order.investor_count.
+      Carries the same divergent-population caveat as total_order_count (Q20).
+  currency_count:
+    column: currencies
+    aggregation: MAX
+    list_count: true
+    description: >-
+      Number of distinct pricing currencies on a deal (counts the pipe-delimited
+      CURRENCIES roll-up). Use with a HAVING threshold for multi-currency deals
+      (group by deal, having currency_count gt 1). Trustworthy since the view
+      deduped the list — Q21 found 6,940 DCM deals rendering 'USD | USD | USD'
+      and inflating this count; V2 confirms none remain. If a CURRENCIES cell ends
+      in a truncation marker the count is a FLOOR, not a total (QA's longest deal
+      currency list was 22 characters — V13 — so that is a PROD-scale caveat).
+  row_count:
+    column: deal_id
+    aggregation: COUNT
+    description: >-
+      Total matched rows. At this grain that equals deal_count — measured, not
+      assumed (V1: ECM 18,399 rows = 18,399 deals; Q9b: DCM 21,068 = 21,068).
+      Prefer deal_count in any answer shown to a user.
+
+# ------------------------------ DIMENSIONS ---------------------------------
+# SETTLEMENT_TS (view column 15) is intentionally NOT declared — see the header.
+dimensions:
+  product: {column: product, description: "Product — 'ECM' or 'DCM'."}
+  deal_id: {column: deal_id, description: "Unique deal identifier. TEXT — quote it. Always project it in a listing: it is the drill-down handle. Two DCM id formats coexist ('I-230109-080151011684' and bare numerics like '1500009396'), so never assume an id is numeric."}
+  deal_name: {column: deal_name, description: "Deal name (display; filter by deal_id/deal_name). A trailing number in a deal name is part of the NAME, never an id."}
+  deal_size: {column: deal_size, description: "Deal size figure (ECM shares / DCM money). Not currency-scoped on DCM. A missing size reads as 0 on DCM and as NULL on ECM — the two branches handle it differently."}
+  issuer_name: {column: issuer_name, description: "Issuer/company name (display). Populated on both products — ECM issuer names come from the transaction source and V14 measured the issuer columns (name/gfcid/ticker/sector) populated on 42,203–42,872 of 44,829 transaction rows, which overturns the earlier Q28 reading that ECM had no issuers."}
+  issuer_id: {column: gfcid, description: "Issuer GFCID (issuer-side key). TEXT — quote it."}
+  ticker: {column: ticker, description: "Issuer ticker symbol. A ticker is a direct filter, never an entity to resolve."}
+  sector: {column: sector, description: "Issuer industry sector. Closed list of 28 stored labels (enumerated on the sector filter) — 'Oil & Gas' is a SEPARATE value from 'Energy', and 'Information Technology' is separate from 'Technology'."}
+  use_of_proceeds: {column: use_of_proceeds, description: "Purpose of raised funds. Stored literals include 'M & A' (with spaces); refinancing is split across 'Refinance', 'Debt Repayment' and DCM's 'Repay Outstanding Borrowings'. The DCM vocabulary is only three literals — see the filter."}
+  equity_type: {column: equity_type, description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…). 'common stock'/'common shares' asks belong HERE, not on tranche product_type. NULL on DCM."}
+  offering_type: {column: offering_type, description: "ECM. Offering type — only 'IPO' and 'FO' (follow-on) are stored. 'Rights' is a tranche product_type, 'Convertible' is an equity_type, 'Block' is not stored at all. NULL on DCM."}
+  deal_status: {column: deal_status, description: "Deal lifecycle status. CASE VARIANTS ARE REAL — 'priced'/'Priced' and 'announced'/'Announced' are distinct stored values on DCM (Q17), so match case-insensitively and merge the variants before reporting a breakdown or the buckets will not sum. On DCM this is MAX() across the deal's tranche statuses and can disagree with the tranche object."}
+  execution_status: {column: execution_status, description: "DEAD COLUMN — carries no information and has no filter. The view fills it from a subquery already restricted to one status type, so every ECM row reads the same literal and every DCM row is NULL. Any 'execution status' ask is a deal_status ask. Kept only because an exposed column is never removed (diagnostics scope rule 2, which also withdrew the request for a real execution status). Do not project it."}
+  deal_region: {column: deal_region, description: "ECM. Deal-level region (NAM/EMEA/APAC); NULL on DCM. On the TRANCHE object the same business name is populated on both products — this ECM-only rule is specific to the deal object."}
+  settlement_currency: {column: settlement_currency, description: "Settlement currency — the currency a TRANCHE settles in (same concept as capital_markets_tranche.settlement_currency), distinct from the pricing currencies in 'currencies'. At DEAL grain it is a MAX() collapse, so a deal whose tranches settle in two currencies shows ONE of them, not both — go to the tranche object when the settlement currency has to be right per tranche. Population UNVERIFIED (see the filter)."}
+  tranche_count: {column: tranche_count, description: "Pre-computed tranche count for the deal. Filterable — 'deals with more than one tranche' is answered here with no hop. Can be NULL on ECM when no tranche rows joined."}
+  order_count: {column: order_count, description: "Pre-computed order count for the deal. Filterable. NULL (not 0) when the deal has no orders. Counts a wider population than capital_markets_order — see total_order_count."}
+  investor_count: {column: investor_count, description: "Pre-computed distinct-investor count for the deal. Filterable. NULL (not 0) when the deal has no orders. Never sum it across deals — investors overlap."}
+  currencies: {column: currencies, description: "Pipe-delimited, DEDUPED and sorted list of the deal's pricing currencies. Display as ONE cell — never split a pipe list across table columns (that made DEAL_ID display an ISIN in production). A trailing truncation marker means the list overflowed and is partial — pass it through verbatim and say so."}
+  first_priced: {column: first_priced, description: "Earliest tranche pricing timestamp on the deal (MIN). Equals last_priced on a single-tranche deal — present one date, not two."}
+  last_priced: {column: last_priced, description: "Latest tranche pricing timestamp on the deal (MAX) and the default deal date field. Equals first_priced on a single-tranche deal."}
+
+# -------------------------------- FILTERS ----------------------------------
+filters:
+  product:
+    column: product
+    operators: [eq, in]
+    suggestable: true
+    values: ["ECM", "DCM"]
+    description: "Product scope — 'ECM' or 'DCM'. Set on every query."
+  deal_id:
+    column: deal_id
+    operators: [eq, ne, in, not_in]
+    description: >-
+      Filter by resolved deal id. Ids are TEXT — quote them, and never strip
+      leading zeros. DCM ids come in two formats ('I-230109-080151011684' and
+      bare numerics like '1500009396'), so an unquoted value forces a numeric
+      conversion and errors on the first lettered id. 0 rows for an explicitly
+      labelled id means NO DATA for that id; never substitute a lookalike.
+  issuer_id:
+    column: gfcid
+    operators: [eq, ne, in, not_in]
+    description: "Issuer-side filter (GFCID, text — quote it). 'deals issued by <company>'."
+  deal_name:
+    column: deal_name
+    operators: [like, eq, in]
+    suggestable: true
+    entity_name: true
+    entity_id_column: deal_id
+    case_insensitive: true
+    description: "Filter by deal name — op 'like' with '%NAME%' (case-insensitive). No id lookup needed first."
+  issuer_name:
+    column: issuer_name
+    operators: [like, eq, in]
+    suggestable: true
+    entity_name: true
+    entity_id_column: gfcid
+    case_insensitive: true
+    description: "Filter by issuer/company name — op 'like' with '%NAME%'. No id lookup needed."
+  deal_size:
+    column: deal_size
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    description: >-
+      Deal-size threshold. Pair with product — ECM is a SHARE COUNT, DCM is
+      notional money and is NOT currency-scoped on this object. NULL HANDLING IS
+      ASYMMETRIC BY PRODUCT because the two branches differ: on DCM a missing
+      size is coalesced to 0, so "no size recorded" is 'eq 0' and is_null never
+      matches; on ECM it is left NULL, so "no size recorded" is 'is_null' and 0
+      does not occur. A 'gt 0' guard is what makes a DCM minimum or average
+      meaningful.
+  sector:
+    column: sector
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Issuer sector — a CLOSED list of 28 stored labels, so a colloquial word is
+      not a value. The full set is: Aero/Defense, Agriculture, Autos, Banks,
+      Chemical, Consumer Goods, Energy, Financial Services, Government,
+      Healthcare, Homebuilding, Industrials, Information Technology, Insurance,
+      Media, MLPS, Natural resources, Oil & Gas, Paper and Packaging,
+      Pharmaceuticals, Pipelines, Real Estate, Retail, Services, Technology,
+      Telecommunications, Transportation, Utilities.
+      TRAPS: 'Oil & Gas' is NOT filed under 'Energy', and 'Information
+      Technology' is NOT 'Technology' — an "energy deals" ask should use 'in'
+      with ['Energy','Oil & Gas'] and the answer must state which labels were
+      included. Common words map as: defence/defense/aerospace → 'Aero/Defense';
+      pharma → Pharmaceuticals; banking → Banks; financials → 'Financial
+      Services'; telecom/telco → Telecommunications; auto/automotive → Autos;
+      IT → 'Information Technology'; REIT → 'Real Estate'. An unrecognised
+      sector word should be answered by naming the valid labels, not by running
+      doomed SQL. PRODUCT APPLICABILITY: the view wires sector on BOTH products
+      (V1's dictionary called it ECM-only, which the rewritten view contradicts)
+      and the DCM population is UNMEASURED — run it, and if a DCM sector scope
+      comes back empty, say the field is unpopulated there rather than reporting
+      "no deals".
+  use_of_proceeds:
+    column: use_of_proceeds
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Use of proceeds. THE TWO PRODUCTS HAVE DIFFERENT VOCABULARIES.
+      ECM stores: Acquisitions, Capital Expenses, Capital Restructure, Debt
+      Repayment, Future Acquisitions, General Corporate Purposes, Growth Capital,
+      Investments, Legal Redemptions, 'M & A', No Proceeds to Issuer, Project
+      Finance, Recapitalization, Refinance, Research and Development, Share
+      Repurchase, Shareholder Dividends, Working Capital Requirement, 'N/A'.
+      DCM stores only THREE: General Corporate Purposes, Repay Outstanding
+      Borrowings, Other — so a DCM "M&A deals" ask is structurally empty and
+      should be answered that way.
+      SHORTHAND MAP (one filter each — filters are ANDed, so never try to OR two
+      patterns): m&a / merger / acquisition → 'in' with ['M & A','Acquisitions',
+      'Future Acquisitions']; capex → like '%CAPITAL
+      EXPENSE%'; refi / refinancing / repay debt / repay borrowings → 'in' with
+      ['Refinance','Debt Repayment','Repay Outstanding Borrowings'], or — ONLY
+      once product='DCM' is already set — the single pattern like '%REPAY%'
+      (unscoped it also matches the ECM literal 'Debt Repayment' while missing
+      'Refinance', so it is not a DCM selector); buyback → like
+      '%SHARE REPURCHASE%'; GCP → like '%GENERAL
+      CORPORATE%'; R&D → like '%RESEARCH%'; dividend → like '%DIVIDEND%';
+      working capital → like '%WORKING CAPITAL%'; recap → like '%RECAPITAL%'.
+      TRAPS: 'M & A' HAS SPACES, so like '%M&A%' matches NOTHING. A two-value
+      refinancing filter MISSES every DCM refinancing deal — 'Debt Repayment' is
+      an ECM literal and DCM spells it 'Repay Outstanding Borrowings'. 'N/A' and
+      'No Proceeds to Issuer' mean PURPOSE NOT STATED — exclude them from a
+      purpose breakdown and say so. A use-of-proceeds word NEVER implies a
+      product: both products raise for all purposes, and auto-adding
+      product='DCM' from "repay borrowing" was a production bug.
+  deal_status:
+    column: deal_status
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Deal lifecycle status. ALWAYS compare case-insensitively (UPPER both sides)
+      and MERGE the case variants before reporting a breakdown, or the buckets
+      will not sum to the stated total.
+      DCM stored literals — all 16 measured (Q17): Settled, priced, Priced,
+      announced, Announced, allocated, freeToTrade, subject, draft, cancelled,
+      deleted, archived, postponed, confidential, 'Final Settled', and NULL.
+      Note the SPACE in 'Final Settled', the camelCase in 'freeToTrade' (render
+      it "Free to Trade"), and that a NULL status exists — is_null is available
+      to count it.
+      The MEASURED case-variant pairs are 'priced' vs 'Priced' and 'announced' vs
+      'Announced'. The older claim that the pair is 'Open' vs 'OPEN' comes from
+      V1's combined single view and is NOT among the 16 measured DCM literals —
+      treat it as an unverified ECM-side observation, never as the example to
+      match on.
+      ECM literals were NOT measured in the diagnostics, and on ECM this column
+      is the transaction's EXECUTION-status VALUE (the view reads STATUS_VALUE
+      from the rows already restricted to STATUS_TYPE = 'Execution_Status'), so
+      the execution-stage vocabulary IS this vocabulary — there is no separate
+      ECM execution status to ask for. Indicative, not closed, and identical on
+      capital_markets_tranche because it is the same source column: Priced, Settled,
+      Live, Executed, Draft, Announced, Allocated, Subject, Archived,
+      FreeToTrade, Postponed, Cancelled, Deleted, OPEN, CLOSED (15).
+      'Mandated' and 'Private' are NOT offered: V1 files them under DCM, and
+      Q17's complete DCM measurement contains neither, so they are attested on
+      neither product.
+      ECM NEVER RETURNS Confidential, Withdrawn or Terminated: the view excludes
+      them on every ECM branch, so such an ask is structurally zero — say that,
+      do not report "none found". DCM excludes nothing and does carry
+      'confidential' rows.
+      TWO MORE THINGS THIS COLUMN HIDES: on DCM it is MAX() across the deal's
+      tranche statuses, which picks lowercase over uppercase by codepoint, so the
+      deal card can disagree with capital_markets_tranche for the same deal (Q17/Q18); on
+      ECM 115 transaction keys carry two different status values and the view
+      picks one (V11). Both are choices, not merges — disclose rather than
+      reconcile.
+  offering_type:
+    column: offering_type
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM. Offering type. ONLY TWO literals are stored — 'IPO' and 'FO'
+      (follow-on, also said as "secondary"). 'Rights Issue' is a tranche
+      product_type, 'Convertible' is an equity_type, and 'Block' is not stored
+      anywhere; filtering any of them here returns zero. DCM has NO offering type
+      (the column is NULL on every DCM row), so scope ECM before using it.
+  equity_type:
+    column: equity_type
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM. Equity instrument CLASS — this is where class words land: 'common
+      stock', 'common shares', 'convertible', 'preferred', 'warrants'. The known
+      set is: Common Stock, Convertible Preferred, Convertible Bonds, Equity
+      Units, Warrants, 'Exchangable Notes' (sic — stored MISSPELLED, match
+      '%EXCHANG%'), American Depository, Global Depository. Env lists vary, so
+      treat that as a superset rather than a closed enum.
+      Match the CLASS WORD with like ('%COMMON%', '%CONVERT%', '%PREFERRED%'),
+      never equality on the user's phrasing — the stored label varies. NEVER OR
+      this with the tranche object's product_type: they are different axes, and
+      hedged ORs were traced to contradictory config rows. Abbreviations
+      (ADR/ADS/GDR/GDS, '144A', 'Class A', 'Rights') belong to product_type on
+      capital_markets_tranche. On zero rows, widen to product_type labels TRANSPARENTLY
+      and say you widened. NULL on DCM.
+  deal_region:
+    column: deal_region
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM. Deal-level region — the stored set is NAM, EMEA and APAC (there is no
+      'AMER'). NULL on DCM, so a DCM-scoped region filter on this object returns
+      nothing; the tranche object carries a region on both products. A NOT-region
+      predicate also drops NULL-region rows — use is_null to count them and say
+      how many were excluded. The region word attaches to a NOUN: "<region>
+      DEALS" is this filter; tranches, orders and bare region mentions are the
+      tranche object's tranche_region. CAVEAT: the view pre-aggregates with
+      MAX(DEAL_REGION) and V11 found 261 transaction keys whose duplicate rows
+      hold DIFFERENT regions — on those deals one region is chosen, not merged.
+      The NAM/EMEA/APAC set is V1-confirmed and was not re-measured in the
+      diagnostics.
+  settlement_currency:
+    column: settlement_currency
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    case_insensitive: true
+    description: >-
+      Settlement currency — the currency a TRANCHE settles in, surfaced at deal
+      grain as a MAX() collapse across the deal's tranches (ECM: across its
+      transactions). It is the SAME concept as
+      capital_markets_tranche.settlement_currency; that object is where the per-tranche
+      value lives. Distinct from the
+      pricing currencies in 'currencies'. POPULATION UNVERIFIED: the diagnostics
+      carried this column over as a placeholder with no data flowing (scope rule
+      2) and no query has measured it since. Treat a zero-row result as expected
+      rather than as "no such deals", and say the field may not be captured.
+      Do NOT conflate it with a settlement DATE — that column is 100% NULL and is
+      refused (see the settlement_date unsupported intent).
+  ticker:
+    column: ticker
+    operators: [eq, ne, in, not_in, like]
+    case_insensitive: true
+    description: "Filter by issuer ticker. A ticker is a direct filter — never resolve it as an entity."
+  tranche_count:
+    column: tranche_count
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    description: >-
+      Pre-computed tranche count per deal. 'Deals with more than one tranche' →
+      gt 1, answered on THIS object with no hop to capital_markets_tranche. Project the
+      dimension too so the number is visible. On ECM the roll-up arrives through
+      a LEFT JOIN, so a deal with no tranche rows carries NULL, not 0, and a
+      'fewer than N' threshold silently drops it — count those with is_null. This
+      count is taken before the tranche view's status exclusion, so it can exceed
+      the number of rows capital_markets_tranche returns for the same deal (34,599 vs
+      33,010 on ECM — V1 vs V26).
+  order_count:
+    column: order_count
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    description: >-
+      Pre-computed order count per deal. 'Deals with 100+ orders' → gte 100,
+      answered here with no hop to capital_markets_order. NULL (not 0) when the deal has
+      no orders at all — a 'fewer than N' threshold drops those deals silently,
+      so count them with is_null and disclose. This roll-up counts a WIDER
+      population than the order object returns (Q20) — see total_order_count
+      before quoting it alongside an order listing.
+  investor_count:
+    column: investor_count
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    description: >-
+      Pre-computed distinct-investor count per deal. 'Deals with more than 50
+      investors' → gt 50, answered here with no hop. NULL (not 0) when the deal
+      has no orders. Never sum it across deals — investors overlap, so a sum
+      double-counts; use average_investor_count or report per deal.
+  currencies:
+    column: currencies
+    operators: [like, is_null, is_not_null]
+    case_insensitive: true
+    description: >-
+      The deal's deduped pipe-delimited currency list. 'Deals that priced in USD'
+      → like '%USD%', answered on THIS object with no hop to the tranche object.
+      CONTAINS-MATCH ONLY — the cell is a pipe list, so eq would match single-
+      currency deals only and is not offered. is_null means no tranche currency
+      was recorded. UNVERIFIED CAVEAT: on ECM this list is built from a currency
+      IDENTIFIER column while capital_markets_tranche renders currency NAMES, so the two
+      objects may print different tokens for the same currency on ECM; until that
+      is checked, prefer the tranche object's 'currency' filter for ECM currency
+      questions and use this one for DCM and for multi-currency counting.
+  first_priced:
+    column: first_priced
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      Earliest tranche pricing timestamp (MIN). Use for 'priced from' bounds and
+      for "when did pricing start". Equals last_priced on a single-tranche deal.
+  last_priced:
+    column: last_priced
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      Latest tranche pricing timestamp (MAX) — the default deal date field and
+      the right one for "priced in <period>". Trailing windows need BOTH bounds
+      (gte start, lt tomorrow-midnight).
+
+unsupported_intents:
+  announced_date:
+    patterns: ["announced", "announcement date", "launch date", "when was it launched", "created date"]
+    reason: >-
+      Only pricing dates exist on the deal — first_priced and last_priced. There
+      is no announcement, launch or creation date, and the settlement timestamp
+      the older wording promised is a 100%-NULL placeholder (Q32).
+    user_message: >-
+      Announcement/launch dates aren't tracked — the deal carries pricing dates
+      only. I can show first/last priced instead, or filter on an "announced"
+      STATUS if that's what you meant. Would either work?
+  settlement_date:
+    patterns: ["settled on", "settlement date", "when did it settle", "settlement window", "settlement timestamp"]
+    reason: >-
+      The settlement timestamp is a placeholder — Q32 measured 22,347 ECM deals
+      with ZERO populated values, and the DCM branch is a NULL cast. It is
+      deliberately not modelled as a dimension or a filter. Do not substitute a
+      pricing date for it.
+    user_message: >-
+      Settlement dates aren't populated in this data — the field exists but
+      carries no values. I can show pricing dates, or the "Settled" deal status,
+      or the settlement currency. Which would help?
+  issuer_country_domicile:
+    patterns: ["country of domicile", "domicile is", "domicile country", "incorporated in", "country of incorporation", "issuer country", "headquartered in"]
+    reason: >-
+      Issuer geography is not tracked on any of the four objects. This is
+      distinct from INVESTOR geography, which IS available on ECM through
+      capital_markets_order.
+    user_message: >-
+      I'm unable to filter by the issuer's country of domicile or incorporation —
+      that isn't tracked. I can use the deal's region (North America / EMEA /
+      APAC) as a geographic proxy, or if you meant where the INVESTORS are based
+      (e.g. US-based investors), that IS supported — just say which.
+  greenshoe_overallotment:
+    patterns: ["greenshoe", "green shoe", "over-allotment", "overallotment", "over allotment"]
+    reason: No greenshoe or over-allotment column is exposed on the deal view.
+    user_message: >-
+      Greenshoe/over-allotment data is not available in this dataset. I can show
+      deal size or allocation detail for the deal instead.
+  deal_fees:
+    patterns: ["fees", "gross spread", "underwriting fee", "economics"]
+    reason: No fee or economics columns are exposed on the deal view.
+    user_message: >-
+      Fee economics aren't available. I can show deal sizes, tranche sizes and
+      order demand instead.
+
+usage_notes:
+  - Always set a product filter ('ECM' for equity, 'DCM' for debt). Count metrics
+    are unit-free, so one request with 'product' in dimensions covers both.
+  - "REJECTED WITHOUT A 'product' FILTER (the server raises
+    missing_required_filter — it is not satisfied by putting product in
+    dimensions): total_deal_size, largest_deal_size, smallest_deal_size,
+    average_deal_size. Every OTHER metric here — deal_count, issuer_count,
+    total_tranche_count, total_order_count, average_investor_count,
+    currency_count, row_count — is unit-free and needs no product filter."
+  - "EVERY SCALAR ON THIS OBJECT IS A MAX() COLLAPSE, because a deal row is
+    built by aggregating something finer: on ECM across the deal's TRANSACTIONS
+    (one deal can span several — Q10), on DCM across the deal's TRANCHES. The
+    affected fields are deal_name, deal_size, issuer_name, issuer_id, ticker,
+    sector, use_of_proceeds, equity_type, offering_type, deal_status,
+    deal_region and settlement_currency. Where the underlying rows AGREE (the
+    normal case) this is invisible. Where they DISAGREE one value wins and
+    nothing is merged — measured examples: 261 transactions with conflicting
+    deal_region and 115 with conflicting deal_status (V11). So a deal-object
+    scalar is the deal's best single value, not a guarantee that its tranches
+    all carry it; when the per-tranche truth matters, ask capital_markets_tranche.
+    tranche_count, order_count, investor_count, currencies, first_priced and
+    last_priced are NOT in this class — they are genuine roll-ups."
+  - One row per deal — deal listings need no deduplication and no aggregation of
+    tranche fields. If you need a tranche/order attribute, switch objects.
+  - DCM deal-size money is not currency-scoped on this object; for currency
+    totals use capital_markets_tranche.total_tranche_size grouped by currency.
+  - A deal has no single pricing date. When first_priced equals last_priced
+    (single-tranche deals, and any deal priced on one day) show ONE date; show a
+    range only when they differ.
+  - Trailing windows need BOTH bounds (gte start AND lt tomorrow-midnight) so
+    future-dated pricings are excluded and today's pricings are not.
+  - The pre-computed roll-ups (tranche_count, order_count, investor_count,
+    currencies) are filterable — use them instead of hopping to another object,
+    and remember NULL on a roll-up means "none recorded", not zero.
+  - The roll-ups do not reconcile with the tranche and order objects. Quote one
+    figure and name what it counted; never show both as if they agreed.
+  - Status comparisons are case-insensitive on both sides, and case variants are
+    merged before any breakdown is reported.
+  - EVERY ranking or paged request ends its 'order' with a UNIQUE key (deal_id
+    here). Without one, tied rows reshuffle between turns and paged listings
+    repeat or drop rows.
+  - EVERY field named in 'order' must ALSO be the metric or appear in
+    'dimensions' — the server sorts on the projected alias and rejects anything
+    else ("Order field 'x' must be the metric or a selected dimension"). So
+    sorting by last_priced means projecting last_priced. Projecting the sort key
+    is the right answer anyway — a date-ordered list with no date column in it
+    is unreadable.
+  - Ids (deal_id, gfcid) are TEXT — quote them and keep leading zeros. DCM deal
+    ids can contain letters, so an unquoted value raises a conversion error.
+
+examples:
+  - question: List energy-sector deals priced in 2025 (ECM)
+    request:
+      source: capital_markets_deal
+      metric: deal_count
+      # last_priced is BOTH filtered and projected: the server rejects an
+      # 'order' field that is neither the metric nor a selected dimension.
+      dimensions: [deal_id, deal_name, issuer_name, sector, deal_status, last_priced]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        # 'Oil & Gas' is a separate stored value from 'Energy' — include both and
+        # say so in the answer, or the count is short.
+        - {field: sector, op: in, value: ["Energy", "Oil & Gas"]}
+        - {field: last_priced, op: gte, value: "2025-01-01"}
+        - {field: last_priced, op: lt, value: "2026-01-01"}
+      order: [{field: last_priced, direction: desc}, {field: deal_id, direction: asc}]
+  - question: Top 10 DCM deals by size in 2024
+    request:
+      source: capital_markets_deal
+      metric: total_deal_size
+      dimensions: [deal_id, deal_name, issuer_name]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        # DCM deal_size is notional money and is NOT currency-scoped here — say
+        # so, or move the ranking to capital_markets_tranche scoped to one currency.
+        - {field: last_priced, op: gte, value: "2024-01-01"}
+        - {field: last_priced, op: lt, value: "2025-01-01"}
+      order: [{field: total_deal_size, direction: desc}, {field: deal_id, direction: asc}]
+      limit: 10
+  - question: Multi-currency DCM deals in 2025
+    request:
+      source: capital_markets_deal
+      metric: currency_count
+      dimensions: [deal_id, deal_name, currencies]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        - {field: last_priced, op: gte, value: "2025-01-01"}
+        - {field: last_priced, op: lt, value: "2026-01-01"}
+      having: [{metric: currency_count, op: gt, value: 1}]
+      order: [{field: currency_count, direction: desc}, {field: deal_id, direction: asc}]
+  - question: Convertible deals priced in the last 12 months (ECM)
+    request:
+      source: capital_markets_deal
+      metric: deal_count
+      # last_priced is projected because the request sorts on it.
+      dimensions: [deal_id, deal_name, issuer_name, equity_type, deal_size, last_priced]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        # Class word matched with 'like' — the stored label varies.
+        - {field: equity_type, op: like, value: "%CONVERT%"}
+        - {field: last_priced, op: gte, value: "REPLACE_WITH_WINDOW_START"}
+        - {field: last_priced, op: lt, value: "REPLACE_WITH_TOMORROW_MIDNIGHT"}
+      order: [{field: last_priced, direction: desc}, {field: deal_id, direction: asc}]
+  - question: Refinancing deals in 2025, both products in one request
+    request:
+      source: capital_markets_deal
+      metric: deal_count
+      # deal_count is unit-free, so ONE request covers both products — put
+      # 'product' in dimensions instead of firing two requests.
+      dimensions: [product, deal_id, deal_name, use_of_proceeds, last_priced]
+      filters:
+        # THREE literals, not two: 'Debt Repayment' is the ECM spelling and
+        # 'Repay Outstanding Borrowings' is the DCM one. Two values miss every
+        # DCM refinancing deal, and nothing warns you — the query returns rows.
+        - {field: use_of_proceeds, op: in, value: ["Refinance", "Debt Repayment", "Repay Outstanding Borrowings"]}
+        - {field: last_priced, op: gte, value: "2025-01-01"}
+        - {field: last_priced, op: lt, value: "2026-01-01"}
+      order: [{field: last_priced, direction: desc}, {field: deal_id, direction: asc}]
+  - question: DCM deals with more than one tranche that priced in USD, 2025
+    request:
+      source: capital_markets_deal
+      metric: deal_count
+      # Both predicates are answered by pre-computed roll-ups on THIS object —
+      # no hop to capital_markets_tranche. Project them so the numbers are visible.
+      dimensions: [deal_id, deal_name, tranche_count, currencies]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        - {field: tranche_count, op: gt, value: 1}
+        # Pipe list — contains-match, never eq.
+        - {field: currencies, op: like, value: "%USD%"}
+        - {field: last_priced, op: gte, value: "2025-01-01"}
+        - {field: last_priced, op: lt, value: "2026-01-01"}
+      order: [{field: tranche_count, direction: desc}, {field: deal_id, direction: asc}]
+  - question: How many DCM deals in each status in 2025
+    request:
+      source: capital_markets_deal
+      metric: deal_count
+      dimensions: [deal_status]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        - {field: last_priced, op: gte, value: "2025-01-01"}
+        - {field: last_priced, op: lt, value: "2026-01-01"}
+      order: [{field: deal_count, direction: desc}, {field: deal_status, direction: asc}]
+      # 'priced' and 'Priced' come back as SEPARATE buckets, as do 'announced'
+      # and 'Announced'. Merge each pair into one row in the answer and say you
+      # merged them, or the buckets will not sum to the deal count you quote.

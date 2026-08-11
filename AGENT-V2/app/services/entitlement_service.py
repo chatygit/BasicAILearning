@@ -544,13 +544,13 @@ def perform_initial_entitlement_check(
         if not matched:
             logger.info(
                 "ECM/DCM entitlement gate DENIED for soeid=%s: "
-                "reason=no_ecm_dcm_entitlement (raw entitled list: %s).",
+                "reason=no_capital_markets_entitlement (raw entitled list: %s).",
                 soeid,
                 entitled_products,
             )
             return {
                 "ok": False,
-                "reason": "no_ecm_dcm_entitlement",
+                "reason": "no_capital_markets_entitlement",
                 "retryable": False,
                 "user_message": (
                     "You don't have entitlements to access ECM or DCM data. "

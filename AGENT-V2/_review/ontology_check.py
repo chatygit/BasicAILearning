@@ -18,11 +18,11 @@ from pathlib import Path
 # tree one level up (adk/... and app/...), so paths mirror the real repo.
 ROOT = Path(__file__).parent.parent
 ONT = ROOT / "app" / "bqs" / "ontology"
-DEAL = ONT / "ecm_dcm_deal.yaml"
-TRANCHE = ONT / "ecm_dcm_tranche.yaml"
-ORDER = ONT / "ecm_dcm_order.yaml"
-ENTITY = ONT / "ecm_dcm_entity.yaml"
-SKILL = ROOT / "adk" / "skills" / "text2sql-ecm-dcm" / "SKILL.md"
+DEAL = ONT / "capital_markets_deal.yaml"
+TRANCHE = ONT / "capital_markets_tranche.yaml"
+ORDER = ONT / "capital_markets_order.yaml"
+ENTITY = ONT / "capital_markets_entity.yaml"
+SKILL = ROOT / "adk" / "skills" / "text2sql-capital-markets" / "SKILL.md"
 TOOLS = ROOT / "adk" / "config" / "tools.yaml"
 SKILLS = ROOT / "adk" / "config" / "skills.yaml"
 AGENTS = ROOT / "adk" / "config" / "agents.yaml"
@@ -90,7 +90,7 @@ def blocks(path, section):
 # 0. YAML SHAPE — a prose list item containing ": " parses as a MAPPING, not a
 #    string, so `usage_notes: list[str]` fails validation and the WHOLE source
 #    silently fails to load. This is valid YAML, so a plain parse check misses
-#    it entirely; only the type matters. Cost us the ecm_dcm_entity source.
+#    it entirely; only the type matters. Cost us the capital_markets_entity source.
 # ---------------------------------------------------------------------------
 PROSE_LISTS = ("usage_notes", "how_to_use")
 for path in OBJECTS:
@@ -508,7 +508,7 @@ check(bool(defined_tools),
 for src_path, label in ((AGENTS, "agents.yaml"), (SKILLS, "skills.yaml")):
     body = "\n".join(l for l in text(src_path).splitlines()
                      if not l.lstrip().startswith("#"))
-    for ref in set(re.findall(r"^\s*-\s*(?:name:\s*)?(ecm_dcm_oracle_mcp|text_to_sql_mcp)\s*$",
+    for ref in set(re.findall(r"^\s*-\s*(?:name:\s*)?(capital_markets_oracle_mcp|text_to_sql_mcp)\s*$",
                               body, re.M)):
         check(ref in defined_tools,
               f"[survival] {label} references toolset '{ref}' but tools.yaml "
@@ -516,7 +516,7 @@ for src_path, label in ((AGENTS, "agents.yaml"), (SKILLS, "skills.yaml")):
               f"fail with Tool 'discover_business_terms' not found")
     check("text_to_sql_mcp" not in body,
           f"[survival] {label} still names the old toolset 'text_to_sql_mcp'; "
-          f"the registry entry is 'ecm_dcm_oracle_mcp'")
+          f"the registry entry is 'capital_markets_oracle_mcp'")
 check("mcp_server_url" in live,
       "[survival] tools.yaml lost mcp_server_url — the local runtime has no "
       "server to connect to")
@@ -589,7 +589,7 @@ for skill_name in re.findall(r"^\s+- ([a-z0-9-]+)\s*$",
           f"[agent] agents.yaml references skill '{skill_name}', which "
           f"skills.yaml does not define")
 # The toolset name must be IDENTICAL everywhere. The platform registry owns
-# `ecm_dcm_oracle_mcp`; our config referred to `text_to_sql_mcp`, so the agent
+# `capital_markets_oracle_mcp`; our config referred to `text_to_sql_mcp`, so the agent
 # pointed at a toolset that does not exist there. Derive it, don't hardcode.
 agent_tools = re.findall(r"^    tools:\n((?:      - \S+\n)+)", text(AGENTS), re.M)
 tool_names = re.findall(r"- (\S+)", agent_tools[0]) if agent_tools else []
@@ -922,7 +922,7 @@ if SERVICE.exists():
     src = text(SERVICE)
     check("DEPLOYMENT LANDMINE" in src,
           "[python] domain_query_service.py: lost the BQS_ENABLED_SOURCES "
-          "landmine note — an allow-list still naming 'ecm_dcm' silently "
+          "landmine note — an allow-list still naming 'capital_markets' silently "
           "disables all four renamed objects")
     check("authoritative statement of the suggestion" in src,
           "[python] domain_query_service.py: lost the note that suggestions "
@@ -935,10 +935,18 @@ check(has(SKILL, "generated_sql"),
       "[contract] SKILL.md no longer names `generated_sql` — that is the "
       "RESPONSE key (sql_audit is only formatter's parameter name), and the SQL "
       "is in the payload the agent receives")
-check(has(SKILL, "Truncation is not reported"),
-      "[contract] SKILL.md lost the truncation rule — there is no `truncated` "
-      "flag and no `limit` echo, so row_count == limit must be read as "
-      "'possibly more rows'")
+# STALE ASSERTION FIXED (2026-08-10). This used to require SKILL.md to say
+# "Truncation is not reported ... no flag, no limit echo". That predates paging:
+# formatter.format_result sets `truncated`/`next_offset`/`paging` whenever
+# `row_count >= limit` (including the 50-row default) or the response cap clipped
+# the rows — which is exactly what the formatter check below (`next_offset` and
+# `truncated` in src) requires. The two checks contradicted each other, and the
+# skill was teaching the agent to ignore a flag the server does send.
+check(has(SKILL, "Truncation IS flagged"),
+      "[contract] SKILL.md lost the truncation rule — the server DOES send "
+      "`truncated`/`next_offset`/`paging` when row_count reaches the limit in "
+      "force or the response cap clipped; the agent must read that as 'more "
+      "rows exist' and page with offset, not re-run with a bigger limit")
 
 SUGGESTIONS = ROOT / "app" / "bqs" / "suggestions.py"
 check(SUGGESTIONS.exists(), "[python] app/bqs/suggestions.py is missing")
@@ -1272,7 +1280,7 @@ if MCPSERVER.exists():
 # Both config layers must tell the agent to page with `offset`. Left saying
 # only "ask for the next 50", the model's instinct on a truncated result is to
 # re-run with a bigger limit — the exact move that exhausts the context.
-for _cfg in [ROOT / "adk" / "skills" / "text2sql-ecm-dcm" / "SKILL.md",
+for _cfg in [ROOT / "adk" / "skills" / "text2sql-capital-markets" / "SKILL.md",
              ROOT / "adk" / "config" / "agents.yaml"]:
     if not _cfg.exists():
         continue
@@ -1289,8 +1297,8 @@ for _cfg in [ROOT / "adk" / "skills" / "text2sql-ecm-dcm" / "SKILL.md",
 # Cross-object field misses, and the hop count.
 #
 # Observed 2026-08-10 on "top 10 investors by allocation in Energy deals":
-# allocation/investor_category are on ecm_dcm_order, `sector` only on
-# ecm_dcm_deal, and one BQS request cannot span grains. The agent was told only
+# allocation/investor_category are on capital_markets_order, `sector` only on
+# capital_markets_deal, and one BQS request cannot span grains. The agent was told only
 # "Unknown filter field 'sector' ... Known filters: [...]", which reads as a
 # spelling problem — so it discovered all three objects, then made TEN
 # run_bqs_query calls, then hit 429 RESOURCE_EXHAUSTED.

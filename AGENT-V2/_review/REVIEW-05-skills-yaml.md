@@ -5,7 +5,7 @@ Two skills declared, both bound to `text_to_sql_mcp`:
 | Skill | Purpose |
 |---|---|
 | `ontology-text-to-sql` | generic: discover first, never invent field names, never write raw SQL, submit structured BQS, surface governance rejections |
-| `text2sql-ecm-dcm` | domain: maps business language onto the four grain-aligned objects, routing by grain, units, B&D, house answer style |
+| `text2sql-capital-markets` | domain: maps business language onto the four grain-aligned objects, routing by grain, units, B&D, house answer style |
 
 Small file, but it raises the biggest open question of the migration.
 
@@ -64,7 +64,7 @@ reliability issue as well as a cost one (we measured an empty-candidate `STOP` a
 
 1. `discover_business_terms()` with no argument returns a **thin index**: four source
    names, their `grain`, and one routing line each (~200 tokens total).
-2. `discover_business_terms(source="ecm_dcm_order")` returns the **full catalog** for
+2. `discover_business_terms(source="capital_markets_order")` returns the **full catalog** for
    that object only.
 
 §2 routing already gives the agent everything it needs to pick from the thin index, so
@@ -90,7 +90,7 @@ turn. Worth checking what `text_to_sql_mcp` actually exposes — if it is exactl
 - `metadata: {}` is unused on both. It could carry the ontology version (`"2"`) so a
   trace shows which generation of the catalog answered — useful when v1 and v2 run side
   by side during migration.
-- Naming is inconsistent between `ontology-text-to-sql` and `text2sql-ecm-dcm`
+- Naming is inconsistent between `ontology-text-to-sql` and `text2sql-capital-markets`
   (`text-to-sql` vs `text2sql`). Cosmetic, but the skill `name` must match its
   directory, so it is worth being deliberate.
 

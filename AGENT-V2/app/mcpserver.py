@@ -72,7 +72,7 @@ def tool_echo_user_context() -> dict:
 # ---------------------------------------------------------------------------
 # Two-tool contract backed by app/bqs/* + app/services/domain_query_service.py:
 #   * discover_business_terms - lists the governed business metrics, dimensions
-#     and filters for the ecm_dcm source (ALWAYS call first).
+#     and filters for the capital_markets source (ALWAYS call first).
 #   * run_bqs_query - the agent submits a structured Business Query
 #     Specification (business names only); the server deterministically builds
 #     read-only SQL and executes it via Starburst/Trino. The agent never writes
@@ -453,8 +453,8 @@ if _BQS_AVAILABLE:
                 catalog for ALL enabled sources — read each source's 'how_to_use'
                 and 'usage_notes' to pick the right one for the question.
                 PREFER passing one name: the four ECM/DCM objects are
-                'ecm_dcm_deal', 'ecm_dcm_tranche', 'ecm_dcm_order' and
-                'ecm_dcm_entity', and fetching all four costs four times the
+                'capital_markets_deal', 'capital_markets_tranche', 'capital_markets_order' and
+                'capital_markets_entity', and fetching all four costs four times the
                 context needed to answer one question.
         """
         # Entitlement is checked HERE, on the first tool the agent calls, not

@@ -11,7 +11,7 @@ Only the fields actually referenced by the copied engine are provided:
     the server may serve. Defaults to the ECM/DCM (Trino) use case only.
   * ``bqs_oracle_cyberark_fid`` / ``bqs_db_user`` / ``bqs_db_password`` - only
     used by the Oracle/Postgres execution path (unused for the Trino-backed
-    ecm_dcm source, but kept so imports resolve).
+    capital_markets source, but kept so imports resolve).
 """
 
 from __future__ import annotations
@@ -22,14 +22,25 @@ import os
 class _Settings:
     @property
     def bqs_enabled_sources(self) -> str:
-        # Restrict the server to the ECM/DCM capital-markets sources — the four
-        # grain-aligned objects (deal / tranche / order / entity). The legacy
-        # single-view v1 source ("ecm_dcm") has been removed. Override with a
-        # comma-separated BQS_ENABLED_SOURCES env var (or "*" to serve every
-        # ontology found on disk).
-        return os.getenv(
+        # Restrict the server to the four grain-aligned Capital Markets objects
+        # (deal / tranche / order / entity). The legacy single-view v1 source
+        # ("ecm_dcm") has been removed. Override with a comma-separated
+        # BQS_ENABLED_SOURCES env var (or "*" to serve every ontology on disk).
+        #
+        # MIGRATION SHIM (2026-08-10, ecm_dcm -> capital_markets rename): a
+        # deployment chart that still lists the OLD source ids would otherwise
+        # match nothing — every object loads and is then silently ignored, and
+        # discovery returns an empty set with no error. Rewrite legacy ids here
+        # so the rename does not have to be deploy-ordered. Remove once every
+        # environment has been updated.
+        raw = os.getenv(
             "BQS_ENABLED_SOURCES",
-            "ecm_dcm_deal,ecm_dcm_tranche,ecm_dcm_order,ecm_dcm_entity",
+            "capital_markets_deal,capital_markets_tranche,"
+            "capital_markets_order,capital_markets_entity",
+        )
+        return ",".join(
+            part.strip().replace("ecm_dcm_", "capital_markets_")
+            for part in raw.split(",")
         )
 
     @property
@@ -54,6 +65,6 @@ settings = _Settings()
 # NOTE: the in-code default already lists the four post-split source ids, so a
 # fresh deployment serves all four objects correctly. The remaining risk is an
 # ENVIRONMENT override left over from v1: if BQS_ENABLED_SOURCES is set to
-# "ecm_dcm" anywhere in the deployment config, it wins over this default and
+# "capital_markets" anywhere in the deployment config, it wins over this default and
 # every object is loaded and then silently ignored. Verify the var is unset (or
 # lists the four names) rather than assuming the default applies.

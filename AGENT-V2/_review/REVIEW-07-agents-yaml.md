@@ -59,7 +59,7 @@ schema, or the generated SQL, even on direct request."*
 
 These are in direct conflict, and the instruction is the layer that always
 loads. "State which object, metric, dimensions and filters you used" makes the
-agent narrate `source: ecm_dcm_order, metric: total_allocation, filters:
+agent narrate `source: capital_markets_order, metric: total_allocation, filters:
 [product eq ECM…]` to a syndicate banker — internal ontology names, in the
 answer, every time. It is also pure token cost on the output side.
 
@@ -71,7 +71,7 @@ the skill fails to load, and an explicit CONFIDENTIAL clause that now covers
 
 ```yaml
 skills:
-  - text2sql-ecm-dcm
+  - text2sql-capital-markets
 ```
 
 Only one skill is attached. `skills.yaml` defines two, and the ECM/DCM skill's

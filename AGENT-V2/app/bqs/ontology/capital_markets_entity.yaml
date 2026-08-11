@@ -1,0 +1,401 @@
+# ---------------------------------------------------------------------------
+# Governed ontology — ECM/DCM ENTITY object (name → id resolution).
+#
+# Columns VERIFIED against the deployed view (diagnostics Q1: 8 columns, exactly
+# the eight modelled below). The view body itself was NOT rewritten in the
+# 2026-08-10 batch; the two views it reads (VW_ORDER_DETAIL, VW_DEAL_SUMMARY)
+# were, so some Q28 counts below are pre-rewrite and are marked as such.
+#
+# ===========================================================================
+# THE DEFAULT IS TO **NOT** CALL THIS OBJECT.
+# ===========================================================================
+# Measured on QA: a single INVESTOR name lookup took **9.4 seconds** (Q29) and
+# one GROUP BY with no name filter, which touches all three branches, took
+# **79.4 seconds** (Q28). VW_ENTITY_SEARCH is a PLAIN view — NOT materialised,
+# NOT indexed — a UNION ALL in which the INVESTOR branch is stacked on top of
+# VW_ORDER_DETAIL (OB_ORDER alone is 5.86M rows in QA), so an INVESTOR
+# resolution re-derives the order view including its ROW_NUMBER dedupe (Round 4
+# open risk #1); the ISSUER and DEAL branches re-derive VW_DEAL_SUMMARY instead.
+# Only the INVESTOR cost is measured — assume seconds, not milliseconds, on any
+# branch. And `query_timeout_seconds` below is INERT on this dialect — the
+# executor sets a statement timeout for Postgres and Oracle only, never for
+# Trino — so nothing on our side stops a slow query here. The only real guard is
+# the required name filter declared on every metric.
+#
+# A named investor / issuer / deal used as a FILTER is answered INLINE on the
+# data object in ONE request with no resolution hop at all, and when the name
+# matched more than one entity the server attaches a disambiguation list to that
+# SAME response. PROJECT the name AND its paired id: the free (rows-based) block
+# carries NAMES ONLY — every 'id' in it is null, and the ids come from your own
+# projected rows. That is the normal path. See how_to_use item 1.
+#
+# GRAIN — one row per ENTITY_TYPE + PRODUCT + ENTITY_NAME + ENTITY_ID.
+# The old declaration ([entity_type, product, entity_id]) was FALSE: the
+# INVESTOR and ISSUER branches also GROUP BY the name, so ONE id yields MANY
+# rows. Measured (Q28, QA):
+#
+#   branch           rows      distinct ids   note
+#   INVESTOR / DCM   124,668   9,871          12.6 name variants per id
+#   INVESTOR / ECM     2,982   1,157
+#   ISSUER   / DCM     6,907     671
+#   ISSUER   / ECM   not in the Q28 result. V14 OVERTURNS that reading: ECM
+#                    issuer names ARE populated at source (~42,872 of 44,829
+#                    rows) and the diagnostics conclude the missing Q28 row was
+#                    an OCR drop, not a defect. Treat ECM issuer resolution as
+#                    WORKING; do not code a workaround. Re-verify on PROD.
+#   DEAL     / DCM    21,068   21,068         1:1
+#   DEAL     / ECM    22,347   18,399         pre-rewrite. The DEAL branch reads
+#                    VW_DEAL_SUMMARY, which V1 collapsed to 18,399 = 18,399, so
+#                    this branch is now 1:1 too.
+#
+# QA numbers are an EXISTENCE PROOF, never a PROD size.
+#
+# Physical source: DGSTREAM.VW_ENTITY_SEARCH (UNION ALL of INVESTOR / ISSUER /
+# DEAL rows) via the Starburst catalog dataglobe_oraas.dgstream. This is a
+# SQL-backed replacement for the old zen-API entity path FOR ECM/DCM.
+#
+# ENTITLEMENT: the request-level product filter injected by the entitlement gate
+# scopes resolution to the caller's entitled product(s) too, so name lookups
+# never leak cross-product entity names/counts to single-product users.
+#
+# RANKING CONTRACT: ONE request — contains-match the name, add
+# entity_id is_not_null, order by entity_activity_count desc, last_active desc,
+# entity_id asc, limit 10. Choose the exact match FROM THE RETURNED ROWS rather
+# than spending a second round-trip probing for it. Rows are NAME VARIANTS, not
+# entities: dedupe by entity_id before you report a count.
+# context_value_1/2 carry the disambiguation enrichment (investor:
+# category/region — BOTH NULL on DCM; issuer: sector/ticker; deal:
+# status/issuer).
+# ---------------------------------------------------------------------------
+source: capital_markets_entity
+version: "3"
+dialect: trino
+
+connection:
+  catalog: dataglobe_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: dataglobe_oraas.dgstream.vw_entity_search
+
+# The NAME is part of the key — see the header table. entity_id alone is NOT
+# unique (12.6 rows per investor id on DCM), and both entity_id and entity_name
+# are NULLABLE, so no subset of these four is a guaranteed key.
+grain: [entity_type, product, entity_name, entity_id]
+
+max_limit: 50
+# INERT on this dialect: the executor applies a statement timeout for Postgres
+# and a call timeout for Oracle only. Whatever bound exists comes from the
+# Starburst connector or the Trino cluster, not from us. Kept as the declared
+# intent — do not read it as protection. The measured 79.4s aggregate (Q28) was
+# not killed by anything.
+query_timeout_seconds: 30
+
+how_to_use:
+  - "DEFAULT: DO NOT CALL THIS OBJECT. A named investor / issuer / deal used as
+     a FILTER is answered inline on the data object in ONE request. Lookup —
+     investor name → capital_markets_order, filter 'investor_name' like '%NAME%',
+     project investor_name AND investor_id. Issuer name → capital_markets_deal (or
+     capital_markets_tranche), filter 'issuer_name' like '%NAME%', project issuer_name
+     AND issuer_id. Deal name → capital_markets_deal / capital_markets_tranche / capital_markets_order,
+     filter 'deal_name' like '%NAME%', project deal_name AND deal_id. The order
+     object carries NO issuer_name — an issuer-scoped order ask filters
+     deal_name, or gets deal ids from the deal object first."
+  - "THE INLINE PATH RESOLVES FOR FREE. When one of those name filters matches
+     MORE THAN ONE distinct entity, the server attaches a disambiguation block
+     to the SAME response — the resolution, already done, at zero extra cost.
+     It is free ONLY IF you PROJECT that name field as a dimension. Read the
+     free block correctly: it is built from the rows you already hold, so it
+     lists NAMES ONLY and every 'id' in it comes back null — PROJECT THE PAIRED
+     ID COLUMN TOO (investor_id / issuer_id / deal_id) and take the ids off your
+     own rows. If you filter a name WITHOUT projecting it the block does carry
+     (name, id) pairs, but the server pays a second serial database round-trip
+     to build it. Projecting both is ONE query and gives you both."
+  - "COMING HERE COSTS SECONDS, MEASURED. Q29 — one INVESTOR name lookup
+     (BlackRock, 10 candidates): 9.4s. Q28 — one GROUP BY with no name filter,
+     touching all three branches: 79.4s. The object is a plain, unindexed UNION
+     view over the order and deal views, so there is no cheap query on it. Every
+     metric therefore REQUIRES filters on entity_type and entity_name; a request
+     without them is rejected with 'missing_required_filter' rather than allowed
+     to run for 79 seconds."
+  - "USE THIS OBJECT ONLY WHEN one of these is true: (a) you need exactly ONE
+     entity and the inline disambiguation list did not settle it; (b) the inline
+     name filter returned ZERO rows and you are recovering a spelling; (c) the
+     user explicitly asks which entities exist by name ('is there an investor
+     called X?'). Resolution runs BEFORE the user's real question, so every hop
+     spent here is paid twice."
+  - "Set 'entity_type' to scope the search: 'INVESTOR', 'ISSUER' or 'DEAL'. Set
+     'product' ('ECM'/'DCM') — entitlement also scopes this automatically. There
+     are only those THREE branches: there is no BANK, BROKER, SECTOR or CURRENCY
+     entity."
+  - "ONE REQUEST, NOT TWO. Use op 'like' with '%NAME%' (case-insensitive) and
+     limit 10. Do NOT probe with op 'eq' first: users type partial names
+     ('blackrock' never equals 'BLACKROCK FINANCIAL MGMT (NY)'), so the exact
+     tier misses by construction and the fallback becomes the common path. If an
+     exact match exists it comes back INSIDE these rows — recognise it there and
+     use it. Reserve op 'eq' for a full legal name the user clearly typed in
+     full, or an id."
+  - "Rank with order: entity_activity_count desc, last_active desc, entity_id asc
+     (the unique tiebreaker keeps candidate lists stable between turns).
+     'last_active' can be NULL — an ECM investor whose orders never matched a
+     priced tranche has no pricing timestamp — and on the DEAL branch
+     'entity_activity_count' can be NULL too (an ECM deal with no tranche rows),
+     so BOTH ranking keys are nullable there. Whether NULLs sort first or last on
+     a DESC order through Starburst→Oracle is UNVERIFIED. Never let last_active
+     decide the winner on its own; entity_activity_count is the signal and
+     entity_id asc is what makes the list deterministic."
+  - "ADD '{field: entity_id, op: is_not_null}' whenever the goal is to PICK ONE.
+     ENTITY_ID is NULL on real candidates — 2 of the 10 BlackRock rows in Q29
+     ('BlackRock London', 'BlackRock (Singapore) Limited') — and a candidate
+     with no id is not a drill-down handle. When the goal is instead to SHOW the
+     family, keep them and say so ('2 further candidates carry no id and cannot
+     be drilled into'); silently dropping them breaks count honesty."
+  - "ROWS ARE NAME VARIANTS, NOT ENTITIES. One id appears under several
+     spellings — Q29 measured id '00918' under both 'BlackRock' and 'BLACKROCK',
+     and id '41364' under both 'Blackrock Financial Mgmt - NY' and 'Blackrock
+     Financial Management, Inc.'. A limit of 10 can therefore return three
+     entities in ten rows. DEDUPE BY entity_id before reporting: say 'I found 3
+     matches' when three DISTINCT IDS came back, never 'here are the top 10'.
+     Compare the two metrics to see it: row_count counts rows, entity_count
+     counts distinct ids, and on this object they DIVERGE by design."
+  - "The activity ranking is SPLIT by the same defect: one investor's deal count
+     is divided across its name variants, so a large investor spelled
+     inconsistently can rank BELOW a smaller one spelled consistently. Sum the
+     variants of a single id before you compare two entities."
+  - "PROJECT 'entity_id' on every candidate — it is the only actionable handle,
+     but it is NOT guaranteed present (see the NULL-id item above), so never
+     promise one for every row you show. Show
+     'entity_activity_count', 'last_active' and context_value_1/2 so the user can
+     pick a meaningful option. LABEL the context columns for the entity_type you
+     queried — they are generic columns with type-dependent meaning (investor:
+     Category / Region; issuer: Sector / Ticker; deal: Status / Issuer). Never
+     render them as 'Context 1' / 'Context 2'."
+  - "CONTEXT IS EMPTY FOR DCM INVESTORS. The INVESTOR branch reads
+     investor_category and investor_region from the order view, and BOTH are
+     NULL casts on the DCM side of that view — so context_value_1/2 are ALWAYS
+     blank for INVESTOR + DCM, which is the largest branch (124,668 rows). Do
+     not render two empty labelled columns there: disambiguate DCM investors on
+     entity_activity_count and last_active, and say the enrichment is not
+     captured for DCM. ISSUER (sector/ticker) and DEAL (status/issuer) read real
+     source columns on both products, but only the ECM side is MEASURED (V14:
+     ticker and sector on ~42.2k-42.9k of 44,829 ECM transaction rows); DCM
+     population is UNMEASURED, so read a blank there as 'not captured', never as
+     'no sector'."
+  - "MISSPELLINGS: matching is contains-based, so a genuine typo ('blakrock')
+     cannot match anything. Do not loop trying variants — a zero-row name search
+     makes the server run an UNSCOPED DISTINCT probe over this whole unindexed
+     view to build 'did_you_mean', so each wrong guess is the SLOW path on the
+     slowest object we have. Retry ONCE on the longest distinctive fragment you
+     are confident of, then ask the user to confirm the spelling and offer the
+     closest active names you did find."
+  - "Bare umbrella names (blackrock, fidelity) mean the whole family — return the
+     family grouped, with ids, and offer the per-entity breakdown; do not force a
+     single pick."
+  - "Bank/broker names are NOT entities — they are syndicate members, and they
+     resolve on capital_markets_tranche. Rating-agency names (Moody's, S&P, Fitch) are
+     never entities either; they live inside the tranche object's issuer_ratings
+     string. Security identifiers (CUSIP/ISIN/FIGI/RIC) are never entities."
+  - "A name or row the user picked from a table already shown is ALREADY
+     RESOLVED — never resolve it again later in the session. An explicitly
+     labelled id needs no resolution at all: filter it directly on the data
+     object. This object cannot be queried by id alone anyway — every metric
+     requires an entity_name filter."
+
+# MATCH_RANK: DECLINED, do not re-request. v1 achieved exact-then-contains
+# tiering in a SINGLE query using is_exact/is_sub flags with MAX(...) OVER ()
+# gates. A MATCH_RANK column here (0 = exact, 1 = prefix, 2 = contains) would
+# have restored that as a plain 'order' field, but diagnostics scope rule 1
+# ("do not add columns") withdrew it explicitly. So gated exact-then-contains
+# tiering is NOT AVAILABLE on this object and will not become available: the
+# one-request contains contract above is the whole design, and the exact match
+# is recognised in the returned rows instead. MATERIALISING this view, or indexing
+# the upper-cased name, is a SEPARATE and still-OPEN request to the data team —
+# no scope rule withdrew it (rule 1 is about adding COLUMNS) and
+# BQS-4VIEW-SPEC section 4 asks for it explicitly, as does Round 4 open risk #1
+# (confirm an index on OB_ORDER.ORDER_ID). Until one of those lands the 9.4s /
+# 79.4s costs stand, which is why the guidance above routes around the object
+# rather than tuning it.
+
+# ------------------------------- METRICS -----------------------------------
+# Every metric requires entity_type + entity_name. That is the only thing
+# standing between a resolution and the 79.4-second unfiltered scan Q28
+# measured, because query_timeout_seconds is inert on this dialect.
+metrics:
+  entity_count:
+    column: entity_id
+    aggregation: COUNT_DISTINCT
+    requires_filters: [entity_type, entity_name]
+    description: >-
+      REQUIRES filters on entity_type AND entity_name (see how_to_use).
+      Number of distinct matched ENTITY IDS — the honest "found N candidates"
+      number. NOT the row count: one id spans many name variants (12.6 per
+      investor id on DCM). COUNT DISTINCT also skips NULL ids, so candidates
+      with no id are counted here as zero even though they are displayed —
+      state them separately.
+  total_activity:
+    column: entity_activity_count
+    aggregation: SUM
+    numeric: true
+    requires_filters: [entity_type, entity_name]
+    description: >-
+      REQUIRES filters on entity_type AND entity_name.
+      Total activity (deal count for investor/issuer, tranche count for deal)
+      across matched ROWS. Because rows are name variants, a deal that appears
+      under two spellings of one investor is counted twice — this is an upper
+      bound on a family's activity, never "how many deals the family did".
+  max_activity:
+    column: entity_activity_count
+    aggregation: MAX
+    numeric: true
+    requires_filters: [entity_type, entity_name]
+    description: >-
+      REQUIRES filters on entity_type AND entity_name.
+      Highest single-row activity count. This is the metric the resolution
+      contract uses: with entity_name/entity_id projected the group is already
+      one row, so MAX simply carries the value through.
+  row_count:
+    column: entity_type
+    aggregation: COUNT
+    requires_filters: [entity_type, entity_name]
+    description: >-
+      REQUIRES filters on entity_type AND entity_name.
+      Rows returned — one per NAME VARIANT, not per entity. row_count >
+      entity_count is the NORMAL case on this object (Q28: 124,668 rows for
+      9,871 investor ids on DCM); the gap is the number of spelling variants
+      plus any rows whose id is NULL. Counted on entity_type because it is the
+      one column that is never NULL — counting entity_id would silently omit
+      the id-less candidates.
+
+# ------------------------------ DIMENSIONS ---------------------------------
+dimensions:
+  entity_type: {column: entity_type, description: "INVESTOR / ISSUER / DEAL — the only three branches of the view."}
+  product: {column: product, description: "Product — 'ECM' or 'DCM'."}
+  entity_name: {column: entity_name, description: "Entity name (display). NOT unique across ids, AND one id carries many spellings of the same name. Always project it: projecting the name you filter on is what makes the server's disambiguation list free instead of a second round-trip."}
+  entity_id: {column: entity_id, description: "Resolved entity id (GP id / GFCID / DEAL_ID). TEXT — quote it, leading zeros matter. ALWAYS project it. It is NULLABLE (2 of 10 Q29 BlackRock candidates) — a NULL id is not a drill-down handle."}
+  entity_activity_count: {column: entity_activity_count, description: "Activity: deal count (investor/issuer) or tranche count (deal). The ranking signal — dormant/test entities sink. Split across the name variants of one id, so compare families only after summing per id. NULLABLE on the DEAL branch: it is the deal view's pre-computed tranche_count, which is NULL on an ECM deal that joined no tranche rows — so the primary sort key itself can be NULL there, not just last_active. Never NULL on the INVESTOR/ISSUER branches (a COUNT DISTINCT)."}
+  last_active: {column: last_active, description: "Most recent pricing/activity timestamp. NULLABLE — ECM investor rows draw it from the order view's pricing date, which is NULL when an order never matched a priced tranche. NULL ordering on a DESC sort is UNVERIFIED here; keep entity_id asc as the final key."}
+  context_value_1: {column: context_value_1, description: "TYPE-DEPENDENT — investor: category · issuer: sector · deal: status. ALWAYS NULL for INVESTOR + DCM (the order view casts investor category to NULL on DCM). Label the column for the type you queried."}
+  context_value_2: {column: context_value_2, description: "TYPE-DEPENDENT — investor: region · issuer: ticker · deal: issuer name. ALWAYS NULL for INVESTOR + DCM (the order view casts investor region to NULL on DCM). Label the column for the type you queried."}
+
+# -------------------------------- FILTERS ----------------------------------
+filters:
+  entity_type:
+    column: entity_type
+    operators: [eq, in]
+    suggestable: true
+    values: ["INVESTOR", "ISSUER", "DEAL"]
+    description: "Scope the search to INVESTOR, ISSUER or DEAL. MANDATORY — every metric requires it."
+  product:
+    column: product
+    operators: [eq, in]
+    suggestable: true
+    values: ["ECM", "DCM"]
+    description: "Product scope — 'ECM' or 'DCM' (also enforced by entitlement). Always set it."
+  entity_name:
+    column: entity_name
+    operators: [like, eq, in]
+    suggestable: true
+    entity_name: true
+    entity_id_column: entity_id
+    case_insensitive: true
+    description: >-
+      Search name. MANDATORY — every metric requires it, because an unfiltered
+      query on this view measured 79.4 seconds. Default to op 'like' with
+      '%NAME%' (case-insensitive) — ONE request. Use op 'eq' only for a full
+      legal name the user typed in full. Any like/eq/in predicate here already
+      excludes the NULL-name rows the view carries (Q28: 343 on DEAL/ECM plus 1
+      on DEAL/DCM; the DEAL branch is the only one with no IS NOT NULL guard —
+      the INVESTOR and ISSUER branches do filter), so no extra filter is needed
+      — but those unnamed deals are unreachable BY NAME anywhere; reach them by
+      deal id on the deal object.
+  entity_id:
+    column: entity_id
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    description: >-
+      Add 'is_not_null' alongside the name search to drop candidates that carry
+      no id and cannot be drilled into (2 of 10 in Q29); use 'is_null' to count
+      them so you can disclose the number instead of hiding it. Filtering by a
+      known id (TEXT — quote it) is NOT a supported entry point on its own: an
+      id needs no resolution, and every metric requires an entity_name filter,
+      so an id-only request is rejected by design — filter that id directly on
+      the deal/tranche/order object instead.
+
+usage_notes:
+  - "DEFAULT: do not come here. Filter the name inline on capital_markets_order
+     (investor_name), capital_markets_deal / capital_markets_tranche (issuer_name) or any of the
+     three (deal_name), PROJECT that name field, and take the server's free
+     (name, id) disambiguation list. Resolve only when you need exactly one
+     entity, the user must pick, or you are recovering a spelling."
+  - "ONE request: contains-match, ranked, limit 10. Do not probe with eq first."
+  - "Always return entity_id; order by entity_activity_count desc, last_active
+     desc, entity_id asc; add entity_id is_not_null when the goal is to pick one."
+  - "Rows are name variants — report the count of DISTINCT IDS (entity_count),
+     not the number of rows, and dedupe the displayed list by id."
+  - "Label context_value_1/2 according to the entity_type queried, and skip them
+     for DCM investors, where both are structurally NULL."
+  - "Entitlement scopes resolution to the caller's entitled product(s)."
+  - "Report the FOUND count honestly — 'I found 3 matches' when three distinct
+     entities came back, never 'here are the top 10' — and name the candidates
+     that carry no id rather than dropping them silently."
+
+examples:
+  - question: "DO NOT RESOLVE FIRST — the normal path for a named investor (BlackRock's ECM allocations). One request on the order object; the server returns the (name, id) disambiguation list free because investor_name is projected."
+    request:
+      source: capital_markets_order
+      metric: total_allocation
+      dimensions: [investor_name, investor_id]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: investor_name, op: like, value: "%BLACKROCK%"}
+      order: [{field: total_allocation, direction: desc}, {field: investor_id, direction: asc}]
+      limit: 10
+  - question: Resolve the investor "blackrock" (ECM) — only when you must pick exactly one
+    request:
+      source: capital_markets_entity
+      metric: max_activity
+      dimensions: [entity_name, entity_id, entity_activity_count, last_active, context_value_1, context_value_2]
+      filters:
+        - {field: entity_type, op: eq, value: INVESTOR}
+        - {field: product, op: eq, value: ECM}
+        - {field: entity_name, op: like, value: "%BLACKROCK%"}
+        - {field: entity_id, op: is_not_null}
+      order: [{field: entity_activity_count, direction: desc}, {field: last_active, direction: desc}, {field: entity_id, direction: asc}]
+      limit: 10
+  - question: Resolve the issuer "apple" (ECM)
+    request:
+      source: capital_markets_entity
+      metric: max_activity
+      dimensions: [entity_name, entity_id, entity_activity_count, last_active, context_value_1, context_value_2]
+      filters:
+        - {field: entity_type, op: eq, value: ISSUER}
+        - {field: product, op: eq, value: ECM}
+        - {field: entity_name, op: like, value: "%APPLE%"}
+        - {field: entity_id, op: is_not_null}
+      order: [{field: entity_activity_count, direction: desc}, {field: last_active, direction: desc}, {field: entity_id, direction: asc}]
+      limit: 10
+  # COSTS TWO QUERIES, by design of the count: with no dimensions, entity_name is
+  # filtered but NOT projected, so the server runs the (scoped, bounded) second
+  # DISTINCT probe to build the disambiguation list — on the slowest object we
+  # have. Prefer deriving the found-count by deduping entity_id in the ranked
+  # resolution rows you already have; use this shape only when the count itself
+  # is the whole answer.
+  - question: How many DISTINCT investor entities match "state street" on DCM (the honest found-count — compare it with row_count to see how many are just spelling variants; NOTE this shape does not project entity_name, so it pays the second disambiguation probe)
+    request:
+      source: capital_markets_entity
+      metric: entity_count
+      dimensions: []
+      filters:
+        - {field: entity_type, op: eq, value: INVESTOR}
+        - {field: product, op: eq, value: DCM}
+        - {field: entity_name, op: like, value: "%STATE STREET%"}
+  - question: Two deals share a name — let the user pick one (DEAL branch is one row per deal)
+    request:
+      source: capital_markets_entity
+      metric: max_activity
+      dimensions: [entity_name, entity_id, entity_activity_count, last_active, context_value_1, context_value_2]
+      filters:
+        - {field: entity_type, op: eq, value: DEAL}
+        - {field: product, op: eq, value: DCM}
+        - {field: entity_name, op: like, value: "%PROJECT ATLAS%"}
+      order: [{field: entity_activity_count, direction: desc}, {field: last_active, direction: desc}, {field: entity_id, direction: asc}]
+      limit: 10

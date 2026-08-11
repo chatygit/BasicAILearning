@@ -19,17 +19,17 @@ skills:
       assumed: always discover the governed business terms first, never invent
       field names, never write raw SQL, submit structured BQS requests, and
       surface governance rejections clearly. For ECM/DCM questions load
-      `text2sql-ecm-dcm` instead — it is self-contained and already includes
+      `text2sql-capital-markets` instead — it is self-contained and already includes
       this contract.
     tools:
-      - name: ecm_dcm_oracle_mcp
+      - name: capital_markets_oracle_mcp
     tags:
       - "text-to-sql"
       - "ontology"
       - "mcp"
     metadata: {}
 
-  - name: "text2sql-ecm-dcm"
+  - name: "text2sql-capital-markets"
     display_name: "ECM/DCM Deal Analysis"
     description: >
       LOAD FIRST for any ECM/DCM data question — REQUIRED to answer correctly.
@@ -43,7 +43,7 @@ skills:
       (1x1, 'M & A', 'Oil & Gas', '10-YEAR', 'SEC Registered(Public)', US vs
       '%US%'), and the house answer style. Load it before calling run_bqs_query.
     tools:
-      - name: ecm_dcm_oracle_mcp
+      - name: capital_markets_oracle_mcp
     tags:
       - "text-to-sql"
       - "ontology"

@@ -177,6 +177,6 @@ def zen_entity_search(
     return [c for c in clients if str(c.get("gfcId", "")) in revenue_access_gfcids]
 
 # NOTE: this module serves ONLY the `revenue_returns_entities` source. The four
-# ECM/DCM objects never reach it — `ecm_dcm_entity` resolves through SQL against
+# ECM/DCM objects never reach it — `capital_markets_entity` resolves through SQL against
 # VW_ENTITY_SEARCH. So the latency here (two sequential calls, 60s timeout each)
 # is not on the ECM/DCM path, but the TLS issue above is in a server we own.
