@@ -1254,7 +1254,11 @@ if PLANNER.exists():
 
 if FORMATTER.exists():
     src = text(FORMATTER)
-    check("max_response_rows" in src and "rows[:cap]" in src,
+    # The row cap may be applied inline (rows[:cap]) or inside the character
+    # budget helper (rows[:row_cap]); both are the same bound. What must never
+    # disappear is that SOME slice of rows happens before the model sees them.
+    check("max_response_rows" in src
+          and ("rows[:cap]" in src or "rows[:row_cap]" in src),
           "[context] formatter.py: the response row cap is gone — this is the "
           "last place before an LLM context and the only hard bound on what one "
           "query can cost in tokens")
@@ -1265,6 +1269,23 @@ if FORMATTER.exists():
     check("returned_rows" in src,
           "[correctness] formatter.py: returned_rows is gone — row_count alone "
           "cannot distinguish what the query returned from what the model got")
+
+    # SECOND, INDEPENDENT BOUND (added 2026-08-11). The row cap does not bound
+    # the PAYLOAD, because row width is not bounded: the tranche object exposes
+    # nine VARCHAR2(32767) columns, so one legal row can carry ~250k characters
+    # and 100 of them are unbounded in practice. Reported from local runs before
+    # this existed: "when the SQL response is too large the LLM fails to parse".
+    # Whichever cap binds first must set the SAME truncated/next_offset/paging
+    # contract, so the agent pages identically either way.
+    check("max_response_chars" in src and "_rows_within_budget" in src,
+          "[context] formatter.py: the response CHARACTER cap is gone — the row "
+          "cap alone does not bound the payload because row width is unbounded "
+          "(nine VARCHAR2(32767) columns on the tranche object). Without it an "
+          "over-wide result is unparseable by the model instead of paged.")
+    check("_clip_cell" in src,
+          "[context] formatter.py: per-cell clipping is gone — a single "
+          "pathological cell can exceed the whole budget, and dropping the row "
+          "loses its ids. Clip the cell, keep the row.")
 
 if MCPSERVER.exists():
     src = text(MCPSERVER)
