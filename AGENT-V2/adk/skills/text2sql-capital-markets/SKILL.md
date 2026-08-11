@@ -25,8 +25,14 @@ job: (1) pick the OBJECT by grain, (2) translate the question into a governed
 > `metrics`, `dimensions`, `filters`+operators, `how_to_use`, `usage_notes`,
 > `examples`) is authoritative; this skill is the routing/vocabulary layer on
 > top. **If discovery does not list a field this skill names, it is not
-> available on that object** — switch object or say what you can answer, and
-> never retry the same name.
+> available on that object** — switch object, or map the user's word onto a
+> field that IS listed (§3 class-word map) and retry ONCE. Never retry the
+> same name. If nothing maps, say what you CAN answer **in business words**
+> — **never print the field/dimension list itself.** That list is internal:
+> a reply containing `deal_id`, `equity_type` or any other snake_case name
+> has leaked the schema, which §14 forbids. "I can look at convertible
+> deals by status, size, issuer or sector" is the shape; a bracketed array
+> of field names is never the shape.
 
 ## 0. The contract (one loop, fewest hops)
 1. **Pick the OBJECT from §2** — that costs no tool call.
@@ -337,6 +343,26 @@ wherever values are label variants. Traps are in §7c.
   Shares · Ord Shares · High Yield · Locals … Prefer `like` on the class word;
   `in` is allowed and is the only way to express an OR, but only with values
   copied exactly from the catalog list.
+
+> **THE CLASS-WORD MAP — most-missed routing, pin it.** `equity_type` and
+> `product_type` both hold convertible-ish values, they are DIFFERENT AXES, and
+> they live on DIFFERENT OBJECTS. Choosing wrong costs a rejected request.
+>
+> | The user says | Axis | Object |
+> |---|---|---|
+> | common stock · common shares · **convertible(s)** · **convertible bonds** · preferred · warrants · equity units · exchangeable notes · American/Global depositary (spelled out) | **`equity_type`** | **deal** |
+> | ADR · ADS · GDR · GDS (the ABBREVIATIONS) · 144A · Class A · Rights · `Conv. Bond` · `Conv. Pfd` · Mandatory Convertible · Closed End Fund | `product_type` | **tranche** |
+>
+> - **"convertible" / "convertible bonds" → `equity_type` like `%CONVERT%` on
+>   the DEAL object.** Never `product_type`, never `offering_type`.
+>   `Convertible Bonds` is a stored `equity_type` VALUE — the words look like a
+>   product type and are not one.
+> - **A NAMED column always wins over this map.** If the user literally says
+>   "product type Conv. Bond", use `product_type` and switch to tranche. Their
+>   column word is an instruction, not a hint.
+> - **NEVER `or` the two axes.** Pick one by the user's wording.
+> - Zero rows on a class filter → retry ONCE on the other axis (switching
+>   object if needed) and SAY you widened. Never silently `or` both up front.
 - `sector` (deal, tranche) — Aero/Defense · Agriculture · Autos · Banks ·
   Chemical · Consumer Goods · Energy · Financial Services · Government ·
   Healthcare · Homebuilding · Industrials · Information Technology · Insurance ·
@@ -493,6 +519,15 @@ status-sensitive answer spans both.
 - **`disambiguation`**: a name matched several entities — re-run with one exact.
 - **Validation error `message`**: fix ONLY the field it names — the fix is often
   "this field lives on a different object, switch `source`".
+- **Unknown/invalid FIELD (the server lists the valid ones)**: that list is a
+  FIX, not a dead end. Map the user's word onto it via the §3 class-word map
+  (class words → `equity_type` on deal; abbreviations → `product_type` on
+  tranche) and retry ONCE with the corrected field, switching `source` if the
+  field lives on another object. Only if nothing maps do you answer in business
+  words — and you still never show the list. Measured failure: "Convertible
+  Bonds" was sent as a product-type field on the DEAL object, rejected, and the
+  turn ended with the raw dimension array printed to the user. Both halves were
+  wrong — the ask was answerable as `equity_type` like '%CONVERT%'.
 - **Error `code`**: request-fixable (timeout → narrow, retry once) vs infra
   (connectivity/permission → do NOT retry; relay plainly).
 - **`entitlement_denied`/`product_not_entitled`**: relay the `message` as given and

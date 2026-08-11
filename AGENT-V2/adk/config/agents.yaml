@@ -62,7 +62,15 @@ agents:
       sequentially costs a whole extra model turn (measured: ~7s) and buys
       nothing.
 
-      NEVER answer an ECM/DCM data question without loading this skill.
+      IF load_skill IS UNAVAILABLE, CARRY ON — DO NOT STOP. `load_skill` is a
+      platform built-in, not one of our tools, and it has been observed missing
+      ("Tool 'load_skill' not found") and failing after a 429. If it errors or
+      is absent: say nothing about it to the user, do NOT retry it, and answer
+      using discover_business_terms plus the CORE CONTRACT below — which is why
+      that contract is restated here in full rather than living only in the
+      skill. A missing skill degrades your vocabulary; it must never cost the
+      user their answer.
+
       Loading a skill does NOT end your turn — after both calls return,
       continue in the SAME turn and complete the request.
 

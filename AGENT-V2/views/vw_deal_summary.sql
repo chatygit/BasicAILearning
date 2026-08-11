@@ -23,6 +23,14 @@
 --      (Q21: 6,940 DCM deals affected). -> deduped, matching the ECM branch.
 --      The DCM currency list is also lifted out of the issuer join so that
 --      OB_DEAL_ISSUER duplicates (Q12: 156) can no longer inflate it.
+--   5. ECM CURRENCIES listed TRANCHE_CURRENCY_ID — an INTERNAL ID, not a code.
+--      Live symptom: the answer carried "For ECM deals, the currencies are
+--      represented by internal identifiers", and "USD deals" could not match
+--      ECM at all (0 rows -> 3 wasted hops -> wrong answer via a placeholder
+--      column). CURRENCY_NAME already existed on ..._TRANCHE_DEMAND_CURRENCY,
+--      which vw_tranche_summary has always used for its CURRENCY column.
+--      -> ECM now lists CURRENCY_NAME, falling back to the id when unmapped,
+--         so ECM and DCM currencies are finally comparable.
 --
 -- DELIBERATELY UNCHANGED: row-exclusion policy. The ECM
 -- Confidential/Withdrawn/Terminated filter is preserved verbatim and no new
@@ -103,11 +111,21 @@ LEFT JOIN (
            LISTAGG(C.TRANCHE_CURRENCY_ID, ' | ' ON OVERFLOW TRUNCATE '...' WITH COUNT)
              WITHIN GROUP (ORDER BY C.TRANCHE_CURRENCY_ID) AS CURRENCIES
     FROM (
-        SELECT DISTINCT ET.DEAL_TRANSACTION_ID, TT.TRANCHE_CURRENCY_ID
+        SELECT DISTINCT ET.DEAL_TRANSACTION_ID,
+               NVL(TDC.CURRENCY_NAME, TT.TRANCHE_CURRENCY_ID) AS TRANCHE_CURRENCY_ID
         FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TT
         JOIN (SELECT DISTINCT ECM_TRANSACTION_ID, DEAL_TRANSACTION_ID
               FROM DGSTREAM.OPUS_ECM_TRANSACTION) ET
           ON ET.ECM_TRANSACTION_ID = TT.ECM_TRANSACTION_ID
+        LEFT JOIN (
+            SELECT ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID,
+                   MAX(CURRENCY_NAME) AS CURRENCY_NAME
+            FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY
+            GROUP BY ECM_TRANSACTION_ID, ECM_TRANSACTION_TRANCHE_ID, CURRENCY_ID
+        ) TDC
+          ON TDC.ECM_TRANSACTION_ID = TT.ECM_TRANSACTION_ID
+         AND TDC.ECM_TRANSACTION_TRANCHE_ID = TT.ECM_TRANSACTION_TRANCHE_ID
+         AND TDC.CURRENCY_ID = TT.TRANCHE_CURRENCY_ID
     ) C
     GROUP BY C.DEAL_TRANSACTION_ID
 ) TC
