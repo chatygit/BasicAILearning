@@ -16,10 +16,15 @@
 --         discarded. A genuinely unparseable value (the '1k') becomes NULL,
 --         never a fake 0 — a missing size must not read as a zero size.
 --         NULL source still maps to 0, preserving existing behaviour.
---   2. SECURITIES_MATURITY deployed as VARCHAR2(16000) (Q1) because the ECM
---      placeholder was CAST(NULL AS VARCHAR2) against a DCM DATE, so maturity
---      was an NLS-formatted string — unsortable, unfilterable as a date.
---      -> ECM placeholder is now CAST(NULL AS DATE); the column stays a DATE.
+--   2. SECURITIES_MATURITY — REVERTED 2026-08-11, still VARCHAR2.
+--      I changed the ECM placeholder to CAST(NULL AS DATE) on the assumption
+--      that OB_DEAL_TRANCHE.MATURITY_DATE is a real DATE. Deploy failed with
+--      ORA-01790 (expression must have same datatype), which proves it is NOT
+--      — it is character data despite the column name. Reverted to
+--      CAST(NULL AS VARCHAR2(4000)) so the branches match and the view
+--      compiles. Maturity therefore remains an unsortable string; fixing it
+--      needs the base column's real type and, if it is text, its date FORMAT
+--      before any TO_DATE can be written. Do not retry this without both.
 --   3. TENORS was TENOR_VALUE || '-' || TENOR_PERIOD. Oracle concatenation
 --      treats NULL as empty, so Q26's 4,808 fully-null rows rendered as a lone
 --      '-'.  -> both-null now yields NULL.
@@ -96,7 +101,7 @@ SELECT
     CAST(NULL AS VARCHAR2(4000)) AS DELIVERY_TYPE,
     CAST(NULL AS VARCHAR2(4000)) AS ISSUER_RATINGS,
     CAST(NULL AS VARCHAR2(4000)) AS TENORS,
-    CAST(NULL AS DATE) AS SECURITIES_MATURITY,
+    CAST(NULL AS VARCHAR2(4000)) AS SECURITIES_MATURITY,
     NVL(DST.DEAL_SHARING_TYPE, 'SHARED') AS DEAL_SHARING_TYPE
 FROM (
     SELECT W.*
