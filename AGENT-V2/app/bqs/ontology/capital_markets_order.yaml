@@ -150,9 +150,9 @@ how_to_use:
      status is 'confidential'. 'Number of orders' therefore means a materially
      different population per product — disclose it whenever the two products
      are compared side by side, and never present the two as the same measure."
-  - "VALUE TRAPS on this object: meeting_type's stored literal is '1x1', NOT
+  - "VALUE TRAPS on this object: meeting_type's stored literal is '1:1', NOT
      'One-to-One' (that spelling exists only in meeting_type_key, as
-     ONE_TO_ONE); 'other than 1x1' must exclude BOTH '1x1' and 'No Meeting', and
+     ONE_TO_ONE); 'other than 1:1' must exclude BOTH '1:1' and 'No Meeting', and
      the answer must say the no-meeting orders were excluded. investor_category
      is a CATEGORY — 'classification' is a different, untracked taxonomy whose
      values do not overlap it; see unsupported_intents."
@@ -285,13 +285,13 @@ dimensions:
   order_id: {column: order_id, description: "Unique order id — the unique key at this grain, on BOTH products. Use it as the final sort key on every paged listing."}
   investor_name: {column: investor_name, description: "Investor/account name (display). NOT unique — several ids can share a name, and one investor is spelled several ways."}
   investor_id: {column: investor_gp_id, description: "Investor GP id (investor-side key). TEXT — quote it, leading zeros matter. NULLABLE at source: grouping by it silently drops those orders."}
-  investor_region: {column: investor_region, description: "ECM-ONLY (hard NULL on DCM). Investor's own geography — never the deal's target region. Mixes full names and codes ('United States' and 'US')."}
-  investor_category: {column: investor_category, description: "ECM-ONLY (hard NULL on DCM). Investor category (Long Only, Hedge Fund, Asset Manager…). This is CATEGORY — 'classification' is a different, untracked taxonomy; see unsupported_intents."}
-  investor_category_key: {column: investor_category_key, description: "ECM-ONLY (hard NULL on DCM). Coded investor category key (LONG_ONLY, HEDGE_FUND, OUTRIGHT…). Display uses investor_category, not this."}
-  meeting_type: {column: meeting_type, description: "ECM-ONLY (hard NULL on DCM). Investor/issuer meeting type. The stored literal is '1x1' (not 'One-to-One'); 'No Meeting' is also a value. There is no stored 'roadshow' value — reading 'roadshow'/'met the issuer' as 'anything but No Meeting' is an INTERPRETATION, so say so in the answer."}
-  meeting_type_key: {column: meeting_type_key, description: "ECM-ONLY (hard NULL on DCM). Coded meeting type (NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING). 'One-to-One' exists ONLY here — the displayed value is '1x1'."}
-  order_type: {column: order_type, description: "ECM-ONLY (hard NULL on DCM). Order HANDLING type (OTT/Regular). LIMIT/MARKET/SCALED are ioi_type values, not these."}
-  ioi_type: {column: ioi_type, description: "ECM-ONLY (hard NULL on DCM). Indication-of-interest type (LIMIT/MARKET/SCALED — the confirmed subset, not an exhaustive list). 'Scaled back' in a sentence about allocation is NOT this field — that is demand minus allocation."}
+  investor_region: {column: investor_region, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Investor's own geography — never the deal's target region. Mixes full names and codes ('United States' and 'US')."}
+  investor_category: {column: investor_category, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Investor category (Long Only, Hedge Fund, Asset Manager…). This is CATEGORY — 'classification' is a different, untracked taxonomy; see unsupported_intents."}
+  investor_category_key: {column: investor_category_key, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Coded investor category key (LONG_ONLY, HEDGE_FUND, OUTRIGHT…). Display uses investor_category, not this."}
+  meeting_type: {column: meeting_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Investor/issuer meeting type. USER WORDS MAP TO THE STORED VALUE: '1x1', '1-1', 'one-on-one', 'one to one', 'One-to-One' ALL mean the stored literal '1:1' (with a COLON) — sending the user's spelling verbatim returns zero rows. PREFER meeting_type_key for filtering ('ONE_TO_ONE'): it has no punctuation to get wrong. The stored literal is '1:1' (not 'One-to-One'); 'No Meeting' is also a value. There is no stored 'roadshow' value — reading 'roadshow'/'met the issuer' as 'anything but No Meeting' is an INTERPRETATION, so say so in the answer."}
+  meeting_type_key: {column: meeting_type_key, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Coded meeting type (NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING). 'One-to-One' exists ONLY here — the displayed value is '1:1'."}
+  order_type: {column: order_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Order HANDLING type (OTT/Regular). LIMIT/MARKET/SCALED are ioi_type values, not these."}
+  ioi_type: {column: ioi_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Indication-of-interest type (LIMIT/MARKET/SCALED — the confirmed subset, not an exhaustive list). 'Scaled back' in a sentence about allocation is NOT this field — that is demand minus allocation."}
   order_allocation: {column: order_allocation, description: "Allocation on this order (ECM shares / DCM money) — project it in order listings. 0 means 'allocated nothing' OR 'nothing recorded'; the two are indistinguishable."}
   order_demand_qty: {column: order_demand_qty, description: "Demand on this order (ECM shares / DCM money) — project it in order listings. On DCM it is the same stored number as order_amount."}
   order_amount: {column: order_amount, description: "Order/indication amount. DCM: the order amount (money). ECM: the HIGHEST limit point on that order's IOI curve — label it 'highest IOI limit', never 'order size'."}
@@ -364,6 +364,7 @@ filters:
     description: "Filter by deal name — like '%NAME%'. Project it too, or the server pays a second database round-trip to disambiguate."
   investor_region:
     column: investor_region
+    products: ["ECM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
@@ -381,6 +382,7 @@ filters:
       the value list above first; if you must probe, probe with ONE spelling.
   investor_category:
     column: investor_category
+    products: ["ECM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
@@ -400,20 +402,22 @@ filters:
       here); see unsupported_intents.
   meeting_type:
     column: meeting_type
+    products: ["ECM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
     description: >-
       ECM-ONLY (hard NULL on DCM). Meeting type — the stored set is 'No Meeting',
-      '1x1', 'Conference Call', 'Small Group', 'Group Meeting'. The literal is '1x1' —
+      '1:1', 'Conference Call', 'Small Group', 'Group Meeting'. The literal is '1:1' —
       'One-to-One' matches NOTHING (it exists only in meeting_type_key, as
-      ONE_TO_ONE). "Other than 1x1" must exclude BOTH '1x1' AND 'No Meeting'
-      (not_in ['1x1','No Meeting']), and the answer must say the no-meeting
+      ONE_TO_ONE). "Other than 1:1" must exclude BOTH '1:1' AND 'No Meeting'
+      (not_in ['1:1','No Meeting']), and the answer must say the no-meeting
       orders were excluded, or the count reads as if everyone met. There is NO
       stored 'roadshow' value: treating 'roadshow' / 'met the issuer' as
       not_in ['No Meeting'] is an interpretation — use it, but state it.
   order_type:
     column: order_type
+    products: ["ECM"]
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
@@ -424,6 +428,7 @@ filters:
       commonest error on this field.
   ioi_type:
     column: ioi_type
+    products: ["ECM"]
     operators: [like, eq, in, not_in]
     suggestable: true
     case_insensitive: true
@@ -611,7 +616,7 @@ examples:
         # Never like '%US%' — it matches RUSSIA and AUSTRIA.
         - {field: investor_region, op: in, value: ["United States", "US"]}
       order: [{field: total_allocation, direction: desc}, {field: investor_id, direction: asc}]
-  - question: Investors who met the issuer other than 1x1 (ECM)
+  - question: Investors who met the issuer other than 1:1 (ECM)
     request:
       source: capital_markets_order
       metric: order_count
@@ -620,7 +625,7 @@ examples:
         - {field: product, op: eq, value: ECM}
         - {field: deal_id, op: eq, value: "REPLACE_WITH_DEAL_ID"}
         # Excludes BOTH the 1x1 literal and No Meeting — disclose the exclusion.
-        - {field: meeting_type, op: not_in, value: ["1x1", "No Meeting"]}
+        - {field: meeting_type, op: not_in, value: ["1:1", "No Meeting"]}
       order: [{field: order_count, direction: desc}, {field: investor_id, direction: asc}]
   - question: Top 10 investors on a DCM deal by allocation, USD only
     request:

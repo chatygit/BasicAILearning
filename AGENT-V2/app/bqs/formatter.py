@@ -43,6 +43,15 @@ _DEFAULT_MAX_RESPONSE_CHARS = 120_000
 # A single cell that alone would blow the budget is truncated rather than
 # dropping the whole row: losing one long pipe-list is recoverable, losing the
 # row's ids is not.
+#
+# ZIP-ALIGNMENT HAZARD. Several columns are pipe lists that pair BY POSITION —
+# identifier_type/identifier_value, and syndicate_member_name/syndicate_role/
+# broker_code/bnd_broker. Clipping is per-cell, so the LONGER of a pair hits
+# the budget first and loses more elements, which silently misaligns the pairs.
+# The budget is far above the measured maximum (531 chars) so this should never
+# fire in practice, but when it does the marker below is the agent's signal to
+# STOP ZIPPING that row rather than pair the lists wrongly. The marker is
+# declared in SKILL.md and in the tranche ontology so the agent can recognise it.
 _DEFAULT_MAX_CELL_CHARS = 4_000
 
 _TRUNCATION_MARK = "…[truncated]"

@@ -12,6 +12,7 @@ changes take effect without redeploying the server.
 from __future__ import annotations
 
 import logging
+from datetime import date, timedelta
 import threading
 from enum import Enum
 from pathlib import Path
@@ -81,17 +82,38 @@ class MetricSpec(BaseModel):
     # aggregations that scan the whole view) require a scoping filter such as
     # 'product' so the DB can prune instead of doing a full scan/dedup.
     requires_filters: list[str] = Field(default_factory=list)
+    # Per-product applicability. Empty = available on BOTH products.
+    # ["ECM"] means the column is HARD NULL on DCM (and vice versa), so a
+    # request that touches this field while scoped to the other product cannot
+    # match anything. Declared here so the planner can REJECT the impossible
+    # combination up front instead of returning an empty result the agent then
+    # misreads as "no data". Prose said this for 23 fields; nothing enforced it.
+    products: list[str] = Field(default_factory=list)
 
 
 class DimensionSpec(BaseModel):
     column: str
     description: str = ""
+    # Per-product applicability. Empty = available on BOTH products.
+    # ["ECM"] means the column is HARD NULL on DCM (and vice versa), so a
+    # request that touches this field while scoped to the other product cannot
+    # match anything. Declared here so the planner can REJECT the impossible
+    # combination up front instead of returning an empty result the agent then
+    # misreads as "no data". Prose said this for 23 fields; nothing enforced it.
+    products: list[str] = Field(default_factory=list)
 
 
 class FilterSpec(BaseModel):
     column: str
     operators: list[FilterOperator] = Field(default_factory=list)
     description: str = ""
+    # Per-product applicability. Empty = available on BOTH products.
+    # ["ECM"] means the column is HARD NULL on DCM (and vice versa), so a
+    # request that touches this field while scoped to the other product cannot
+    # match anything. Declared here so the planner can REJECT the impossible
+    # combination up front instead of returning an empty result the agent then
+    # misreads as "no data". Prose said this for 23 fields; nothing enforced it.
+    products: list[str] = Field(default_factory=list)
     # When true, this filter's column is a bounded, suggestable field: on a
     # 0-row result the server may probe DISTINCT values and fuzzy-rank the
     # agent's guess against them to return "did_you_mean" suggestions. Set on
@@ -293,10 +315,37 @@ class OntologySpec(BaseModel):
 
     def discovery(self) -> dict:
         """Business-facing catalog. Contains NO physical schema names."""
+        # DATE ANCHOR — server-computed, never the model's guess.
+        # A model does not know today's date: its training cutoff is in the
+        # past, and it will silently anchor relative windows there. Measured
+        # 2026-08-11: "past 12 month" was emitted as
+        # last_priced >= DATE '2023-05-17' AND < DATE '2024-05-18' — a 27-month
+        # error, guaranteeing zero rows against 2024-2026 data, on a question
+        # that was otherwise routed perfectly.
+        # V1 solved this twice: a DATE ANCHOR instruction (agents-v6.yml:115)
+        # and ADD_MONTHS(SYSDATE,-12) in the SQL (domain-v4.yml:218). V2 lost
+        # both — the agent cannot emit SYSDATE because it does not write SQL,
+        # so the date has to arrive as data. It goes here because discovery is
+        # already called before every request, so it can never be stale.
+        today = date.today()
         return {
             "source": self.source,
             "version": self.version,
             "grain": list(self.grain),
+            "current_date": today.isoformat(),
+            "date_anchor": (
+                f"TODAY IS {today.isoformat()}. You do NOT know the date — your "
+                f"training cutoff is in the past, so any date you infer yourself "
+                f"will be wrong. This value is the ONLY authority for 'today', "
+                f"'this year', 'YTD', 'last N months/years' and 'recent'. "
+                f"Trailing windows need BOTH bounds: 'last 12 months' is "
+                f">= {(today - timedelta(days=365)).isoformat()} AND "
+                f"< {(today + timedelta(days=1)).isoformat()} — the upper bound "
+                f"is TOMORROW so today's rows are included and future-dated rows "
+                f"(this data contains them) are excluded. Any period at or before "
+                f"{today.isoformat()} is HISTORY: query it, never refuse it as "
+                f"'future'."
+            ),
             "how_to_use": self._generic_how_to_use() + list(self.how_to_use),
             "usage_notes": list(self.usage_notes),
             "examples": list(self.examples),

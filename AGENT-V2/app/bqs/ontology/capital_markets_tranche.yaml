@@ -252,12 +252,12 @@ dimensions:
   currency: {column: currency, description: "Pricing/denomination currency (scalar at this grain). Required alongside any DCM money figure. Can be NULL on ECM."}
   tranche_region: {column: tranche_region, description: "Tranche target region (NAM/EMEA/APAC). This is the TRANCHE's market, not the investor's geography (that lives on capital_markets_order)."}
   # --- ECM-only ---
-  product_type: {column: product_type, description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the deal-level instrument CLASS ('common stock', 'convertible') use capital_markets_deal.equity_type."}
-  exchange: {column: exchange, description: "ECM. Listing venue — holds FULL venue names AND sometimes the abbreviation itself ('NYSE'); match BOTH tokens with like (full name first, abbreviation on a 0-row retry), never equality. A dual-listed tranche may show only one venue."}
+  product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the deal-level instrument CLASS ('common stock', 'convertible') use capital_markets_deal.equity_type."}
+  exchange: {column: exchange, products: ["ECM"], description: "ECM. Listing venue — holds FULL venue names AND sometimes the abbreviation itself ('NYSE'); match BOTH tokens with like (full name first, abbreviation on a 0-row retry), never equality. A dual-listed tranche may show only one venue."}
   # --- syndicate (aligned pipe lists) ---
   syndicate_member_name: {column: syndicate_member_name, description: "ECM: pipe-delimited syndicate banks, ordered the same way as syndicate_role/broker_code/bnd_broker (pair by position only when the element counts match). A member token may carry an inline '(true)'/'(false)' suffix duplicating the B&D flag — never filter on it, and STRIP it when displaying the name. DCM: a SINGLE bank string which IS the B&D bank, not the syndicate."}
-  syndicate_role: {column: syndicate_role, description: "ECM. Pipe-delimited roles, aligned with syndicate_member_name. NULL on DCM. Display only — never attribute a role to a bank by matching lists."}
-  broker_code: {column: broker_code, description: "ECM. Pipe-delimited broker codes, aligned with syndicate_member_name. NULL on DCM."}
+  syndicate_role: {column: syndicate_role, products: ["ECM"], description: "ECM. Pipe-delimited roles, aligned with syndicate_member_name. NULL on DCM. Display only — never attribute a role to a bank by matching lists."}
+  broker_code: {column: broker_code, products: ["ECM"], description: "ECM. Pipe-delimited broker codes, aligned with syndicate_member_name. NULL on DCM."}
   bnd_broker: {column: bnd_broker, description: "ECM: pipe list of 'true'/'false', one per syndicate member, aligned with the member list; no member name is embedded in it. DCM: a SCALAR computed as 'is the B&D bank Citigroup Global', with NO null branch — so 'false' covers BOTH 'another bank billed' AND 'no B&D bank recorded at all', and it is never NULL on DCM. Split those two cases with bnd_bank is_null. Legacy either way; prefer bnd_bank."}
   bnd_bank: {column: bnd_bank, description: "RESOLVED bill-and-deliver bank NAME(S). ECM can hold SEVERAL banks in one ' | ' list (co-B&D); DCM is a single bank. NULL = no B&D designated. Use this for ALL B&D asks."}
   deal_sharing_type: {column: deal_sharing_type, description: "'SOLO' = Citi was the ONLY syndicate member (both products). 'SHARED' = everything else, including a tranche solely managed by another bank and a tranche with no syndicate rows. Never render SOLO as a bare 'sole-managed'."}
@@ -265,17 +265,17 @@ dimensions:
   identifier_type: {column: identifier_type, description: "Pipe-delimited identifier types (CUSIP/ISIN/FIGI/RIC/Valoren/'SMCP ID'/'DirectBooks Id'), zip-aligned with identifier_value. Casing differs per product (DCM lowercase, ECM uppercase)."}
   identifier_value: {column: identifier_value, description: "Pipe-delimited identifier values, zip-aligned with identifier_type. Display ZIPPED with the type list into one cell per tranche. A security identifier is never a deal_id and never an entity."}
   # --- DCM-only ---
-  product_class: {column: product_class, description: "DCM. Bond class — a closed 15-value list (Investment Grade, High Yield, SSA, ABS…). Expand IG/HY/EM before filtering."}
-  coupon_type: {column: coupon_type, description: "DCM. Coupon STRUCTURE (Fixed, FRN, Zero Coupon, Fixed to FRN, Step Coupon…) — SPACES, not hyphens. It is not a rate; never present 'Fixed' as 'the coupon'."}
-  coupon_freq: {column: coupon_freq, description: "DCM. Annual, Semi Annual, Quarterly, Monthly, Weekly, Zero, At Maturity, Daily."}
-  tenors: {column: tenors, description: "DCM. Scalar tenor label built as '<value>-<PERIOD>' — the hyphen is always there, so never '10Y'. The PERIOD spelling drifts ('10-YEAR' and '10-Y' both occur; 'M' is months), so match the short token '%10-Y%'. NULL when no tenor was recorded (a large, real population). No longer a pipe list and no longer aligned with securities_maturity."}
-  seniority: {column: seniority, description: "DCM. Rank in the capital structure (Senior Secured, Senior Unsecured, Subordinated…). An ECM 'senior secured convertible' ask is an equity_type ask, not this."}
-  reg_category: {column: reg_category, description: "DCM. Regulatory category — stored as 'SEC Registered(Public)' (no space before the bracket), '144A', 'Reg S'… A bare '144A'/'Reg S'/'3(a)(2)' ask, and a 'delivery type SEC Registered' ask, both route HERE."}
-  delivery_type: {column: delivery_type, description: "DCM. Legal delivery type — a SCALAR now, only three values: '144A', 'RegS' (no space), '3(a)(2) Exempt'. Use only when the user says 'delivery'."}
-  esg_bond: {column: esg_bond, description: "DCM. GREEN / SUSTAINABILITY / SOCIAL. NULL means not an ESG-labelled bond."}
-  issuer_ratings: {column: issuer_ratings, description: "DCM. COMMA-separated ratings, each rendered 'AGENCY - VALUE(OUTLOOK)' and ordered by agency. The AGENCY NAME IS IN THE STRING, so match the agency directly. This is the only place a rating outlook is exposed. Never a pipe list."}
-  securities_maturity: {column: securities_maturity, description: "DCM. Maturity DATE (a real date, the only one on this object). Future maturities are normal — never treat them as invalid or filter them out."}
-  tranche_status: {column: tranche_status, description: "DCM. Tranche lifecycle status — the SAME source column as deal_status on DCM, so the two are identical there. NULL on every ECM row; for ECM status use deal_status, which is on THIS object."}
+  product_class: {column: product_class, products: ["DCM"], description: "DCM. Bond class — a closed 15-value list (Investment Grade, High Yield, SSA, ABS…). Expand IG/HY/EM before filtering."}
+  coupon_type: {column: coupon_type, products: ["DCM"], description: "DCM. Coupon STRUCTURE (Fixed, FRN, Zero Coupon, Fixed to FRN, Step Coupon…) — SPACES, not hyphens. It is not a rate; never present 'Fixed' as 'the coupon'."}
+  coupon_freq: {column: coupon_freq, products: ["DCM"], description: "DCM. Annual, Semi Annual, Quarterly, Monthly, Weekly, Zero, At Maturity, Daily."}
+  tenors: {column: tenors, products: ["DCM"], description: "DCM. Scalar tenor label built as '<value>-<PERIOD>' — the hyphen is always there, so never '10Y'. The PERIOD spelling drifts ('10-YEAR' and '10-Y' both occur; 'M' is months), so match the short token '%10-Y%'. NULL when no tenor was recorded (a large, real population). No longer a pipe list and no longer aligned with securities_maturity."}
+  seniority: {column: seniority, products: ["DCM"], description: "DCM. Rank in the capital structure (Senior Secured, Senior Unsecured, Subordinated…). An ECM 'senior secured convertible' ask is an equity_type ask, not this."}
+  reg_category: {column: reg_category, products: ["DCM"], description: "DCM. Regulatory category — stored as 'SEC Registered(Public)' (no space before the bracket), '144A', 'Reg S'… A bare '144A'/'Reg S'/'3(a)(2)' ask, and a 'delivery type SEC Registered' ask, both route HERE."}
+  delivery_type: {column: delivery_type, products: ["DCM"], description: "DCM. Legal delivery type — a SCALAR now, only three values: '144A', 'RegS' (no space), '3(a)(2) Exempt'. Use only when the user says 'delivery'."}
+  esg_bond: {column: esg_bond, products: ["DCM"], description: "DCM. GREEN / SUSTAINABILITY / SOCIAL. NULL means not an ESG-labelled bond."}
+  issuer_ratings: {column: issuer_ratings, products: ["DCM"], description: "DCM. COMMA-separated ratings, each rendered 'AGENCY - VALUE(OUTLOOK)' and ordered by agency. The AGENCY NAME IS IN THE STRING, so match the agency directly. This is the only place a rating outlook is exposed. Never a pipe list."}
+  securities_maturity: {column: securities_maturity, products: ["DCM"], description: "DCM. Maturity DATE (a real date, the only one on this object). Future maturities are normal — never treat them as invalid or filter them out."}
+  tranche_status: {column: tranche_status, products: ["DCM"], description: "DCM. Tranche lifecycle status — the SAME source column as deal_status on DCM, so the two are identical there. NULL on every ECM row; for ECM status use deal_status, which is on THIS object."}
 
 # -------------------------------- FILTERS -----------------------------------
 filters:
@@ -412,6 +412,7 @@ filters:
       every unfiltered DCM result. Humanise 'freeToTrade' as 'Free to Trade'.
   tranche_status:
     column: tranche_status
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
@@ -466,6 +467,7 @@ filters:
       product; both products raise for all purposes.
   product_type:
     column: product_type
+    products: ["ECM"]
     operators: [like, in, not_in]
     suggestable: true
     case_insensitive: true
@@ -489,6 +491,7 @@ filters:
       and NEVER blend the two — they are different axes.
   exchange:
     column: exchange
+    products: ["ECM"]
     operators: [like, in, not_in]
     suggestable: true
     case_insensitive: true
@@ -526,6 +529,7 @@ filters:
       how_to_use.
   broker_code:
     column: broker_code
+    products: ["ECM"]
     operators: [like, is_null, is_not_null]
     case_insensitive: true
     description: >-
@@ -564,6 +568,7 @@ filters:
       zero rows because the CASE always yields a value.
   syndicate_role:
     column: syndicate_role
+    products: ["ECM"]
     operators: [like]
     case_insensitive: true
     description: >-
@@ -606,6 +611,7 @@ filters:
       can be UUIDs (DirectBooks).
   product_class:
     column: product_class
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
@@ -619,6 +625,7 @@ filters:
       belong here, not on seniority.
   coupon_type:
     column: coupon_type
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
@@ -630,6 +637,7 @@ filters:
       not a rate — the coupon rate is not stored.
   coupon_freq:
     column: coupon_freq
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
@@ -639,6 +647,7 @@ filters:
       form.
   tenors:
     column: tenors
+    products: ["DCM"]
     operators: [like, eq, in, is_null, is_not_null]
     case_insensitive: true
     description: >-
@@ -655,6 +664,7 @@ filters:
       a text label — enumerate the qualifying labels or ask which tenors.
   seniority:
     column: seniority
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
@@ -666,6 +676,7 @@ filters:
       offer it. An ECM 'senior secured convertible' ask is an equity_type ask.
   reg_category:
     column: reg_category
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
@@ -678,6 +689,7 @@ filters:
       ask — 'SEC Registered' is not a delivery_type value.
   delivery_type:
     column: delivery_type
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
@@ -689,6 +701,7 @@ filters:
       keeps one.
   esg_bond:
     column: esg_bond
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
@@ -702,6 +715,7 @@ filters:
       bond.
   issuer_ratings:
     column: issuer_ratings
+    products: ["DCM"]
     operators: [like, is_null, is_not_null]
     case_insensitive: true
     description: >-
@@ -717,6 +731,7 @@ filters:
       resolve them. Not pipe-delimited: never apply pipe token anchors here.
   securities_maturity:
     column: securities_maturity
+    products: ["DCM"]
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
     description: >-
       DCM. A real DATE, so range and between comparisons work as dates (they

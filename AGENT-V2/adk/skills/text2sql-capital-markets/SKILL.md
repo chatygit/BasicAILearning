@@ -114,6 +114,13 @@ question with metric `deal_count`.
 A tranche ask that also scopes on sector, issuer, deal status, deal region or use
 of proceeds is **ONE request on the tranche object**.
 
+**"Investors in IPOs" is TWO requests today.** `offering_type` lives only on the
+deal object, so: request 1 on `capital_markets_deal` with
+`offering_type eq 'IPO'` projecting `deal_id`; request 2 on
+`capital_markets_order` with `deal_id in [...]` plus
+`investor_category_key eq 'LONG_ONLY'`. Say you scoped to IPO deals. Do NOT
+search `deal_name` for "IPO" — see §3c-bis.
+
 **An ORDER ask scoping on SECTOR, ISSUER or TRANCHE SIZE is now also ONE
 request** — those three are carried on the order object, so
 "top 10 investors in Healthcare over the last 5 years" is a single
@@ -162,6 +169,96 @@ products **on the tranche object**, so a DCM region ask goes to tranche (§7b).
 | Settlement DATE ("when did it settle", "settlement window") | **Refuse** — the column exists and is 100% empty (measured: zero populated deals). Offer pricing dates, the `Settled` status, or settlement CURRENCY, which is a different and populated field |
 | DCM coverage / fill rate / "how filled were they" | **Answer it.** DCM allocation is now a real figure that reconciles to tranche size. Any inherited "DCM ratios are trivially 1x — refuse" rule is DEAD |
 | Investor **classification** (Strategic, Family Office, Retail, SWF, Index, Quant) | **Refuse, offer CATEGORY.** A different untracked taxonomy — substituting category returns a WRONG population, not an approximate one (production incident) |
+
+### 3c. Shapes the request format CANNOT express — say so, do not improvise
+
+BQS has one metric per request, ANDed filters, no OR, no joins and **no window
+functions**. When an ask needs a shape outside that, SAY YOU CANNOT DO IT and
+offer the nearest honest thing. Never approximate silently — a plausible wrong
+answer is worse than a clear "not supported".
+
+| Ask shape | Why it cannot be expressed | Say / offer |
+|---|---|---|
+| **"one/top X for EACH Y"** — top deal per product type, best investor per sector, largest tranche per currency | needs `ROW_NUMBER() OVER (PARTITION BY …)`; there is no partitioned rank anywhere in the SQL path | Say per-group ranking is not supported. Offer the **max metric per group** (one row per Y with its highest value) and state plainly that it does not name the winning row. **Never** fetch a global top-N and de-duplicate by Y — the top-N is dominated by one group, so the rarer groups can never appear and the answer looks complete while missing exactly what was asked |
+| **A OR B across two different fields** — "Citi B&D or Citi bookrunner" | filters are ANDed; there is no OR and no predicate grouping | Ask which axis they mean, or run the two and say you combined them |
+| **Two figures in one request** — "count AND total size" | one metric per request | Answer with the primary figure, offer the second as a follow-up |
+| **Set difference** — "deals that were B&D but NOT solo" | `HAVING` thresholds one metric; it cannot compare two populations | Two requests, and say you compared them |
+| **Anything needing a join between objects** | there are no joins | Two requests, ids from the first — or say which half you can answer |
+
+**Self-check before sending an answer:** if your header promises variety the
+rows do not have — "for each product type" over rows sharing one product type,
+or a "top 10" whose ranks 3-10 are all tied at the same value — the answer is
+wrong even though the query succeeded. Say what actually varied, or say the
+ranking does not separate beyond rank N.
+
+### 3c-bis. A stored VALUE is never a NAME — do not search text for it
+
+`IPO`, `FO`, `Warrants`, `Convertible Bonds`, `Long Only`, `SOLO`, `1:1` are
+**values of governed fields**. They are NOT words to look for inside
+`deal_name`, `tranche_name` or `investor_name`.
+
+Measured failure: *"top 15 long-only investors in IPOs"* was attempted as
+**"ECM deals with 'IPO' in the deal name"**. `IPO` is an `offering_type` value
+on the deal object; deal names do not contain it. This is the same mistake as
+reaching for `product_type_name` — inventing a plausible field instead of using
+the enumerated one.
+
+**Before filtering on a name, ask: is this word a VALUE of some field?** If §7b
+lists it, filter that field. Only genuine proper nouns — a company, an
+investor, a deal's actual title — belong in a name filter.
+
+| The user says | Field | Object |
+|---|---|---|
+| IPO · FO · follow-on | `offering_type` | deal |
+| long-only · hedge fund · outright · asset manager | `investor_category_key` (`LONG_ONLY`, `HEDGE_FUND`…) | order |
+| solo · sole-managed | `deal_sharing_type` | tranche |
+| 1x1 · one-on-one | `meeting_type_key` = `ONE_TO_ONE` | order |
+
+**Prefer the `_key` twin wherever one exists** — `investor_category_key`,
+`meeting_type_key`. Keys are punctuation-free and case-stable; the display
+labels are not (`Long Only` vs `long-only`, `1:1` vs `1x1`). Filter the key,
+PROJECT the label.
+
+### 3c-ter. ECM-only and DCM-only fields — SCOPE THE PRODUCT
+
+28 columns are **hard NULL on the other product**. Using one without scoping to
+its product cannot match anything, and the server now REJECTS it with
+`product_not_applicable` rather than returning an empty result you would
+misread as "no data".
+
+- **ECM-only**: `equity_type` · `offering_type` · `deal_region` (deal object) ·
+  `product_type` · `exchange` · `broker_code` · `syndicate_role` ·
+  `execution_status` · `investor_category`(+`_key`) · `investor_region` ·
+  `meeting_type`(+`_key`) · `order_type` · `ioi_type`
+- **DCM-only**: `product_class` · `seniority` · `reg_category` · `esg_bond` ·
+  `coupon_type` · `coupon_freq` · `tenors` · `securities_maturity` ·
+  `issuer_ratings` · `delivery_type` · `tranche_status`
+
+**If your request touches any of these, add `product eq 'ECM'` (or `'DCM'`).**
+An unscoped request spans BOTH products and is rejected the same way.
+
+This matters most for callers entitled to BOTH products. A single-product login
+has `product eq <that>` injected automatically, so sloppy scoping still works;
+a dual-entitled login does not, and the identical question fails. Never rely on
+entitlement to scope for you.
+
+### 3d. Never ask permission for a mechanic
+
+Ask the user ONLY when their reply changes the ANSWER: an ambiguous metric
+("top 5 by size or by count?"), or a name that matched several entities. Never
+ask whether to proceed with an internal step — "this needs two requests, shall
+I?" costs a model turn plus a human turn and the reply is always yes. The
+question already authorised the work. Do it and answer.
+
+### 3e. Entitlement is a silent constraint, not a topic
+
+If the user did NOT name a product, scope to what they are entitled to and
+answer — do not request the unentitled product, and do not mention it. The
+server tells you the scope before the query runs; a request that names an
+unentitled product is a wasted round-trip you could have avoided.
+If the user DID explicitly name an unentitled product, say so in ONE line and
+still give them the entitled half. Never open with the limitation when you have
+an answer — the answer leads, the scope note is a footnote ("ECM only").
 
 ## 4. Entity resolution — only when you must (ONE request, never an aggregate)
 Only to resolve a name to an id, recover a near-miss, or force a single pick. An
@@ -456,7 +553,7 @@ wherever values are label variants. Traps are in §7c.
   allocation cut, and **no metric subtracts two columns** — list by `total_demand`
   desc with `order_demand_qty` AND `order_allocation` projected, and read the
   shortfall off the rows shown.
-- `meeting_type` (order) **ECM** — `No Meeting` · `1x1` · Conference Call · Small
+- `meeting_type` (order) **ECM** — `No Meeting` · `1:1` · Conference Call · Small
   Group · Group Meeting. There is **no stored "roadshow" value**: reading
   "roadshow"/"met the issuer" as `not_in ['No Meeting']` is an INTERPRETATION —
   use it, and say in the answer that that is how you read it.
@@ -494,7 +591,7 @@ no safety net at all.
 | "priced / announced deals" | case-insensitive; `priced`/`Priced` and `announced`/`Announced` are distinct stored values — **merge the variants when grouping or the buckets will not sum** |
 | "US investors" | `in ['United States','US']` — **never `like '%US%'`**: it matches RUSSIA, AUSTRIA, AUSTRALIA |
 | "non-US", any NOT-predicate | negate that same pair, then count the NULL bucket with `is_null` and disclose it — unknown is not non-US |
-| "one-on-one / 1:1" | `meeting_type eq '1x1'`; "One-to-One" matches nothing. "Other than 1x1" excludes BOTH `1x1` and `No Meeting` — say the no-meeting orders were excluded |
+| "one-on-one / 1:1" | `meeting_type eq '1:1'`; "One-to-One" matches nothing. "Other than 1x1" excludes BOTH `1:1` and `No Meeting` — say the no-meeting orders were excluded |
 | "CUSIP", any identifier type | case-insensitive `like` always — DCM stores types lowercase, ECM uppercase |
 | "10-year" | `tenors like '%10-Y%'` — catches BOTH stored spellings (`10-YEAR`, `10-Y`); `%10-YEAR%` misses the abbreviated rows and `10Y` matches nothing. For a 1-digit tenor `%2-Y%` also matches `12-Y`/`22-Y` and LIKE cannot anchor it: project `tenors` and say which labels you counted |
 | "fixed-to-float", "semi-annual" | `Fixed to FRN`, `Semi Annual` — spaces, not hyphens |
@@ -523,6 +620,12 @@ status-sensitive answer spans both.
   first). Never delete the question's defining filter to force a result. For a
   valid question with no matches: "no matching records" plus ONE widening idea.
 - **`disambiguation`**: a name matched several entities — re-run with one exact.
+- **A cell ending `…[truncated]`**: that value was clipped by the response
+  budget. Render it as-is and say the value is partial. **NEVER ZIP a truncated
+  pipe list against another list** — identifier type/value and syndicate
+  member/role/broker pair BY POSITION, and a clipped list has lost elements the
+  other one still has, so pairing them produces WRONG attributions. Show the
+  lists separately, or page to a narrower request.
 - **Validation error `message`**: fix ONLY the field it names — the fix is often
   "this field lives on a different object, switch `source`".
 - **Unknown/invalid FIELD (the server lists the valid ones)**: that list is a
@@ -542,6 +645,25 @@ status-sensitive answer spans both.
 - Max ~2 attempts per turn; stop at the first non-empty result.
 
 ## 9. Time
+
+> ### ⚠ DATE ANCHOR — read before building ANY relative window
+> **You do NOT know today's date.** Your training cutoff is in the past and any
+> date you infer yourself will be wrong. `discover_business_terms` returns
+> **`current_date`** and **`date_anchor`** — that value is the ONLY authority
+> for "today", "this year", "YTD", "recent", "last N months/years", "past N
+> days", "August this year".
+>
+> Measured failure (2026-08-11): "deals in the past 12 month" was sent as
+> `last_priced >= 2023-05-17 AND < 2024-05-18` — the model's cutoff, **27 months
+> stale**. Zero rows against 2024-2026 data, on a question that was otherwise
+> routed perfectly. It then paid ~90s of zero-row probes and retried. The
+> routing was never the bug.
+>
+> Compute every relative window FROM `current_date`. Never from memory, never
+> from a date seen in an earlier result, never from a year in the user's other
+> questions. If discovery has not returned yet, you cannot build a relative
+> window — get the catalog first.
+
 - Deals have `first_priced`/`last_priced` (no single deal pricing date); tranches
   and orders have `pricing_date`. Calendar year = `gte` Jan 1 AND `lt` Jan 1 of
   next year (half-open). Quarters: Q1 Jan–Mar … Q4 Oct–Dec.

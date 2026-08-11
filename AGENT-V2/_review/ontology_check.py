@@ -1233,6 +1233,7 @@ if AUTH_MW.exists():
 # unreachable, while the skill promises the user "ask for the next 50".
 # ---------------------------------------------------------------------------
 FORMATTER = ROOT / "app" / "bqs" / "formatter.py"
+ONTOLOGY_PY = ROOT / "app" / "bqs" / "ontology.py"
 PAGING_TEST = ROOT / "tests" / "test_response_paging.py"
 
 for p in [FORMATTER, PAGING_TEST]:
@@ -1251,6 +1252,39 @@ if PLANNER.exists():
           "[correctness] planner.py: offset lost its deterministic-sort "
           "guarantee — OFFSET without ORDER BY is sampling, not paging, and "
           "page 2 can repeat or skip rows from page 1")
+
+# DATE ANCHOR (added 2026-08-11). A model does not know today's date and will
+# anchor relative windows on its training cutoff. Measured: "past 12 month"
+# became 2023-05-17..2024-05-18 against 2024-2026 data — 27 months stale, zero
+# rows, on a correctly-routed question. V1 carried this rule in two places
+# (agents-v6.yml DATE ANCHOR + ADD_MONTHS(SYSDATE,-12)); the V2 rewrite dropped
+# both. The server now emits current_date/date_anchor in discovery, and the
+# skill must tell the agent that value is the ONLY authority for "today".
+check("current_date" in text(ONTOLOGY_PY) and "date_anchor" in text(ONTOLOGY_PY),
+      "[time] ontology.py: discovery() no longer emits current_date/date_anchor "
+      "— the agent has no way to know today's date and every relative window "
+      "('last 12 months', 'YTD', 'recent') silently uses the model's training "
+      "cutoff instead, returning zero rows against current data")
+check(re.search(r"(?i)date anchor", text(SKILL)),
+      "[time] SKILL.md: lost the DATE ANCHOR rule — without it the agent does "
+      "not know that current_date from discovery is the only authority for "
+      "'today', and will infer relative windows from its training cutoff")
+
+# PER-PRODUCT APPLICABILITY (added 2026-08-11). 28 columns are HARD NULL on one
+# product (CAST(NULL) in the view's other UNION branch). Prose said so for 23 of
+# them and nothing enforced it, so an impossible combination returned an empty
+# result the agent misread as "no data". This hid as an ENVIRONMENT bug: a
+# single-product login gets `product eq X` injected by the entitlement gate and
+# never trips it, while a dual-entitled login — which is what production has —
+# fails on the same question.
+check("_check_product_applicability" in text(PLANNER)
+      and "product_not_applicable" in text(PLANNER),
+      "[product] planner.py: lost the per-product applicability check — an ECM-"
+      "only field requested on DCM (or unscoped) now returns an empty result "
+      "instead of a rejection, and the agent reads that as 'no data'")
+check("products" in text(ONTOLOGY_PY),
+      "[product] ontology.py: the specs no longer carry `products` — per-product "
+      "applicability is back to prose, which is what let the bug ship")
 
 if FORMATTER.exists():
     src = text(FORMATTER)

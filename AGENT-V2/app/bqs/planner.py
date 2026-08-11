@@ -415,12 +415,64 @@ def _resolve_derived_filter(spec: OntologySpec, name: str) -> ResolvedDerivedFil
     return ResolvedDerivedFilter(name, dspec.predicate, columns)
 
 
+def _check_product_applicability(req, spec) -> None:
+    """Reject a request that uses a field the requested product cannot have.
+
+    23+ columns are HARD NULL on one product — CAST(NULL AS ...) in the view's
+    other UNION branch. Asking for investor_category while scoped to DCM cannot
+    match anything, and the empty result reads to the agent as "no data" rather
+    than "impossible combination", so it retries, widens, or reports nothing
+    found. Spec section 3.2 asked for this to be mechanical rather than prose.
+
+    WHY IT SHOWS UP AS AN ENVIRONMENT BUG. A caller entitled to ONE product gets
+    `product eq '<that>'` injected by the entitlement gate, so every request is
+    single-product scoped by accident and this never fires. A DUAL-entitled
+    caller is scoped to both, so the same question that worked on a
+    single-product login returns nothing. Production is the dual case.
+    """
+    requested: set[str] = set()
+    for f in req.filters:
+        if f.field == "product":
+            v = f.value
+            requested |= {str(x).upper() for x in (v if isinstance(v, list) else [v])}
+    if not requested:
+        requested = {"ECM", "DCM"}  # unscoped spans everything entitled
+
+    used: list[tuple[str, list[str]]] = []
+    ms = spec.metrics.get(req.metric)
+    if ms is not None and getattr(ms, "products", None):
+        used.append((req.metric, ms.products))
+    for name in req.dimensions:
+        d = spec.dimensions.get(name)
+        if d is not None and getattr(d, "products", None):
+            used.append((name, d.products))
+    for f in req.filters:
+        fs = spec.filters.get(f.field)
+        if fs is not None and getattr(fs, "products", None):
+            used.append((f.field, fs.products))
+
+    for name, allowed in used:
+        allow = {p.upper() for p in allowed}
+        impossible = requested - allow
+        if impossible:
+            only = "/".join(sorted(allow))
+            bad = "/".join(sorted(impossible))
+            raise BQSError(
+                f"'{name}' exists only on {only} — it is empty on {bad}. This "
+                f"request is scoped to {'/'.join(sorted(requested))}, so it "
+                f"cannot match anything. Add a filter product eq '{only}' if "
+                f"you want the {only} answer, or drop '{name}'.",
+                code="product_not_applicable",
+            )
+
+
 def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
     """Validate the request against the ontology and build a QueryPlan."""
     metric = _resolve_metric(req, spec)
 
     _check_unsupported(spec, req)
 
+    _check_product_applicability(req, spec)
     dims = _resolve_dimensions(req, spec)
     filters = [_validate_filter(spec, f) for f in req.filters]
     computed_filters = [
@@ -459,7 +511,7 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
         # tuples, so ordering by every projected dimension is fully
         # deterministic — do that rather than refuse.
         orders = [
-            ResolvedOrder(column_alias=d.alias, direction="ASC") for d in dims
+            ResolvedOrder(column_alias=d.business_name, direction="ASC") for d in dims
         ]
         if not orders:
             raise BQSError(

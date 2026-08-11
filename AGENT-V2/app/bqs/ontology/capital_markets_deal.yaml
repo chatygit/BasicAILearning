@@ -247,11 +247,11 @@ dimensions:
   ticker: {column: ticker, description: "Issuer ticker symbol. A ticker is a direct filter, never an entity to resolve."}
   sector: {column: sector, description: "Issuer industry sector. Closed list of 28 stored labels (enumerated on the sector filter) — 'Oil & Gas' is a SEPARATE value from 'Energy', and 'Information Technology' is separate from 'Technology'."}
   use_of_proceeds: {column: use_of_proceeds, description: "Purpose of raised funds. Stored literals include 'M & A' (with spaces); refinancing is split across 'Refinance', 'Debt Repayment' and DCM's 'Repay Outstanding Borrowings'. The DCM vocabulary is only three literals — see the filter."}
-  equity_type: {column: equity_type, description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…). 'common stock'/'common shares' asks belong HERE, not on tranche product_type. NULL on DCM."}
-  offering_type: {column: offering_type, description: "ECM. Offering type — only 'IPO' and 'FO' (follow-on) are stored. 'Rights' is a tranche product_type, 'Convertible' is an equity_type, 'Block' is not stored at all. NULL on DCM."}
+  equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…). 'common stock'/'common shares' asks belong HERE, not on tranche product_type. NULL on DCM."}
+  offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Offering type — only 'IPO' and 'FO' (follow-on) are stored. 'Rights' is a tranche product_type, 'Convertible' is an equity_type, 'Block' is not stored at all. NULL on DCM."}
   deal_status: {column: deal_status, description: "Deal lifecycle status. CASE VARIANTS ARE REAL — 'priced'/'Priced' and 'announced'/'Announced' are distinct stored values on DCM (Q17), so match case-insensitively and merge the variants before reporting a breakdown or the buckets will not sum. On DCM this is MAX() across the deal's tranche statuses and can disagree with the tranche object."}
-  execution_status: {column: execution_status, description: "DEAD COLUMN — carries no information and has no filter. The view fills it from a subquery already restricted to one status type, so every ECM row reads the same literal and every DCM row is NULL. Any 'execution status' ask is a deal_status ask. Kept only because an exposed column is never removed (diagnostics scope rule 2, which also withdrew the request for a real execution status). Do not project it."}
-  deal_region: {column: deal_region, description: "ECM. Deal-level region (NAM/EMEA/APAC); NULL on DCM. On the TRANCHE object the same business name is populated on both products — this ECM-only rule is specific to the deal object."}
+  execution_status: {column: execution_status, products: ["ECM"], description: "DEAD COLUMN — carries no information and has no filter. The view fills it from a subquery already restricted to one status type, so every ECM row reads the same literal and every DCM row is NULL. Any 'execution status' ask is a deal_status ask. Kept only because an exposed column is never removed (diagnostics scope rule 2, which also withdrew the request for a real execution status). Do not project it."}
+  deal_region: {column: deal_region, products: ["ECM"], description: "ECM. Deal-level region (NAM/EMEA/APAC); NULL on DCM. On the TRANCHE object the same business name is populated on both products — this ECM-only rule is specific to the deal object."}
   settlement_currency: {column: settlement_currency, description: "Settlement currency — the currency a TRANCHE settles in (same concept as capital_markets_tranche.settlement_currency), distinct from the pricing currencies in 'currencies'. At DEAL grain it is a MAX() collapse, so a deal whose tranches settle in two currencies shows ONE of them, not both — go to the tranche object when the settlement currency has to be right per tranche. Population UNVERIFIED (see the filter)."}
   tranche_count: {column: tranche_count, description: "Pre-computed tranche count for the deal. Filterable — 'deals with more than one tranche' is answered here with no hop. Can be NULL on ECM when no tranche rows joined."}
   order_count: {column: order_count, description: "Pre-computed order count for the deal. Filterable. NULL (not 0) when the deal has no orders. Counts a wider population than capital_markets_order — see total_order_count."}
@@ -410,6 +410,7 @@ filters:
       reconcile.
   offering_type:
     column: offering_type
+    products: ["ECM"]
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
@@ -421,6 +422,7 @@ filters:
       (the column is NULL on every DCM row), so scope ECM before using it.
   equity_type:
     column: equity_type
+    products: ["ECM"]
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
@@ -440,6 +442,7 @@ filters:
       and say you widened. NULL on DCM.
   deal_region:
     column: deal_region
+    products: ["ECM"]
     operators: [eq, ne, in, not_in, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
