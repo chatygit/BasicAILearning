@@ -33,7 +33,7 @@
 # conflate the two.
 #
 # Physical source: DGSTREAM.VW_DEAL_SUMMARY (UNION ALL of ECM + DCM), exposed
-# through the Starburst catalog dataglobe_oraas.dgstream. PRODUCT ('ECM'/'DCM')
+# through the Starburst catalog bds_dg_oraas.dgstream. PRODUCT ('ECM'/'DCM')
 # separates the two; callers scope with a product filter (entitlement injects it
 # too). Only business names below are ever shown to the agent.
 # ---------------------------------------------------------------------------
@@ -42,11 +42,11 @@ version: "3"
 dialect: trino
 
 connection:
-  catalog: dataglobe_oraas
+  catalog: bds_dg_oraas
   schema: dgstream
   sslmode: require
 
-base_view: dataglobe_oraas.dgstream.vw_deal_summary
+base_view: bds_dg_oraas.dgstream.vw_deal_summary
 
 # Object grain (business names). One physical row per this combination.
 grain: [product, deal_id]

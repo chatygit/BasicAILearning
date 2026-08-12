@@ -949,9 +949,42 @@ if MCPSERVER.exists():
     check('"code": "invalid_product_value"' in src,
           "[security] mcpserver.py: the invalid-product-value refusal is gone "
           "— a typo'd product is stripped and scope widens to full entitlement")
+    # ENTITLEMENT SCOPE IS DATA, NOT A GUESS (added 2026-08-12). The skill has
+    # always ordered "never request the unentitled product", but nothing told
+    # the agent what the entitled set WAS — observed in QA: an ECM-only caller
+    # got a correct ECM answer, then the agent volunteered the DCM version,
+    # paid a full turn for the guaranteed denial, and closed with an apology.
+    check("_attach_entitlement_scope(" in src
+          and '"entitled_products"' in src,
+          "[answer] mcpserver.py: discovery no longer carries "
+          "entitled_products — the agent can only learn its product scope by "
+          "paying for a denied query")
+    check(src.count("_attach_entitlement_scope(") >= 2,
+          "[answer] mcpserver.py: _attach_entitlement_scope is defined but "
+          "not CALLED from discover_business_terms — the scope never reaches "
+          "the agent")
+    # Both sides of the contract: the server EMITS the scope, the skill READS
+    # it.
+    check(has(SKILL, "entitled_products"),
+          "[answer] SKILL.md §3e no longer reads entitled_products — the "
+          "agent is back to offering products the caller cannot query and "
+          "paying a turn for the denial")
+    check(has(ROOT / "adk" / "config" / "agents.yaml", "entitled_products"),
+          "[answer] agents.yaml: the follow-ups rule no longer names "
+          "entitled_products — the skill-failed fallback path offers "
+          "unentitled products again")
     check("PREFER passing one name" in src,
           "[python] mcpserver.py: discover_business_terms docstring no longer "
           "steers the agent to a single source")
+    # TEAMMATE CODE (Samir, 2026-08-12): the top-holders tool registration was
+    # transcribed FROM the deployed POC copy. Handing back is a whole-file
+    # copy, so if this block disappears from our copy, the hand-back ERASES
+    # their feature from the deployment. Losing this pin = losing their code.
+    check("register_top_holders_tools(mcp, resolve_soeid=_resolve_soeid)" in src,
+          "[teammate] mcpserver.py: the top-holders tool registration "
+          "(app/tools/top_holders_tool.py, added by a teammate in the POC "
+          "repo) is gone — handing this file back would overwrite their "
+          "change")
 
 if MODELS.exists():
     ops = re.search(r"class FilterOperator.*?(?=\nclass )", text(MODELS), re.S)

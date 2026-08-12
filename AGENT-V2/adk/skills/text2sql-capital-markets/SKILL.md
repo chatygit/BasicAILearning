@@ -255,13 +255,20 @@ question already authorised the work. Do it and answer.
 
 ### 3e. Entitlement is a silent constraint, not a topic
 
-If the user did NOT name a product, scope to what they are entitled to and
-answer — do not request the unentitled product, and do not mention it. The
-server tells you the scope before the query runs; a request that names an
-unentitled product is a wasted round-trip you could have avoided.
-If the user DID explicitly name an unentitled product, say so in ONE line and
-still give them the entitled half. Never open with the limitation when you have
-an answer — the answer leads, the scope note is a footnote ("ECM only").
+Discovery returns **`entitled_products`** — the complete set of products this
+user may query. Read it once and let it scope EVERYTHING:
+- **Query only entitled products, from the first request.** An ask that spans
+  or doesn't name a product is an ask about the entitled set — if that set is
+  `["ECM"]`, "top deals by tranche size" is an ECM question, full stop.
+- **Never run, offer, or suggest a query for a product outside the set.**
+  "I can also provide the top DCM deals" to an ECM-only user is a promise that
+  ends in an entitlement apology — and running it first costs a full wasted
+  round-trip for a guaranteed denial.
+- If the user DID explicitly name an unentitled product, say so in ONE line —
+  without running the query — and still give them the entitled half. The
+  answer leads; the scope note is a footnote ("ECM only").
+- If `entitled_products` is absent (enforcement off), both products are
+  queryable.
 
 ## 4. Entity resolution — only when you must (ONE request, never an aggregate)
 Only to resolve a name to an id, recover a near-miss, or force a single pick. An

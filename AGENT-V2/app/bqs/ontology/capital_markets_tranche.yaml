@@ -11,7 +11,7 @@
 # capital_markets_order.
 #
 # Physical source: DGSTREAM.VW_TRANCHE_SUMMARY (UNION ALL ECM + DCM) via the
-# Starburst catalog dataglobe_oraas.dgstream.
+# Starburst catalog bds_dg_oraas.dgstream.
 #
 # ROUTING NOTE: this is the ONLY object that can answer syndicate, B&D,
 # identifier, coupon, tenor, rating, maturity and exchange questions. "Which
@@ -29,11 +29,11 @@ version: "3"
 dialect: trino
 
 connection:
-  catalog: dataglobe_oraas
+  catalog: bds_dg_oraas
   schema: dgstream
   sslmode: require
 
-base_view: dataglobe_oraas.dgstream.vw_tranche_summary
+base_view: bds_dg_oraas.dgstream.vw_tranche_summary
 
 grain: [product, deal_id, tranche_id]
 

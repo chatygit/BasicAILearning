@@ -1,7 +1,7 @@
 # Review 01 — `capital_markets_deal.yaml` (deal object)
 
 Reviewed from screenshots, 2026-08-07. Physical source
-`dataglobe_oraas.dgstream.vw_deal_summary`, `grain: [product, deal_id]`.
+`bds_dg_oraas.dgstream.vw_deal_summary`, `grain: [product, deal_id]`.
 
 ## Verdict
 

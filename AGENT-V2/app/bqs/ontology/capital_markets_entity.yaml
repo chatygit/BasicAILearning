@@ -51,7 +51,7 @@
 # QA numbers are an EXISTENCE PROOF, never a PROD size.
 #
 # Physical source: DGSTREAM.VW_ENTITY_SEARCH (UNION ALL of INVESTOR / ISSUER /
-# DEAL rows) via the Starburst catalog dataglobe_oraas.dgstream. This is a
+# DEAL rows) via the Starburst catalog bds_dg_oraas.dgstream. This is a
 # SQL-backed replacement for the old zen-API entity path FOR ECM/DCM.
 #
 # ENTITLEMENT: the request-level product filter injected by the entitlement gate
@@ -72,11 +72,11 @@ version: "3"
 dialect: trino
 
 connection:
-  catalog: dataglobe_oraas
+  catalog: bds_dg_oraas
   schema: dgstream
   sslmode: require
 
-base_view: dataglobe_oraas.dgstream.vw_entity_search
+base_view: bds_dg_oraas.dgstream.vw_entity_search
 
 # The NAME is part of the key — see the header table. entity_id alone is NOT
 # unique (12.6 rows per investor id on DCM), and both entity_id and entity_name

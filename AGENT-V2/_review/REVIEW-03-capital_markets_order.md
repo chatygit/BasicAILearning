@@ -1,6 +1,6 @@
 # Review 03 — `capital_markets_order.yaml` (order object)
 
-Source `dataglobe_oraas.dgstream.vw_order_detail`, `grain: [product, order_id]`.
+Source `bds_dg_oraas.dgstream.vw_order_detail`, `grain: [product, order_id]`.
 
 ## Verdict
 

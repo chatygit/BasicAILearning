@@ -97,7 +97,7 @@ class FakeFilter:
 
 @dataclass
 class FakeSpec:
-    base_view: str = "dataglobe_oraas.dgstream.vw_order_detail"
+    base_view: str = "bds_dg_oraas.dgstream.vw_order_detail"
 
 
 @dataclass

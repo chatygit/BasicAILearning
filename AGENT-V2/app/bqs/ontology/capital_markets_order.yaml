@@ -23,7 +23,7 @@
 # V22 passes; PROD is larger, so re-run the rows-vs-orders check there.)
 #
 # Physical source: DGSTREAM.VW_ORDER_DETAIL (UNION ALL ECM + DCM) via the
-# Starburst catalog dataglobe_oraas.dgstream.
+# Starburst catalog bds_dg_oraas.dgstream.
 #
 # WHAT CHANGED IN THE VIEW UNDER THIS OBJECT (all evidence-cited):
 #   * DCM order_allocation is REAL DATA NOW. It was NVL(OB_ORDER_MATCH_GROUP
@@ -50,11 +50,11 @@ version: "3"
 dialect: trino
 
 connection:
-  catalog: dataglobe_oraas
+  catalog: bds_dg_oraas
   schema: dgstream
   sslmode: require
 
-base_view: dataglobe_oraas.dgstream.vw_order_detail
+base_view: bds_dg_oraas.dgstream.vw_order_detail
 
 grain: [product, order_id]
 

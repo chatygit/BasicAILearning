@@ -1,6 +1,6 @@
 # Review 02 — `capital_markets_entity.yaml` (entity resolution object)
 
-Source `dataglobe_oraas.dgstream.vw_entity_search`, `grain: [entity_type, product,
+Source `bds_dg_oraas.dgstream.vw_entity_search`, `grain: [entity_type, product,
 entity_id]`, `max_limit: 50`.
 
 ## Verdict

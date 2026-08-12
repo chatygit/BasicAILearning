@@ -239,6 +239,40 @@ def test_import_failure_with_flag_off_stays_permissive():
     )
 
 
+# --------------------------------------------------------------------------
+# entitlement scope in discovery (added 2026-08-12)
+#
+# QA trace: an ECM-only caller asked for top Healthcare deals, got a correct
+# ECM answer — then the agent volunteered "the top DCM deals", ran the query,
+# was denied, and closed with an entitlement apology. The skill's rule (never
+# request the unentitled product) was unfollowable because nothing told the
+# agent WHAT was entitled. Discovery now carries the set.
+# --------------------------------------------------------------------------
+
+def test_discovery_carries_entitled_products():
+    result = mcpserver._attach_entitlement_scope({"error": False}, ["ECM"])
+    assert result["entitled_products"] == ["ECM"]
+    note = result["entitlement_note"]
+    assert "ONLY products" in note
+    assert "never run" in note.lower(), (
+        "the note must forbid RUNNING the unentitled query, not just "
+        "mentioning it — the wasted round-trip is the bug"
+    )
+
+
+def test_scope_not_attached_when_gate_inactive_or_error():
+    # Enforcement off -> entitled=[] -> key absent; the skill then treats both
+    # products as queryable (dev mode must not look like a one-product user).
+    assert "entitled_products" not in mcpserver._attach_entitlement_scope(
+        {"error": False}, []
+    )
+    # Error payloads pass through untouched — a denial needs no catalog decor.
+    denial = {"error": True, "code": "missing_soeid"}
+    assert "entitled_products" not in mcpserver._attach_entitlement_scope(
+        denial, ["ECM"]
+    )
+
+
 def test_ok_with_no_products_refuses_when_flag_on():
     _grant([])
     denial, entitled = mcpserver._entitlement_preflight()
@@ -255,6 +289,8 @@ CASES = [
     ("single asking other product denied", test_single_entitled_asking_other_product_is_denied),
     ("product ne rejected, not inverted", test_negated_product_filter_is_rejected_not_inverted),
     ("invalid product rejected, not widened", test_invalid_product_value_is_rejected_not_widened),
+    ("discovery carries entitled_products", test_discovery_carries_entitled_products),
+    ("scope absent when inactive/error", test_scope_not_attached_when_gate_inactive_or_error),
     ("import failure + flag on refuses", test_import_failure_with_enforcement_on_refuses),
     ("import failure + flag off permissive", test_import_failure_with_flag_off_stays_permissive),
     ("ok-with-no-products refuses", test_ok_with_no_products_refuses_when_flag_on),

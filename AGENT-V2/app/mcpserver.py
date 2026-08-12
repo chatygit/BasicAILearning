@@ -386,6 +386,35 @@ def _entitlement_preflight() -> tuple[dict | None, list[str]]:
     return None, entitled
 
 
+def _attach_entitlement_scope(result: dict, entitled: list[str]) -> dict:
+    """Put the caller's entitled products INTO the discovery response.
+
+    The skill has always said "scope to what the user is entitled to and never
+    request the unentitled product" — but nothing told the agent what that set
+    WAS, so it could only find out by paying a full LLM turn for a query the
+    gate was guaranteed to deny. Observed in QA 2026-08-12: an ECM-only caller
+    asked for top Healthcare deals, got a correct ECM answer, then the agent
+    volunteered "the top DCM deals", ran the query, and closed the chat with an
+    entitlement apology. With the scope in discovery the agent queries only
+    entitled products from the start and never offers the others.
+
+    Attached only when the gate is active (non-empty `entitled`); when
+    enforcement is off the key is absent and the skill treats both products as
+    queryable.
+    """
+    if entitled and isinstance(result, dict) and not result.get("error"):
+        result["entitled_products"] = list(entitled)
+        result["entitlement_note"] = (
+            "These are the ONLY products this user may query — treat the list "
+            "as complete. Scope every request to it from the start; never run "
+            "a query for, offer, or suggest a product outside it. If the user "
+            "explicitly names an unentitled product, say access does not cover "
+            "it in one line — WITHOUT running the query — and answer with the "
+            "entitled portion."
+        )
+    return result
+
+
 def _entitlement_gate(request: dict) -> dict | None:
     """Enforce ECM/DCM entitlement on a BQS request (mutates it in place).
 
@@ -540,15 +569,18 @@ if _BQS_AVAILABLE:
         # produce a refusal we could have given on the first one. It also warms
         # the entitlement cache, so the check inside run_bqs_query is a cache
         # hit and costs nothing.
-        denial, _entitled = _entitlement_preflight()
+        denial, entitled = _entitlement_preflight()
         if denial is not None:
             logger.info(
                 "discover_business_terms: refused early (code=%s)", denial.get("code")
             )
             return denial
         _log_repeat_discovery(_resolve_soeid(), source)
-        logger.info("discover_business_terms: source=%s", source)
-        return _get_bqs_service().discover(source)
+        logger.info("discover_business_terms: source=%s entitled=%s", source, entitled)
+        # The agent learns its product scope HERE, with the catalog — so it can
+        # scope multi-product asks to entitled products from the first request
+        # instead of discovering the boundary through a denied query.
+        return _attach_entitlement_scope(_get_bqs_service().discover(source), entitled)
 
     @mcp.tool()
     def run_bqs_query(
@@ -671,6 +703,22 @@ if _BQS_AVAILABLE:
             return denial
         logger.info("run_bqs_query: source=%s metric=%s", source, metric)
         return _get_bqs_service().run(request)
+
+
+# ---------------------------------------------------------------------------
+# Activism / Ownership: top institutional holders REST tool + analysis.
+# Registered from its own module (app/tools/top_holders_tool.py) so the tool's
+# agent-facing contract and the REST/analysis logic stay out of this file.
+# ---------------------------------------------------------------------------
+try:
+    try:
+        from tools.top_holders_tool import register_top_holders_tools
+    except ImportError:
+        from app.tools.top_holders_tool import register_top_holders_tools
+    register_top_holders_tools(mcp, resolve_soeid=_resolve_soeid)
+    logger.info("Activism top-holders tool registered (get_top_holders).")
+except Exception as _th_exc:  # noqa: BLE001 - optional tool must not break startup
+    logger.warning("Top-holders tool unavailable; skipping registration. Reason: %s", _th_exc)
 
 
 # Resource templates are parameterized resources that allow the client to request specific data.
