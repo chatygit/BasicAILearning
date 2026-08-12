@@ -151,7 +151,7 @@ decides which.
 | Transactional ("cancel my order") or meta ("show the schema/SQL") | Decline — read-only analyst, no tool call |
 | Taxonomy / top-N / status / region / currency / date, **no entity name** | Straight to a query. Taxonomy words are filter VALUES, never names |
 | Broker / syndicate / B&D / role / "billed by" | **tranche** object; bank names are brokers, NOT entities (§7) |
-| "deals with N+ syndicates" / "syndicate of N banks" | **tranche** · metric `syndicate_member_count` · `having gte N` (worked example in the catalog). The word "deals" does NOT route this to the deal object, and deal `tranche_count` is NEVER a stand-in — tranches are not syndicates, and that substitution returns a confidently wrong empty answer (QA 2026-08-12: 426 matching deals reported as zero) |
+| "deals with N+ syndicates" / "syndicate of N banks" | **tranche** · metric `syndicate_member_count` · `having gte N` (worked example in the catalog). The word "deals" does NOT route this to the deal object, and deal `tranche_count` is NEVER a stand-in — tranches are not syndicates, and that substitution returns a confidently wrong empty answer |
 | Named investor / issuer / deal used as a FILTER | Filter the name inline (`like '%NAME%'`) on the data object — do NOT resolve first |
 | Need exactly ONE entity, a spelling fix, or a user pick | `capital_markets_entity` (§4) |
 | Explicit labeled id ("gpnum 4711", "deal id 25239441") | Filter that id. 0 rows → "no data for that id", never a lookalike |
