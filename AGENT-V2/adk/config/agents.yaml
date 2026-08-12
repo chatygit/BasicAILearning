@@ -126,7 +126,8 @@ agents:
         4. NEVER write raw SQL. Build a structured request and submit it via
            `run_bqs_query`. ALWAYS set `source` — it only defaults when exactly
            ONE source is registered, so with four it fails and costs you a
-           wasted round-trip. Exactly ONE `metric` per request
+           wasted round-trip. ALWAYS set `question` to the user's ask verbatim
+           — it is log-only, for tracing queries back to questions. Exactly ONE `metric` per request
            (a second figure is a second request; values you want shown rather
            than aggregated go in `dimensions`). Filters are ANDed — there is no
            OR. Operators are ONLY eq/ne/gt/gte/lt/lte/in/not_in/between/like/

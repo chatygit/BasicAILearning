@@ -963,6 +963,38 @@ if MCPSERVER.exists():
           "[answer] mcpserver.py: _attach_entitlement_scope is defined but "
           "not CALLED from discover_business_terms — the scope never reaches "
           "the agent")
+    # ASK-IN-LOGS (added 2026-08-12): the user's prompt lives in the ADK layer
+    # and never reaches this server, so QA debugging meant matching queries to
+    # questions by timestamp alone. run_bqs_query now takes a log-only
+    # `question` and logs it FIRST, before identity/entitlement, so every
+    # query's log group opens with the ask that produced it.
+    check("question: str | None = None" in src
+          and 'ask=%r' in src,
+          "[debug] mcpserver.py: run_bqs_query lost the log-only `question` "
+          "field — queries in the logs can no longer be traced to the asks "
+          "that produced them")
+    check(has(SKILL, "include `question`")
+          and has(ROOT / "adk" / "config" / "agents.yaml", "ALWAYS set `question`"),
+          "[debug] SKILL.md/agents.yaml: the agent is no longer told to pass "
+          "`question` on every run_bqs_query — the server field goes unused "
+          "and log correlation dies")
+    # TRANCHES ARE NOT SYNDICATES (QA 2026-08-12): the agent answered "deals
+    # with 5+ syndicates" by filtering deal tranche_count >= 5 — a VALID query
+    # about a DIFFERENT question, reporting 426 matching deals as zero. The
+    # trap is pinned on every surface the routing touches.
+    check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_deal.yaml",
+              "TRANCHES ARE NOT SYNDICATES"),
+          "[trap] capital_markets_deal.yaml: tranche_count lost the "
+          "not-a-syndicate warning — 'deals with N+ syndicates' silently "
+          "becomes tranche_count >= N again, a confidently wrong empty answer")
+    check(has(SKILL, "tranches are not syndicates"),
+          "[trap] SKILL.md: the syndicate-count routing row is gone — the "
+          "word 'deals' will route syndicate-size asks to the deal object "
+          "again")
+    check(has(SKILL, "Never substitute a lookalike field"),
+          "[trap] SKILL.md: the no-lookalike-substitution self-check is gone "
+          "— when the routed object lacks the concept's field the agent will "
+          "swap in the nearest number instead of re-routing")
     # Both sides of the contract: the server EMITS the scope, the skill READS
     # it.
     check(has(SKILL, "entitled_products"),

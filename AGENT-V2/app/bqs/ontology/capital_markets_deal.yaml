@@ -192,7 +192,9 @@ metrics:
     numeric: true
     description: >-
       Total tranches across the matched deals (sum of the per-deal pre-computed
-      TRANCHE_COUNT). For tranche-grain analysis use capital_markets_tranche — and note
+      TRANCHE_COUNT). TRANCHES ARE NOT SYNDICATES — syndicate size questions are
+      capital_markets_tranche's syndicate_member_count, never this. For
+      tranche-grain analysis use capital_markets_tranche — and note
       the two do NOT reconcile: this roll-up is counted before the execution-status
       exclusion the tranche view applies (34,599 here against 33,010 rows on the
       ECM tranche object, V1 vs V26). Quote one figure, and say which object
@@ -487,7 +489,12 @@ filters:
     column: tranche_count
     operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
     description: >-
-      Pre-computed tranche count per deal. 'Deals with more than one tranche' →
+      Pre-computed tranche count per deal. TRANCHES ARE NOT SYNDICATES: 'deals
+      with N+ syndicates / N+ banks / syndicate of N' is capital_markets_tranche's
+      syndicate_member_count with a HAVING threshold — filtering tranche_count
+      for it returns a confidently wrong (usually empty) answer, because most
+      deals have 1-2 tranches while syndicates run much larger. Use THIS filter
+      only when the user says TRANCHE. 'Deals with more than one tranche' →
       gt 1, answered on THIS object with no hop to capital_markets_tranche. Project the
       dimension too so the number is visible. On ECM the roll-up arrives through
       a LEFT JOIN, so a deal with no tranche rows carries NULL, not 0, and a

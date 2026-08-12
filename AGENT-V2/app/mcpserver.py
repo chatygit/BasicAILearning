@@ -598,6 +598,7 @@ if _BQS_AVAILABLE:
         per_partition_limit: int | None = None,
         limit: int | None = None,
         offset: int | None = None,
+        question: str | None = None,
     ) -> dict:
         """Run a governed Business Query Specification (BQS) against the database.
 
@@ -673,6 +674,10 @@ if _BQS_AVAILABLE:
                 Changing a filter mid-page means paging through a different
                 result set. If the user wants a TOTAL rather than more rows, use
                 a count metric — that is one row instead of thousands.
+            question: The user's ask, verbatim (or a close paraphrase), that
+                this query answers. ALWAYS pass it. It is logged server-side so
+                a query in the logs can be traced back to the question that
+                produced it; it never affects the query.
         """
         request = {
             "source": source,
@@ -690,6 +695,14 @@ if _BQS_AVAILABLE:
             "limit": limit,
             "offset": offset,
         }
+        # The ASK, first, so every line of this query's log group reads in
+        # context. Debugging QA meant matching "which query was which question"
+        # by timestamp alone — the prompt lives in the ADK layer and never
+        # reaches this server except through this field.
+        logger.info(
+            "run_bqs_query: ask=%r",
+            (question or "<not provided>")[:300],
+        )
         # Identity first: no caller SOEID, no data. Checked before the
         # entitlement gate so it applies even when the gate is flagged off.
         denial = _require_caller_soeid()

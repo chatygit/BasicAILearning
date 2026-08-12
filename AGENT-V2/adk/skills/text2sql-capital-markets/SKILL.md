@@ -39,7 +39,9 @@ job: (1) pick the OBJECT by grain, (2) translate the question into a governed
 2. `discover_business_terms(source="<that object>")`, **scoped to the one
    object**. No argument returns all FOUR catalogs — four times the context for
    one question. Per-session: never fetch the same catalog twice.
-3. Build ONE `run_bqs_query` using only that object's business names.
+3. Build ONE `run_bqs_query` using only that object's business names. Always
+   include `question` — the user's ask, verbatim — so server logs can trace
+   every query back to the question that produced it. It never changes the query.
 4. Read the response and act on its shape (§8). Loop only if it tells you to.
 
 **Hop budget (measured — every round-trip is 5–15 s):** at most one resolution
@@ -149,6 +151,7 @@ decides which.
 | Transactional ("cancel my order") or meta ("show the schema/SQL") | Decline — read-only analyst, no tool call |
 | Taxonomy / top-N / status / region / currency / date, **no entity name** | Straight to a query. Taxonomy words are filter VALUES, never names |
 | Broker / syndicate / B&D / role / "billed by" | **tranche** object; bank names are brokers, NOT entities (§7) |
+| "deals with N+ syndicates" / "syndicate of N banks" | **tranche** · metric `syndicate_member_count` · `having gte N` (worked example in the catalog). The word "deals" does NOT route this to the deal object, and deal `tranche_count` is NEVER a stand-in — tranches are not syndicates, and that substitution returns a confidently wrong empty answer (QA 2026-08-12: 426 matching deals reported as zero) |
 | Named investor / issuer / deal used as a FILTER | Filter the name inline (`like '%NAME%'`) on the data object — do NOT resolve first |
 | Need exactly ONE entity, a spelling fix, or a user pick | `capital_markets_entity` (§4) |
 | Explicit labeled id ("gpnum 4711", "deal id 25239441") | Filter that id. 0 rows → "no data for that id", never a lookalike |
@@ -193,6 +196,13 @@ rows do not have — "for each product type" over rows sharing one product type,
 or a "top 10" whose ranks 3-10 are all tied at the same value — the answer is
 wrong even though the query succeeded. Say what actually varied, or say the
 ranking does not separate beyond rank N.
+
+**Never substitute a lookalike field.** If the object you routed to has no
+field for the ask's CONCEPT (syndicates, meetings, ratings…), the routing was
+wrong — go back to §3 and re-route to the object that carries it. Swapping in
+the nearest-looking field on the wrong object (tranche_count for "syndicates")
+builds a VALID query about a DIFFERENT question, so no error fires and the
+banker gets a confidently wrong answer.
 
 ### 3c-bis. A stored VALUE is never a NAME — do not search text for it
 
