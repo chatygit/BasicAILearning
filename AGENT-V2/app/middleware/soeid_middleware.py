@@ -49,15 +49,23 @@ CANDIDATE_ID_QUERY_PARAMS = [
     if q.strip()
 ]
 
-# Optional fallback user identifier. When the inbound request carries none of
-# the identity headers above, the server falls back to this value so downstream
-# entitlement checks ("no user identifier was provided") do not hard-fail.
-# Set MCP_FALLBACK_USER_ID to enable it (empty = disabled, original behaviour).
-FALLBACK_USER_ID = os.getenv("MCP_FALLBACK_USER_ID", "").strip()
+# There is deliberately NO server-side fallback identity. A fallback attributes
+# one person's queries AND one person's entitlements to every caller that
+# arrives without identity, and it hides a broken identity chain behind answers
+# that look correct — that is how a local default SOEID once scoped real query
+# results. An unidentified request must be refused (mcpserver returns
+# missing_soeid), never silently impersonated. If the old env var is still set
+# in a deployment, say so loudly and ignore it.
+if os.getenv("MCP_FALLBACK_USER_ID", "").strip():
+    logger.error(
+        "MCP_FALLBACK_USER_ID is set but IGNORED — server-side identity "
+        "fallbacks are forbidden. Identity must arrive on the request "
+        "(x-user-id header or ?user_id=). Remove the env var."
+    )
 
 
 def _resolve_user_id(request: Request) -> tuple[str, str]:
-    """Return (user_id, source). source is '' when the fallback was used."""
+    """Return (user_id, source). Both empty when the request carries no identity."""
     for name in CANDIDATE_ID_HEADERS:
         val = request.headers.get(name, "")
         if val:
@@ -66,7 +74,7 @@ def _resolve_user_id(request: Request) -> tuple[str, str]:
         val = request.query_params.get(name, "")
         if val:
             return val.strip(), f"?{name}"
-    return FALLBACK_USER_ID, ""
+    return "", ""
 
 
 class SoeidHeaderMiddleware(BaseHTTPMiddleware):
@@ -89,13 +97,11 @@ class SoeidHeaderMiddleware(BaseHTTPMiddleware):
                     sorted(request.query_params.keys()),
                 )
             logger.info(
-                "SoeidHeaderMiddleware: %s path=%s user_id=%s (via=%s, "
-                "used_fallback=%s)",
+                "SoeidHeaderMiddleware: %s path=%s user_id=%s (via=%s)",
                 request.method,
                 request.url.path,
                 soeid or "<empty>",
                 src or "<none>",
-                bool(soeid) and not src,
             )
         try:
             response = await call_next(request)

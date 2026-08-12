@@ -58,6 +58,10 @@ base_view: dataglobe_oraas.dgstream.vw_order_detail
 
 grain: [product, order_id]
 
+# One-line routing purpose for the no-argument discovery index.
+purpose: >-
+  Investors/accounts: demand, allocation, order/IOI type, meeting type, "top investors", "how many deals did X buy".
+
 max_limit: 5000
 query_timeout_seconds: 60
 
@@ -400,6 +404,33 @@ filters:
       This is CATEGORY — 'classification' is a different, untracked taxonomy
       (Strategic, Family Office, Retail, SWF, DSP, Index, Quant never appear
       here); see unsupported_intents.
+  investor_category_key:
+    column: investor_category_key
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    # No curated value list: the view passes the column through with no CASE
+    # mapping, so the key set is data-observed (QA), not structural — and a
+    # partial curated list would REPLACE the live DISTINCT probe in
+    # did_you_mean. suggestable alone gives ground-truth suggestions.
+    description: >-
+      ECM-ONLY (hard NULL on DCM). Coded investor category — the
+      punctuation-free twin of investor_category (LONG_ONLY, HEDGE_FUND,
+      OUTRIGHT…). FILTER here, PROJECT investor_category for display.
+  meeting_type_key:
+    column: meeting_type_key
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM-ONLY (hard NULL on DCM). Coded meeting type — the punctuation-free
+      twin of meeting_type (NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL,
+      SMALL_GROUP, GROUP_MEETING). FILTER here ('one-on-one' → ONE_TO_ONE, no
+      colon to get wrong), PROJECT meeting_type for display. "Other than 1:1"
+      is not_in [ONE_TO_ONE, NO_MEETING] — and say the no-meeting orders were
+      excluded.
   meeting_type:
     column: meeting_type
     products: ["ECM"]

@@ -740,6 +740,18 @@ if SOEID_MW.exists():
                   "x-authenticated-userid", "x-forwarded-user", "x-remote-user"):
         check(f'"{alias}"' in src,
               f"[python] soeid_middleware.py: lost header alias {alias}")
+    # No server-side fallback identity, ever (removed 2026-08-11). One env var
+    # made every anonymous caller query as one person WITH that person's
+    # entitlements. The var may still exist in a deployment chart, so the code
+    # must warn-and-ignore it, never honour it.
+    check("FALLBACK_USER_ID = os.getenv" not in src,
+          "[security] soeid_middleware.py: MCP_FALLBACK_USER_ID is honoured "
+          "again — a server-side fallback identity impersonates every "
+          "anonymous caller")
+    check("MCP_FALLBACK_USER_ID" in src,
+          "[security] soeid_middleware.py: the MCP_FALLBACK_USER_ID "
+          "warn-and-ignore guard is gone — a chart that still sets it would "
+          "change behaviour silently when someone re-adds support")
 
 # LATENCY: measured 2026-08-07 — one ask = 59s, of which run_bqs_query was 36s.
 # build_disambiguation costs a SECOND serial DB round-trip whenever an
@@ -775,9 +787,20 @@ for path, label in ((SKILL, "SKILL.md"), (AGENTS, "agents.yaml")):
           f"[latency] {label}: lost the 50-row display cap — an unbounded table "
           f"is the biggest single cost in an answer (measured 9,299 output "
           f"tokens / 67s for 189 rows)")
-    check(re.search(r"(?i)showing 50 of", text(path)),
-          f"[latency] {label}: lost the 'showing 20 of N' caption, which is what "
-          f"keeps the capped table an HONEST answer to 'list all'")
+    # The caption doctrine changed 2026-08-11: "showing 50 of N" was
+    # UNPRODUCIBLE — the response carries no total (row_count is what the query
+    # returned under its limit), so the old caption invited an invented N. The
+    # honest contract is: a stated total comes from a paired count-metric
+    # request, and without one the caption is "Showing 1-50 — more exist".
+    check(re.search(r"(?i)count-metric request", text(path)),
+          f"[latency] {label}: lost the count-metric pairing — a capped 'list "
+          f"all' answer has no honest way to state a total without it")
+    check(re.search(r"(?i)more exist", text(path)),
+          f"[latency] {label}: lost the 'Showing 1-50 — more exist' fallback "
+          f"caption — without it a capped listing invites an invented total")
+    check(re.search(r"(?i)never invent", text(path)),
+          f"[latency] {label}: lost the never-invent-an-N rule — row_count is "
+          f"not the number that match, and a guessed total is a wrong answer")
     check(re.search(r"(?i)(wide|8\\+ columns)", text(path)),
           f"[latency] {label}: lost the wide-table clause — 50 rows of an "
           f"8+ column table with pipe-list cells costs about twice 50 narrow "
@@ -898,14 +921,34 @@ if MCPSERVER.exists():
           "`scope` — it is back to injecting the full entitlement")
     check('"value": entitled[0]' not in src,
           "[python] mcpserver.py: the OLD full-entitlement injection is back")
-    # The three fail-open paths must stay visibly flagged until decided.
-    # Was 3. The RUN_MODE one is DECIDED and gone: the entitlement gate no
-    # longer consults the run mode at all. Two remain, both on import/response
-    # failure paths.
-    check(src.count("FAIL-OPEN (undecided)") == 2,
-          f"[python] mcpserver.py: expected 2 FAIL-OPEN markers, found "
-          f"{src.count('FAIL-OPEN (undecided)')} — the entitlement fail-open "
-          f"paths must stay visible until they are decided")
+    # The fail-open paths are DECIDED (2026-08-11): both fail CLOSED while
+    # ECM_DCM_ENTITLEMENT_FEATURE_FLAG is on, and stay permissive only when the
+    # developer explicitly turned enforcement off. Was 3, then 2, now 0 — the
+    # lifecycle ends here; a FAIL-OPEN marker reappearing means a regression.
+    check(src.count("FAIL-OPEN (undecided)") == 0,
+          f"[security] mcpserver.py: found "
+          f"{src.count('FAIL-OPEN (undecided)')} FAIL-OPEN markers — the "
+          f"entitlement paths were decided fail-closed on 2026-08-11; an "
+          f"undecided marker means that decision was reverted")
+    check(src.count("FAIL-CLOSED (decided 2026-08-11)") == 2,
+          "[security] mcpserver.py: expected 2 FAIL-CLOSED markers (import "
+          "failure + ok-with-no-products) — running unscoped while enforcement "
+          "is ON hands every caller data entitlement never checked")
+    check('"code": "entitlement_unavailable"' in src,
+          "[security] mcpserver.py: the entitlement_unavailable refusal is gone "
+          "— an import failure with enforcement ON must refuse, not run "
+          "unscoped")
+    # The gate rewrites product filters BEFORE the planner's operator
+    # allow-list sees them, so it must police op and value itself: `product ne
+    # 'ECM'` would otherwise be rewritten to `product eq 'ECM'` (the exact
+    # opposite), and a typo'd value would be stripped and widened to the full
+    # entitlement.
+    check("if op not in (\"eq\", \"in\"):" in src,
+          "[security] mcpserver.py: the gate no longer rejects non-eq/in "
+          "product filters — `product ne 'ECM'` inverts into `eq 'ECM'`")
+    check('"code": "invalid_product_value"' in src,
+          "[security] mcpserver.py: the invalid-product-value refusal is gone "
+          "— a typo'd product is stripped and scope widens to full entitlement")
     check("PREFER passing one name" in src,
           "[python] mcpserver.py: discover_business_terms docstring no longer "
           "steers the agent to a single source")
@@ -952,9 +995,25 @@ SUGGESTIONS = ROOT / "app" / "bqs" / "suggestions.py"
 check(SUGGESTIONS.exists(), "[python] app/bqs/suggestions.py is missing")
 if SUGGESTIONS.exists():
     src = text(SUGGESTIONS)
-    check("PERFORMANCE: this probe is UNSCOPED" in src,
-          "[python] suggestions.py: lost the note that the 0-row DISTINCT probe "
-          "carries no product/date filter — a bad guess is the SLOW path")
+    # The 0-row probe was UNSCOPED until 2026-08-11 (full-view DISTINCT scan
+    # per suggestable filter — a bad guess was the slow path). It is now scoped
+    # by the request's own WHERE minus ALL guessed fields; these pins keep it
+    # that way.
+    check("exclude_fields=exclude_fields" in src
+          and "plan=plan" in src,
+          "[latency] suggestions.py: the 0-row DISTINCT probe no longer passes "
+          "plan/exclude_fields — it is back to an unscoped full-view scan per "
+          "suggestable filter")
+    check("guessed_fields = {c.field for c in candidates}" in src,
+          "[latency] suggestions.py: the probe no longer excludes ALL guessed "
+          "fields together — a second bad guess zeroes out every probe")
+    check("def _is_same_value" in src and "_is_same_value(c.value" in src,
+          "[answer] suggestions.py: the same-value hint is gone — a 0-row "
+          "result whose guess IS a real value (curated enums, the gate-injected "
+          "product) tells the agent to retry the identical request")
+    check("Do NOT retry the same" in src,
+          "[answer] suggestions.py: the same-value hint no longer forbids "
+          "retrying the identical request")
     check("makes\n            #    disambiguation cost nothing" in src
           or "disambiguation cost nothing" in src,
           "[python] suggestions.py: lost the note that projecting the filtered "
@@ -1282,9 +1341,96 @@ check("_check_product_applicability" in text(PLANNER)
       "[product] planner.py: lost the per-product applicability check — an ECM-"
       "only field requested on DCM (or unscoped) now returns an empty result "
       "instead of a rejection, and the agent reads that as 'no data'")
+# CALL SITE, not just the def: the def's own signature contains the same
+# substring, so a presence check passes with the call deleted. Two occurrences
+# = definition + the call in plan_query.
+check(text(PLANNER).count("_check_product_applicability(req, spec)") >= 2,
+      "[product] planner.py: _check_product_applicability is defined but no "
+      "longer CALLED from plan_query — the rejection is dead code and the "
+      "dual-entitled empty-result bug is back")
 check("products" in text(ONTOLOGY_PY),
       "[product] ontology.py: the specs no longer carry `products` — per-product "
       "applicability is back to prose, which is what let the bug ship")
+
+# THE DATA SIDE OF THE SAME GUARD. The planner check is data-driven — it fires
+# only for fields whose YAML entry declares `products:`. Dropping one
+# declaration in a rewrite silently disables the rejection for that field while
+# every code check above stays green. Pin the load-bearing declarations, the
+# same way entity_id_column is pinned per field. Doctrine source is the view
+# DDL CAST(NULL) union branches (structural), never QA row counts.
+# Verified against the parsed ontology 2026-08-11 (OntologyRegistry ground
+# truth) — every entry here ACTUALLY declares products: today. If one is
+# missing tomorrow, someone deleted a declaration.
+_PRODUCT_PINS = [
+    ("capital_markets_deal.yaml", "equity_type", "ECM"),
+    ("capital_markets_deal.yaml", "offering_type", "ECM"),
+    ("capital_markets_deal.yaml", "deal_region", "ECM"),
+    ("capital_markets_deal.yaml", "execution_status", "ECM"),
+    ("capital_markets_order.yaml", "investor_category", "ECM"),
+    ("capital_markets_order.yaml", "investor_category_key", "ECM"),
+    ("capital_markets_order.yaml", "investor_region", "ECM"),
+    ("capital_markets_order.yaml", "meeting_type", "ECM"),
+    ("capital_markets_order.yaml", "meeting_type_key", "ECM"),
+    ("capital_markets_order.yaml", "order_type", "ECM"),
+    ("capital_markets_order.yaml", "ioi_type", "ECM"),
+    ("capital_markets_tranche.yaml", "product_type", "ECM"),
+    ("capital_markets_tranche.yaml", "exchange", "ECM"),
+    ("capital_markets_tranche.yaml", "syndicate_role", "ECM"),
+    ("capital_markets_tranche.yaml", "broker_code", "ECM"),
+    ("capital_markets_tranche.yaml", "product_class", "DCM"),
+    ("capital_markets_tranche.yaml", "coupon_type", "DCM"),
+    ("capital_markets_tranche.yaml", "coupon_freq", "DCM"),
+    ("capital_markets_tranche.yaml", "tenors", "DCM"),
+    ("capital_markets_tranche.yaml", "reg_category", "DCM"),
+    ("capital_markets_tranche.yaml", "securities_maturity", "DCM"),
+    ("capital_markets_tranche.yaml", "seniority", "DCM"),
+    ("capital_markets_tranche.yaml", "esg_bond", "DCM"),
+    ("capital_markets_tranche.yaml", "issuer_ratings", "DCM"),
+    ("capital_markets_tranche.yaml", "delivery_type", "DCM"),
+    ("capital_markets_tranche.yaml", "tranche_status", "DCM"),
+]
+for _fname, _field, _product in _PRODUCT_PINS:
+    _ysrc = text(ROOT / "app" / "bqs" / "ontology" / _fname)
+    # The declaration must sit inside the FIELD'S OWN entry: the window runs
+    # from the field key to the next 2-space-indented key, so a neighbour's
+    # products: line can never satisfy the pin (a flat char window did exactly
+    # that in this check's first draft).
+    _hit = False
+    for m in re.finditer(r"^  " + _field + r":", _ysrc, re.M):
+        _nxt = re.search(r"^  \w+:", _ysrc[m.end():], re.M)
+        _entry = _ysrc[m.start():m.end() + (_nxt.start() if _nxt else len(_ysrc))]
+        if re.search(r'products:\s*\[\s*"?' + _product + r'"?\s*\]', _entry):
+            _hit = True
+            break
+    check(_hit,
+          f"[product] {_fname}: field '{_field}' no longer declares "
+          f"products: [\"{_product}\"] — the planner rejection for this field "
+          f"is silently disabled and a dual-entitled (production) caller gets "
+          f"an empty result misread as 'no data'")
+
+# TOP-N-PER-GROUP (added 2026-08-11 — closed QA ask #17, the one true V1
+# architectural regression). The feature spans four layers; losing any one of
+# them strands the others.
+check("partition_by" in text(MODELS) and "per_partition_limit" in text(MODELS),
+      "[capability] models.py: partition_by/per_partition_limit are gone from "
+      "BQSRequest — top-N-per-group asks are back to being refused")
+check("bad_partition" in text(PLANNER),
+      "[capability] planner.py: the partition_by validation (code "
+      "bad_partition) is gone — malformed partition requests reach SQL")
+check("ROW_NUMBER() OVER (PARTITION BY" in text(ROOT / "app" / "bqs" / "sql_builder.py")
+      and "rank_in_group" in text(ROOT / "app" / "bqs" / "sql_builder.py"),
+      "[capability] sql_builder.py: the partitioned-rank wrapper is gone — "
+      "partition_by requests would plan but not compile")
+check("TOP-N-PER-GROUP" in text(ONTOLOGY_PY),
+      "[capability] ontology.py: discovery no longer teaches partition_by — "
+      "the agent cannot use a feature it never hears about")
+check("partition_by" in text(SKILL),
+      "[capability] SKILL.md: the top-N-per-group row no longer names "
+      "partition_by — the agent will fall back to refusing or to the global "
+      "top-N-then-dedupe trap")
+check('"partition_by": partition_by or []' in text(MCPSERVER),
+      "[capability] mcpserver.py: run_bqs_query no longer forwards "
+      "partition_by — the tool signature and the engine disagree")
 
 if FORMATTER.exists():
     src = text(FORMATTER)
@@ -1454,6 +1600,29 @@ for _py in sorted((ROOT / "app").rglob("*.py")):
             "imported by the gate so nothing else would catch it")
 
 # ---------------------------------------------------------------------------
+# EVERY test file gates. The runner used to be hand-wired per file, so a new
+# test file silently did not gate — it passed locally, was never executed
+# here, and its guarantees quietly lapsed. This block runs every
+# tests/test_*.py as a standalone subprocess (the repo convention: every test
+# file is dual-mode — pytest AND `python3 <file>` with stubs for absent
+# third-party packages). Files already wired individually above are skipped
+# so nothing runs twice.
+_INDIVIDUALLY_WIRED = {
+    "test_entitlement_scope.py", "test_soeid_resolution.py",
+    "test_cyberark_cache.py", "test_disambiguation_scope.py",
+    "test_entitlement_cache.py", "test_cross_object_error.py",
+    "test_response_paging.py",
+}
+import subprocess  # noqa: E402
+for _tf in sorted((ROOT / "tests").glob("test_*.py")):
+    if _tf.name in _INDIVIDUALLY_WIRED:
+        continue
+    _rc = subprocess.run([sys.executable, str(_tf)],
+                         capture_output=True, text=True).returncode
+    check(_rc == 0,
+          f"[python] {_tf.name} FAILED — run `python3 tests/{_tf.name}` "
+          f"directly to see which case regressed")
+
 print(f"\n{passes} checks passed, {len(failures)} failed\n")
 if failures:
     print("FAILURES")

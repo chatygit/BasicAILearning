@@ -51,6 +51,10 @@ base_view: dataglobe_oraas.dgstream.vw_deal_summary
 # Object grain (business names). One physical row per this combination.
 grain: [product, deal_id]
 
+# One-line routing purpose for the no-argument discovery index.
+purpose: >-
+  Deals: "list/how many deals", deal size/value/status, issuer, sector, offering type, equity type, per-deal roll-ups.
+
 max_limit: 5000
 query_timeout_seconds: 60
 

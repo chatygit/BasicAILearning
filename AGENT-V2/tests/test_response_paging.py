@@ -27,9 +27,21 @@ APP = Path(__file__).parent.parent / "app"
 if str(APP) not in sys.path:
     sys.path.insert(0, str(APP))
 
-from bqs.formatter import format_result, max_response_rows  # noqa: E402
+from bqs.formatter import (  # noqa: E402
+    format_result,
+    max_cell_chars,
+    max_response_chars,
+    max_response_rows,
+)
 
-_ENV = ["BQS_MAX_RESPONSE_ROWS", "BQS_DEFAULT_LIMIT"]
+_ENV = [
+    "BQS_MAX_RESPONSE_ROWS",
+    "BQS_DEFAULT_LIMIT",
+    # The char/cell budgets are env-tunable too; without save/restore a
+    # budget test would leak its tiny cap into every later test.
+    "BQS_MAX_RESPONSE_CHARS",
+    "BQS_MAX_CELL_CHARS",
+]
 _SAVED: dict[str, str | None] = {}
 
 
@@ -139,6 +151,76 @@ def test_paging_text_forbids_raising_the_limit():
 
 
 # --------------------------------------------------------------------------
+# the character budget — the SECOND, independent bound (added 2026-08-11)
+#
+# The row cap does not bound the PAYLOAD, because row width is not bounded:
+# the tranche object exposes nine VARCHAR2(32767) columns, so one legal row
+# can carry ~250k characters. Reported before the budget existed: "when the
+# SQL response is too large the LLM fails to parse" — a byte problem being
+# measured in rows.
+# --------------------------------------------------------------------------
+
+def wide_rows(n: int, width: int = 5000):
+    return [(f"Deal {i}", f"D{i:05d}", "x" * width) for i in range(n)]
+
+
+def test_char_budget_binds_before_row_cap():
+    os.environ["BQS_MAX_RESPONSE_CHARS"] = "20000"
+    res = fmt(wide_rows(50), limit=50)
+    assert 0 < res["returned_rows"] < 50, (
+        f"{res['returned_rows']} wide rows reached the model — the char "
+        f"budget never bound, which is the unparseable-response path"
+    )
+    # Whichever cap binds, the paging contract is IDENTICAL — the agent pages
+    # the same way and the withheld rows stay reachable.
+    assert res["truncated"] is True
+    assert res["next_offset"] == res["returned_rows"]
+    assert f"offset={res['returned_rows']}" in res["paging"]
+
+
+def test_single_over_budget_row_is_still_returned():
+    # The at-least-one-row rule (`if records and used + size > ...`). Without
+    # `records and`, one wide row yields ZERO rows plus truncated=True, which
+    # the agent reads as "no data" and reports "nothing found" to the banker —
+    # while claiming there is more.
+    os.environ["BQS_MAX_RESPONSE_CHARS"] = "1000"
+    res = fmt(wide_rows(1, width=50_000), limit=50)
+    assert res["returned_rows"] == 1, (
+        "a single row over the whole budget must be clipped and returned, "
+        "never dropped to zero"
+    )
+
+
+def test_over_long_cell_is_clipped_with_marker():
+    os.environ["BQS_MAX_CELL_CHARS"] = "200"
+    res = fmt(wide_rows(1, width=50_000), limit=50)
+    cell = res["rows"][0]["total_deal_size"]
+    assert len(cell) == 200, f"cell is {len(cell)} chars, budget is 200"
+    assert cell.endswith("…[truncated]"), (
+        "the marker is the agent's signal to stop zipping pipe-list pairs "
+        "(declared in SKILL.md and the tranche ontology)"
+    )
+    # Non-string cells pass through untouched — clipping is for text only.
+    assert res["rows"][0]["deal_name"] == "Deal 0"
+
+
+def test_row_count_stays_truthful_under_char_clipping():
+    os.environ["BQS_MAX_RESPONSE_CHARS"] = "20000"
+    res = fmt(wide_rows(50), limit=50)
+    assert res["row_count"] == 50, "row_count is what the QUERY returned"
+    assert res["returned_rows"] == len(res["rows"]), (
+        "returned_rows is what the MODEL got"
+    )
+
+
+def test_bad_char_budgets_fall_back_to_defaults():
+    os.environ["BQS_MAX_RESPONSE_CHARS"] = "not-a-number"
+    os.environ["BQS_MAX_CELL_CHARS"] = "-5"
+    assert max_response_chars() == 120_000
+    assert max_cell_chars() == 4_000
+
+
+# --------------------------------------------------------------------------
 # planner: the SQL side (pydantic/yaml stubbed when absent)
 # --------------------------------------------------------------------------
 
@@ -208,6 +290,11 @@ CASES = [
     ("partial page is the end", test_partial_page_is_the_end),
     ("page 2 continues numbering", test_second_page_continues_the_numbering),
     ("paging text forbids bigger limit", test_paging_text_forbids_raising_the_limit),
+    ("char budget binds before row cap", test_char_budget_binds_before_row_cap),
+    ("single over-budget row still returned", test_single_over_budget_row_is_still_returned),
+    ("over-long cell clipped with marker", test_over_long_cell_is_clipped_with_marker),
+    ("row_count truthful under char clipping", test_row_count_stays_truthful_under_char_clipping),
+    ("bad char budgets fall back", test_bad_char_budgets_fall_back_to_defaults),
     ("omitted limit is a small page", test_omitted_limit_is_a_small_page_not_max_limit),
     ("OFFSET is coerced, not interpolated", test_offset_clause_is_inherited_and_coerced),
     ("trino inherits offset_clause", test_trino_inherits_offset_clause),

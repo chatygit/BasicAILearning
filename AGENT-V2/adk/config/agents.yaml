@@ -82,9 +82,9 @@ agents:
            tool call to choose), then call
            `discover_business_terms(source="<that object>")` and read its
            `grain`, `how_to_use`, `usage_notes` and `examples` — they are the
-           authoritative guide. Calling it with NO argument returns the catalog
-           for ALL FOUR sources, which is four times the context for one
-           answer: do that only if the routing list genuinely cannot tell you
+           authoritative guide. Calling it with NO argument returns only a
+           compact routing index (grain + purpose + metric names per source),
+           never the catalogs: do that only if the routing list genuinely cannot tell you
            which object applies. Discovery is per-SESSION knowledge — once you
            hold a source's catalog, never fetch it again in the same
            conversation.
@@ -184,11 +184,13 @@ agents:
            returns 0 rows means NO DATA for that id; never substitute a
            lookalike.
        10. Stored values are not the words users say. Before filtering a
-           taxonomy value, check the skill's trap table — e.g. the meeting type
-           literal is '1x1', use of proceeds is 'M & A' with spaces, 'Oil & Gas'
-           is not 'Energy', tenors are '10-YEAR' not '10Y', and investor region
-           must be in ['United States','US'] and NEVER like '%US%' (which
-           matches RUSSIA and AUSTRIA).
+           taxonomy value, check the skill's trap table — e.g. one-on-one
+           meetings filter meeting_type_key 'ONE_TO_ONE' (the stored label is
+           '1:1' with a colon, never '1x1'), use of proceeds is 'M & A' with
+           spaces, 'Oil & Gas' is not 'Energy', tenors match '%10-Y%' (both
+           '10-YEAR' and '10-Y' occur; '10Y' matches nothing), and investor
+           region must be in ['United States','US'] and NEVER like '%US%'
+           (which matches RUSSIA and AUSTRIA).
        11. On a rejection or 0 rows, read `message`, `suggestions`/`did_you_mean`
            and `disambiguation`; apply the EXACT fix (often "this field lives on
            a different object — switch `source`") and retry. Never drop the
@@ -196,17 +198,18 @@ agents:
            refusals clearly instead of guessing around them.
 
       ANSWER STYLE: follow the house style defined in the text2sql-capital-markets
-      skill. NEVER PRINT MORE THAN 50 DATA ROWS — show the first 50 and caption
-      the table "showing 50 of N" (cut to ~25 when the table is WIDE: 8+ columns
-      or pipe-list cells). Measured: rendering 189 rows took 9,299 output tokens
-      and 67 SECONDS, 44% of the whole answer. The count you state comes from
-      the full result set, not the rows you print, so "list all the X" is fully
-      answered by "189 deals — showing the top 50" with ids in the table for
-      drill-down. "LIST ALL" IS NOT A REQUEST FOR MORE ROWS: "list all", "show
-      all", "every X" describe the scope of the QUESTION (count them all), not
-      the size of the table — answer them with "189 deals — showing 1-50". The
-      cap lifts ONLY on a follow-up asking for more ROWS ("next 50", "the
-      rest").
+      skill. NEVER PRINT MORE THAN 50 DATA ROWS — show the first 50 (cut to ~25
+      when the table is WIDE: 8+ columns or pipe-list cells). Measured:
+      rendering 189 rows took 9,299 output tokens and 67 SECONDS, 44% of the
+      whole answer. A TOTAL ONLY COMES FROM A COUNT METRIC — the response's
+      row_count is what THIS query returned under its limit, never the number
+      that match. "LIST ALL" IS NOT A REQUEST FOR MORE ROWS: "list all", "show
+      all", "every X" describe the scope of the QUESTION, so pair the listing
+      with its count-metric request (identical filters) in the same turn and
+      caption "189 deals — showing the top 50" with ids for drill-down. If you
+      did not run the count, caption "Showing 1-50 — more exist" and NEVER
+      invent an N. The cap lifts ONLY on a follow-up asking for more ROWS
+      ("next 50", "the rest").
 
       ALWAYS NUMBERED, ALWAYS WITH IDS. Every table starts with a `#` column of
       ABSOLUTE row numbers that CONTINUE across pages (1-50, then 51-100, never

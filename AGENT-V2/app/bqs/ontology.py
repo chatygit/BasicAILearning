@@ -251,6 +251,11 @@ class OntologySpec(BaseModel):
     # dedup_key — the row is already unique. Declared in business names so it can
     # be shown to the agent without leaking physical columns.
     grain: list[str] = Field(default_factory=list)
+    # One routing line for the no-argument discovery index: what asks this
+    # object answers. Mirrors the routing table in agents.yaml rule 2 — the
+    # index exists so the agent can pick ONE source without paying for four
+    # full catalogs (~36k tokens) in a single tool result.
+    purpose: str = ""
     # Optional governed availability-date query. When set, the server fetches the
     # latest as_of_date and returns it on every query for this source.
     as_of_date: Optional[AsOfDateSpec] = None
@@ -304,6 +309,13 @@ class OntologySpec(BaseModel):
             "To rank/sort, use 'order': [{\"field\", \"direction\"}] where "
             "'field' is the metric or a selected dimension, and set 'limit' for "
             "'top N' questions (e.g. order desc by the metric, limit 10).",
+            "TOP-N-PER-GROUP ('the biggest X in EACH Y', 'top 3 investors per "
+            "deal'): set 'partition_by' to the grouping dimension(s) — a "
+            "subset of 'dimensions' — and 'per_partition_limit' to N (default "
+            "1). Rows are ranked inside each group by 'order' (default: the "
+            "metric descending) and the response carries each row's "
+            "rank_in_group. Keep the identifying dimensions (names, ids) OUT "
+            "of partition_by.",
             "For a filter that lists a 'values' catalog, pass one of those exact "
             "values. For a filter marked entity_name, match by name with op "
             "'like' and value '%NAME%' (case-insensitive on the server).",

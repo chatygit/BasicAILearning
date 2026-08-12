@@ -118,34 +118,57 @@ def _rank(guess: str, choices: list[str]) -> list[dict]:
 
 
 def _build_distinct_probe(
-    spec: "OntologySpec", column: str, stem: str, dialect: "BaseDialect"
+    spec: "OntologySpec",
+    column: str,
+    stem: str,
+    dialect: "BaseDialect",
+    plan=None,
+    exclude_fields: set[str] | None = None,
 ) -> tuple[str, dict]:
-    """Build a bounded, read-only DISTINCT probe. Guess stem is bound as param."""
+    """Build a bounded, read-only DISTINCT probe. Guess stem is bound as param.
+
+    PERFORMANCE + TRUTH: the probe is SCOPED with the plan's WHERE minus every
+    suggestable guess (``exclude_fields``), the same way the disambiguation
+    probe reuses _build_where. The governed scope (product/entitlement, dates,
+    computed/derived filters) pushes down, so the probe is fast AND only offers
+    values that exist WITHIN the asked scope — an unscoped probe used to cost a
+    full-view DISTINCT scan per suggestable filter (measured 34.89s on the
+    scoped analog's predecessor) and could suggest values from the product the
+    caller never asked for. All guesses are excluded together because excluding
+    only the probed one would let a second bad guess zero out every probe.
+    """
     col = dialect.quote_ident(column)
     base = dialect.quote_ident(spec.base_view)
     params: dict = {}
-    where = ""
+    if plan is not None:
+        scope = _build_where(plan, dialect, params, exclude_fields=exclude_fields)
+    else:
+        scope = ""
     if stem:
         params["stem"] = f"%{stem}%"
         # Case-insensitive contains match on the loosened stem.
-        where = f" WHERE UPPER({col}) LIKE {dialect.placeholder(0, 'stem')}"
+        pred = f"UPPER({col}) LIKE {dialect.placeholder(0, 'stem')}"
     else:
-        where = f" WHERE {col} IS NOT NULL"
+        pred = f"{col} IS NOT NULL"
+    where = f"{scope} AND {pred}" if scope else f" WHERE {pred}"
     sql = (
         f'SELECT DISTINCT {col} AS "value" FROM {base}{where} '
         f"ORDER BY 1 {dialect.limit_clause(_MAX_DISTINCT)}"
     )
-    # PERFORMANCE: this probe is UNSCOPED — it carries neither the request's
-    # product filter nor its date range, and UPPER(col) defeats a plain index.
-    # So a 0-row query costs a full-view DISTINCT scan PER suggestable filter,
-    # on top of the original query. An unhelpful guess is the expensive path.
     return sql, params
+
+
+def _is_same_value(guess: str, top_choice: str) -> bool:
+    """True when the top-ranked real value IS the agent's guess (case/wildcard
+    insensitive) — i.e. the guess was right and something ELSE zeroed the rows."""
+    return guess.strip().strip("%").upper() == top_choice.strip().upper()
 
 
 def build_suggestions(
     req: BQSRequest,
     spec: "OntologySpec",
     dialect: "BaseDialect",
+    plan=None,
 ) -> list[dict]:
     """Return a list of suggestion blocks (one per suggestable filter guess).
 
@@ -155,6 +178,8 @@ def build_suggestions(
     candidates = collect_candidates(req, spec)
     if not candidates:
         return []
+    # All guesses come out of the probe scope together — see _build_distinct_probe.
+    guessed_fields = {c.field for c in candidates}
 
     suggestions: list[dict] = []
     for c in candidates:
@@ -165,7 +190,10 @@ def build_suggestions(
                 choices = [str(v) for v in fs.values]
             else:
                 stem = _stem(c.value)
-                sql, params = _build_distinct_probe(spec, c.column, stem, dialect)
+                sql, params = _build_distinct_probe(
+                    spec, c.column, stem, dialect,
+                    plan=plan, exclude_fields=guessed_fields,
+                )
                 _cols, rows = execute(spec, BuiltQuery(sql=sql, params=params), dialect)
                 choices = [str(r[0]) for r in rows if r and r[0] is not None]
             if not choices:
@@ -173,17 +201,31 @@ def build_suggestions(
             ranked = _rank(c.value, choices)
             if not ranked:
                 continue
+            if _is_same_value(c.value, ranked[0]["value"]):
+                # The guess is a REAL value (curated enums land here — probes
+                # can't fix those — and so does the gate-injected product
+                # filter). Retrying the identical request would just pay the
+                # query again: the zero rows came from the OTHER constraints.
+                hint = (
+                    f"'{c.value}' is a real value on '{c.field}' — the 0 rows "
+                    f"come from your OTHER constraints (date window, product, "
+                    f"or another filter), not this one. Do NOT retry the same "
+                    f"request; widen or drop one of the other constraints, or "
+                    f"tell the user nothing matches in that scope."
+                )
+            else:
+                hint = (
+                    f"0 rows matched '{c.value}' on '{c.field}'. The values "
+                    f"above are real values from the data — retry with one "
+                    f"of them (exact spelling/case)."
+                )
             suggestions.append(
                 {
                     "field": c.field,
                     "your_value": c.value,
                     "did_you_mean": [r["value"] for r in ranked],
                     "scored": ranked,
-                    "hint": (
-                        f"0 rows matched '{c.value}' on '{c.field}'. The values "
-                        f"above are real values from the data — retry with one "
-                        f"of them (exact spelling/case)."
-                    ),
+                    "hint": hint,
                 }
             )
         except Exception as e:  # noqa: BLE001 - suggestions are best-effort

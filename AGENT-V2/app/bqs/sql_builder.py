@@ -98,11 +98,24 @@ def _filter_predicate(i: int, f, dialect: BaseDialect, params: dict) -> str:
     return f"{lhs} {_OP_SQL[f.op]} {_bind(dialect.placeholder(0, pname))}"
 
 
-def _build_where(plan: QueryPlan, dialect: BaseDialect, params: dict) -> str:
-    """Build the WHERE clause, mutating `params` with bound values."""
+def _build_where(
+    plan: QueryPlan,
+    dialect: BaseDialect,
+    params: dict,
+    exclude_fields: set[str] | None = None,
+) -> str:
+    """Build the WHERE clause, mutating `params` with bound values.
+
+    ``exclude_fields`` drops the named plain filters (by business name) from
+    the clause. The zero-row suggestion probe uses it to keep the request's
+    governed scope (product, dates, computed/derived filters) while removing
+    the guessed values it is probing alternatives FOR — excluding only one
+    guess at a time would let a second bad guess zero out every probe.
+    """
     where_parts: list[str] = [
         _filter_predicate(i, f, dialect, params)
         for i, f in enumerate(plan.filters)
+        if not (exclude_fields and f.business_name in exclude_fields)
     ]
 
     # Computed (regex) filters — pattern is always a bound parameter.
@@ -216,6 +229,37 @@ def build_sql(plan: QueryPlan, dialect: BaseDialect) -> BuiltQuery:
                     f"{hexpr} {_OP_SQL[h.op]} {dialect.placeholder(0, pname)}"
                 )
             sql += " HAVING " + " AND ".join(having_parts)
+
+    if plan.partition:
+        # ---- Top-N-per-group wrapper --------------------------------------
+        # Wrap the finished aggregate (either path — both end in output
+        # aliases) and rank rows INSIDE each group. The agent never writes a
+        # window function: it named business fields, the server owns the SQL.
+        # rank_in_group is projected on purpose — it lets the agent caption
+        # "#1 / #2 within <group>" without recomputing anything.
+        p = plan.partition
+        part_cols = ", ".join(f'q."{a}"' for a in p.by)
+        rank_orders = [f'q."{o.column_alias}" {o.direction}' for o in plan.orders]
+        # Deterministic tiebreak: ROW_NUMBER breaks ties arbitrarily, so two
+        # runs could crown different "winners". Append the non-partition
+        # aliases the request already projects.
+        ranked_aliases = {o.column_alias for o in plan.orders} | set(p.by)
+        for _sel, _grp, alias in group_cols:
+            if alias not in ranked_aliases:
+                rank_orders.append(f'q."{alias}" ASC')
+        rn = (
+            f"ROW_NUMBER() OVER (PARTITION BY {part_cols} "
+            f"ORDER BY {', '.join(rank_orders)}) AS \"rank_in_group\""
+        )
+        sql = (
+            f"SELECT * FROM (SELECT q.*, {rn} FROM ({sql}) q) ranked "
+            f'WHERE "rank_in_group" <= {int(p.limit)}'
+        )
+        # Groups together, winners first inside each.
+        final_order = [f'"{a}" ASC' for a in p.by] + ['"rank_in_group" ASC']
+        sql += " ORDER BY " + ", ".join(final_order)
+        sql += " " + dialect.limit_clause(plan.limit)
+        return BuiltQuery(sql=sql, params=params)
 
     if plan.orders:
         # ORDER BY references the OUTPUT ALIAS, so every sort field must be the

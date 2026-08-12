@@ -41,6 +41,12 @@ class SortDirection(str, Enum):
 class BQSFilter(BaseModel):
     """A single filter expressed in business names."""
 
+    # extra="forbid" on every sub-model: a typo'd key ("val" for "value") must
+    # be a corrective ValidationError, not silently ignored — pydantic's
+    # default leaves value=None, which renders `col = NULL` and returns 0 rows
+    # that read as "no data".
+    model_config = {"extra": "forbid"}
+
     field: str = Field(..., description="Business dimension/filter name.")
     op: FilterOperator = Field(..., description="Comparison operator.")
     value: Any = Field(
@@ -59,6 +65,8 @@ class BQSFilter(BaseModel):
 
 
 class BQSOrder(BaseModel):
+
+    model_config = {"extra": "forbid"}
     field: str = Field(..., description="Business metric or dimension name.")
     direction: SortDirection = SortDirection.ASC
 
@@ -71,6 +79,8 @@ class BQSHaving(BaseModel):
     multi-currency deals (metric 'currency_count' gt 1). Only comparison
     operators are allowed; the metric is any metric name from discovery.
     """
+
+    model_config = {"extra": "forbid"}
 
     metric: str = Field(..., description="Metric name to threshold (from discovery).")
     op: FilterOperator = Field(..., description="Comparison operator (eq/ne/gt/gte/lt/lte).")
@@ -91,6 +101,8 @@ class BQSComputedFilter(BaseModel):
     The agent supplies only the computed-filter name and, when required, a
     business token (e.g. "citi"). The server owns the SQL/regex entirely.
     """
+
+    model_config = {"extra": "forbid"}
 
     name: str = Field(..., description="Computed filter name from discovery.")
     token: Optional[str] = Field(
@@ -156,6 +168,22 @@ class BQSRequest(BaseModel):
         "to the source's default_time_dimension when omitted.",
     )
     order: list[BQSOrder] = Field(default_factory=list)
+    partition_by: list[str] = Field(
+        default_factory=list,
+        description="Top-N-PER-GROUP: the subset of `dimensions` that defines "
+        "the groups. Each group keeps only its top `per_partition_limit` rows, "
+        "ranked by `order` (default: the metric descending), and the response "
+        "carries each row's rank_in_group. Example — biggest deal per sector: "
+        "dimensions [sector, deal_name, deal_id], partition_by [sector], "
+        "per_partition_limit 1. Keep identifying dimensions OUT of "
+        "partition_by or every group is a single row.",
+    )
+    per_partition_limit: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Rows kept per partition_by group (default 1). Only valid "
+        "together with partition_by.",
+    )
     limit: Optional[int] = Field(
         default=None, ge=1, description="Max rows to return."
     )

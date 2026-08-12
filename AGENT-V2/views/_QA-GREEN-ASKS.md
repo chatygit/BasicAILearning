@@ -23,13 +23,14 @@ no joins · order on output aliases only · no window functions · no
 | 3 | ECM warrants deals priced in the last year | **SUPPORTED** | deal | `deal_type` does not exist; the ask routes to `equity_type like %WARRANT%`. Everything else is declared. |
 | 12 | List all deals with use of proceeds "Legal Redemptions", ECM, 2026 | **SUPPORTED** | deal | `Legal Redemptions` is a stored ECM literal; `use_of_proceeds eq` is declared. |
 | 15 | Security identifiers for the tranches of deal "Suneel999" | **SUPPORTED** | tranche | Named deal goes inline as a `deal_name like` filter — no entity hop. `tranche_count` needs no product filter. |
-| 17 | The top deal for each product type by largest tranche size (ECM, 2026) | **BLOCKED** | tranche | Top-N-per-group needs a partitioned rank. No window function exists anywhere in the SQL path. |
+| 17 | The top deal for each product type by largest tranche size (ECM, 2026) | **SUPPORTED** | tranche | `partition_by [product_type]` + `per_partition_limit 1` (shipped 2026-08-11) — one request, `rank_in_group` returned. |
 | 20 | Top 5 deals by tranche size — ECM Healthcare — with identifiers | **SUPPORTED-2HOP** | tranche | Ranking deals and listing their tranches are two grains; one request cannot do both. |
 | 24 | Syndicate members on deal "RM_CONTRA_Sender" | **SUPPORTED** | tranche | All syndicate lists are declared dimensions on one object at one grain. |
 | 25 | Deals where Citi was bill-and-deliver in 2026 | **SUPPORTED-2HOP** | tranche | Listing the deals and counting them are two metrics. |
 | 27 | Which of those Citi B&D 2026 deals were SOLO on every tranche | **SUPPORTED-2HOP** | tranche | "Every tranche" is a set difference across two populations; `HAVING` cannot express it. Needs 2 requests beyond #25. |
 
-**Counts — SUPPORTED 5 · SUPPORTED-2HOP 3 · BLOCKED 1.**
+**Counts — SUPPORTED 6 · SUPPORTED-2HOP 3 · BLOCKED 0** (#17 unblocked by
+`partition_by`, 2026-08-11).
 
 ---
 
@@ -402,9 +403,30 @@ works on **ECM only**. #27 is ECM-scoped, so it does not bite here.
 
 ---
 
-## 3. BLOCKED — Ask #17
+## 3. SUPPORTED (was BLOCKED) — Ask #17
 
 **Ask:** the top deal for each ECM product type by largest tranche size, 2026.
+
+**RESOLVED 2026-08-11 — `partition_by` shipped.** The "only complete general
+fix" from the table below landed: `BQSRequest` now carries
+`partition_by: list[str]` + `per_partition_limit: int` (models.py), the planner
+validates them (proper subset of projected dimensions, no offset, default
+ranking = metric desc — code `bad_partition` on misuse) and `sql_builder` wraps
+the finished aggregate in `ROW_NUMBER() OVER (PARTITION BY … ORDER BY …)` with
+deterministic tiebreaks, projecting `rank_in_group`. One request:
+
+```
+source capital_markets_tranche · metric largest_tranche_size
+dimensions [product_type, deal_name, deal_id]
+partition_by [product_type] · per_partition_limit 1
+filters: product eq ECM + the 2026 pricing window
+```
+
+The NULL-bucket rule below still applies (a NULL `product_type` group appears
+and must be reported as "product type not recorded"). The 2-hop below is now
+only a fallback recipe; `tranche_size` gained `in` regardless.
+
+<details><summary>Historical analysis (pre-fix)</summary>
 
 **Missing capability:** a partitioned rank. `ROW_NUMBER() OVER (PARTITION BY
 product_type ORDER BY tranche_size DESC)` — or `QUALIFY`, or a correlated
@@ -446,6 +468,8 @@ recorded" — never dropped, never merged into another label.
 | Add `in` to `tranche_size` operators (tranche.yaml:322-324) | **ontology** | ~5 min, 1 token | Upgrades the partial 2-hop to a **complete** one: `tranche_size in [M_1…M_K]` returns exactly the K maxima regardless of where they sit in the global size ordering. Does not create the 2-hop — it removes its only real limit. |
 | Add a `top_n_per_group` entry to `unsupported_intents` + a per-group-ranking rule in SKILL.md (which today has none — grepped) | **prompt** | ~30 min | Stops the agent inventing a global top-N and calling it per-group. **Label it prompt, not server guard:** `planner._check_unsupported` (`:201-221`) matches an intent id against *field names only*, and no agent sends `top_n_per_group` as a field name, so it can never fire. |
 | A `rank`/`partition_by` field on `BQSRequest` plus window emission in `sql_builder` | **planner** | days, new SQL shape + dialect work + tests | The only complete general fix. Not justified by one ask. |
+
+</details>
 
 ---
 

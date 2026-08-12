@@ -37,6 +37,10 @@ base_view: dataglobe_oraas.dgstream.vw_tranche_summary
 
 grain: [product, deal_id, tranche_id]
 
+# One-line routing purpose for the no-argument discovery index.
+purpose: >-
+  Tranches: coupon, tenor, seniority, ESG, ratings, identifiers (CUSIP/ISIN), exchange, product type/class, syndicate/broker/B&D, sole-managed, tranche/issue size, per-currency DCM money.
+
 max_limit: 5000
 query_timeout_seconds: 60
 
@@ -274,7 +278,7 @@ dimensions:
   delivery_type: {column: delivery_type, products: ["DCM"], description: "DCM. Legal delivery type — a SCALAR now, only three values: '144A', 'RegS' (no space), '3(a)(2) Exempt'. Use only when the user says 'delivery'."}
   esg_bond: {column: esg_bond, products: ["DCM"], description: "DCM. GREEN / SUSTAINABILITY / SOCIAL. NULL means not an ESG-labelled bond."}
   issuer_ratings: {column: issuer_ratings, products: ["DCM"], description: "DCM. COMMA-separated ratings, each rendered 'AGENCY - VALUE(OUTLOOK)' and ordered by agency. The AGENCY NAME IS IN THE STRING, so match the agency directly. This is the only place a rating outlook is exposed. Never a pipe list."}
-  securities_maturity: {column: securities_maturity, products: ["DCM"], description: "DCM. Maturity DATE (a real date, the only one on this object). Future maturities are normal — never treat them as invalid or filter them out."}
+  securities_maturity: {column: securities_maturity, products: ["DCM"], description: "DCM. Maturity date stored as TEXT in an unmeasured format (the deployed column is character data — the 2026-08-11 DATE conversion was reverted on ORA-01790). Safe to PROJECT and show; sorting or comparing it is a STRING operation until the stored format is measured, so caveat any ordering by maturity. NEVER use as time_dimension for time_grain — date_trunc on text fails. Future maturities are normal — never treat them as invalid or filter them out."}
   tranche_status: {column: tranche_status, products: ["DCM"], description: "DCM. Tranche lifecycle status — the SAME source column as deal_status on DCM, so the two are identical there. NULL on every ECM row; for ECM status use deal_status, which is on THIS object."}
 
 # -------------------------------- FILTERS -----------------------------------
@@ -321,7 +325,9 @@ filters:
       dimension is how 'by target market' is answered.
   tranche_size:
     column: tranche_size
-    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    # `in` supports the pinpoint recipe "these exact K sizes" (e.g. matching
+    # per-group maxima back to their rows); numeric values bind cleanly.
+    operators: [gt, gte, lt, lte, between, eq, in, is_null, is_not_null]
     description: >-
       ROW-LEVEL tranche-size threshold, on a real NUMBER. Pair with product, and
       with currency for DCM — the unit differs by product. NULL SEMANTICS, and
@@ -732,11 +738,18 @@ filters:
   securities_maturity:
     column: securities_maturity
     products: ["DCM"]
-    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    # Range operators are deliberately ABSENT: the deployed column is character
+    # data in an unmeasured format (the DATE conversion was reverted on
+    # ORA-01790), so gt/gte/lt/lte/between would be string comparisons that can
+    # be silently wrong on a core banker question ("maturing after 2030").
+    # Re-add them only after the stored format is measured ISO-lexical.
+    operators: [eq, is_null, is_not_null]
     description: >-
-      DCM. A real DATE, so range and between comparisons work as dates (they
-      used to be string comparisons). Future maturities are normal — never treat
-      them as invalid or filter them out. NULL on every ECM row.
+      DCM. Maturity stored as TEXT in an unmeasured format — range/between are
+      not offered because string comparison can be silently wrong. To answer
+      "maturing after YYYY", use the tenors filter or project
+      securities_maturity and let the user read the values; say why. NULL on
+      every ECM row.
   pricing_date:
     column: pricing_ts
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
@@ -847,6 +860,19 @@ usage_notes:
   - Ids (deal_id, tranche_id, gfcid) are TEXT — quote them and keep leading zeros.
 
 examples:
+  - question: Top deal in EACH product type by tranche size (top-N-per-group)
+    request:
+      source: capital_markets_tranche
+      # partition_by = the grouping dimension only; the identifying dimensions
+      # (deal_name, deal_id) stay OUT of it, or every group is one row.
+      # Ranking defaults to the metric desc; each row returns rank_in_group.
+      # For "top 3 per type", set per_partition_limit: 3.
+      metric: largest_tranche_size
+      dimensions: [product_type, deal_name, deal_id]
+      partition_by: [product_type]
+      per_partition_limit: 1
+      filters:
+        - {field: product, op: eq, value: ECM}
   - question: Security identifiers for a deal, per tranche
     request:
       source: capital_markets_tranche
@@ -932,20 +958,22 @@ examples:
         - {field: pricing_date, op: gte, value: "2025-01-01"}
         - {field: pricing_date, op: lt, value: "2026-01-01"}
       order: [{field: tranche_count, direction: desc}, {field: tranche_id, direction: asc}]
-  - question: Settled DCM tranches over USD 1bn maturing after 2030
+  - question: Settled long-dated DCM tranches over USD 1bn
     request:
       source: capital_markets_tranche
       # deal_status is on THIS object for both products — no hop, and the
       # case-insensitive filter matches both 'Settled' and any case variant.
+      # For "maturing after YYYY": securities_maturity is TEXT in an unmeasured
+      # format, so there is no range filter on it — approximate with tenors
+      # (long-dated = 10-Y and up) or PROJECT securities_maturity so the user
+      # reads the actual dates, and say which you did.
       metric: total_tranche_size
-      dimensions: [deal_name, tranche_name, tranche_id, currency, securities_maturity, deal_status]
+      dimensions: [deal_name, tranche_name, tranche_id, currency, securities_maturity, tenors, deal_status]
       filters:
         - {field: product, op: eq, value: DCM}
         - {field: deal_status, op: eq, value: "Settled"}
         - {field: currency, op: eq, value: USD}
         - {field: tranche_size, op: gt, value: 1000000000}
-        # securities_maturity is a real DATE now, so this is a date comparison.
-        - {field: securities_maturity, op: gte, value: "2031-01-01"}
       order: [{field: total_tranche_size, direction: desc}, {field: tranche_id, direction: asc}]
       limit: 25
   - question: 10-year green bonds priced in 2025 with no tenor gaps

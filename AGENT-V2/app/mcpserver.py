@@ -308,10 +308,34 @@ def _entitlement_preflight() -> tuple[dict | None, list[str]]:
     if denial is not None:
         return denial, []
     if not _ENTITLEMENT_AVAILABLE:
-        # FAIL-OPEN (undecided): import failure = NO GATE AT ALL. Every query runs
-        # unscoped. Should this fail closed in non-local mode?
+        if _ecm_entitlement_enabled():
+            # FAIL-CLOSED (decided 2026-08-11): enforcement is ON but its
+            # component failed to import at startup, so no caller's products can
+            # be established. Running unscoped here would hand every caller
+            # ECM+DCM data that entitlement was never checked for — the exact
+            # outcome the gate exists to prevent. Mirror identity_unavailable:
+            # a server fault the agent must report, not retry around.
+            logger.error(
+                "ENTITLEMENT: refusing data request — enforcement is enabled "
+                "but the entitlement component failed to import at startup. "
+                "This is a server deployment fault."
+            )
+            return {
+                "error": True,
+                "code": "entitlement_unavailable",
+                "message": (
+                    "This server cannot check entitlements because its "
+                    "entitlement component failed to load at startup. No data "
+                    "can be returned until it is fixed. This is a server fault "
+                    "— do not retry and do not reword the question; report it "
+                    "to the user plainly."
+                ),
+            }, []
+        # Flag explicitly OFF: the developer opted out of enforcement (their
+        # .env, announced at startup) — run unscoped as they asked.
         logger.warning(
-            "ENTITLEMENT: gate UNAVAILABLE (import failed) — query runs UNSCOPED"
+            "ENTITLEMENT: gate unavailable (import failed) and enforcement "
+            "flag is OFF — query runs unscoped by explicit configuration"
         )
         return None, []
     soeid = _resolve_soeid()
@@ -333,13 +357,31 @@ def _entitlement_preflight() -> tuple[dict | None, list[str]]:
             ),
         }, []
     entitled = [p for p in _ALLOWED_PRODUCTS if p in set(gate.get("entitled_products") or [])]
-    if not entitled:
-        # FAIL-OPEN (undecided): gate said ok but no products - let the query proceed unscoped
-        logger.warning(
-            "ENTITLEMENT: soeid=%s passed the gate with NO entitled products "
-            "(raw=%s) — query runs UNSCOPED",
+    if not entitled and _ecm_entitlement_enabled():
+        # FAIL-CLOSED (decided 2026-08-11): the service said ok but named no
+        # recognisable product. Unreachable today (the service denies first) —
+        # kept defensive, because "ok with nothing" must never widen to
+        # "everything" while enforcement is on.
+        logger.error(
+            "ENTITLEMENT: DENIED soeid=%s — gate passed with NO entitled "
+            "products (raw=%s)",
             soeid or "<empty>",
             gate.get("entitled_products"),
+        )
+        return {
+            "error": True,
+            "code": "no_entitled_products",
+            "message": (
+                "Your entitlements could be checked but cover neither ECM nor "
+                "DCM, so no Capital Markets data can be returned. Report this "
+                "to the user plainly — rewording the question will not help."
+            ),
+        }, []
+    if not entitled:
+        logger.warning(
+            "ENTITLEMENT: soeid=%s has no entitled products and enforcement "
+            "flag is OFF — query runs unscoped by explicit configuration",
+            soeid or "<empty>",
         )
     return None, entitled
 
@@ -359,16 +401,48 @@ def _entitlement_gate(request: dict) -> dict | None:
     # the entitlement call — and it keeps the preflight's return a 2-tuple.
     soeid = _resolve_soeid()
 
-    # Products the user explicitly asked for (via any product filter).
+    # Products the user explicitly asked for (via a product filter).
+    #
+    # Only eq/in count as "asking for a product". Anything else is rejected
+    # HERE, before the strip-and-inject below, because the gate rewrites
+    # product filters before the planner's operator allow-list ever sees them:
+    # left alone, `product ne 'ECM'` would collect requested=["ECM"] and be
+    # rewritten to `product eq 'ECM'` — the exact opposite of the ask. An
+    # unrecognised value ("EMC", "equity") must also stop the request: stripping
+    # it and injecting the full entitlement answers a product-scoped question
+    # with ALL the caller's data and no sign anything went wrong.
     requested: list[str] = []
     for f in request.get("filters") or []:
         if str(f.get("field", "")).strip().lower() != "product":
             continue
+        op = str(f.get("op", "eq")).strip().lower()
+        if op not in ("eq", "in"):
+            return {
+                "error": True,
+                "code": "operator_not_allowed",
+                "message": (
+                    f"Filter 'product' supports only eq or in — got '{op}'. "
+                    "There are exactly two products, ECM and DCM: to exclude "
+                    "one, filter eq to the other."
+                ),
+            }
         val = f.get("value")
         vals = val if isinstance(val, (list, tuple)) else [val]
-        for v in vals:
-            v = str(v or "").strip().upper()
-            if v in _ALLOWED_PRODUCTS and v not in requested:
+        for raw in vals:
+            v = str(raw or "").strip().upper()
+            if v not in _ALLOWED_PRODUCTS:
+                return {
+                    "error": True,
+                    "code": "invalid_product_value",
+                    "message": (
+                        f"'{str(raw or '').strip()}' is not a product. The only "
+                        "product values are ECM and DCM. Words like equity, "
+                        "convertible or bond are equity_type/product_type/"
+                        "product_class values, not products — re-check the "
+                        "catalog and re-send."
+                    ),
+                }
+            if v not in requested:
                 requested.append(v)
 
     if requested and not any(p in entitled for p in requested):
@@ -449,13 +523,15 @@ if _BQS_AVAILABLE:
         names.
 
         Args:
-            source: Optional business data source name. If omitted, returns the
-                catalog for ALL enabled sources — read each source's 'how_to_use'
-                and 'usage_notes' to pick the right one for the question.
+            source: Optional business data source name. If omitted, returns a
+                compact ROUTING INDEX (per source: grain, purpose, metric
+                names) plus the date anchor — NOT the full catalogs. Pick one
+                source from the index and call again with it.
                 PREFER passing one name: the four ECM/DCM objects are
                 'capital_markets_deal', 'capital_markets_tranche', 'capital_markets_order' and
-                'capital_markets_entity', and fetching all four costs four times the
-                context needed to answer one question.
+                'capital_markets_entity'; only the single-source call returns
+                the full catalog (operators, values, examples) you need to
+                build a request.
         """
         # Entitlement is checked HERE, on the first tool the agent calls, not
         # only on run_bqs_query. An unentitled or unidentified caller used to
@@ -486,6 +562,8 @@ if _BQS_AVAILABLE:
         time_grain: str | None = None,
         time_dimension: str | None = None,
         order: list[dict] | None = None,
+        partition_by: list[str] | None = None,
+        per_partition_limit: int | None = None,
         limit: int | None = None,
         offset: int | None = None,
     ) -> dict:
@@ -512,6 +590,8 @@ if _BQS_AVAILABLE:
           - Pick ONE metric (the number to compute) from the chosen source.
           - "top N": order=[{"field": <metric>, "direction": "desc"}], limit=N,
             and add a dimension to see the ranked entities.
+          - "top X in EACH Y" (per-group winners): partition_by=[Y] with
+            per_partition_limit=N — see the partition_by arg below.
           - A full calendar year: two date filters, op "gte" on Jan 1 and op "lt"
             on Jan 1 of the next year.
           - Apply any mandatory scoping filters the source's usage_notes call out.
@@ -540,6 +620,15 @@ if _BQS_AVAILABLE:
             time_dimension: Date dimension to bucket for time_grain (defaults to the
                 source's default date dimension).
             order: List of {"field", "direction"} sort objects.
+            partition_by: TOP-N-PER-GROUP ("biggest deal in EACH sector", "top
+                3 investors per deal"): the dimension(s) defining the groups —
+                a subset of `dimensions`. Each group keeps its top
+                `per_partition_limit` rows, ranked by `order` (default: the
+                metric descending), and every returned row carries its
+                rank_in_group. Keep identifying dimensions (names, ids) OUT of
+                partition_by. Cannot be combined with offset.
+            per_partition_limit: Rows kept per group (default 1). Only valid
+                with partition_by.
             limit: Max rows to return. Omitting it gives a small default page
                 (50), NOT everything — ask for more rows with `offset`, never by
                 raising the limit. The response is capped independently of this,
@@ -564,6 +653,8 @@ if _BQS_AVAILABLE:
             "time_grain": time_grain,
             "time_dimension": time_dimension,
             "order": order or [],
+            "partition_by": partition_by or [],
+            "per_partition_limit": per_partition_limit,
             "limit": limit,
             "offset": offset,
         }

@@ -70,13 +70,42 @@ class DomainQueryService:
         if source:
             spec = self.registry.get(source)
             return {"error": False, "sources": [spec.discovery()]}
-        catalogs = [
-            self.registry.get(s).discovery() for s in self.registry.list_sources()
-        ]
-        # NOTE: the no-argument path returns ALL catalogs — and because
-        # registry.get() reloads, it also re-scans the ontology directory once
-        # per source. Passing `source` is both smaller and cheaper.
-        return {"error": False, "sources": catalogs}
+        # No source: a compact ROUTING INDEX, never four full catalogs. The
+        # full four-catalog response measured ~145k chars (~36k tokens) in ONE
+        # tool result that then sits in the uncached context for every later
+        # turn. The index carries exactly what routing needs — grain, purpose,
+        # metric names — plus one shared date anchor; the agent then fetches
+        # the ONE catalog it actually wants.
+        index: list[dict] = []
+        shared: dict = {}
+        for s in self.registry.list_sources():
+            spec = self.registry.get(s)
+            if not shared:
+                full = spec.discovery()
+                shared = {
+                    "current_date": full["current_date"],
+                    "date_anchor": full["date_anchor"],
+                }
+            index.append(
+                {
+                    "source": spec.source,
+                    "grain": list(spec.grain),
+                    "purpose": spec.purpose,
+                    "metrics": sorted(spec.metrics),
+                }
+            )
+        return {
+            "error": False,
+            **shared,
+            "routing_index": index,
+            "hint": (
+                "This is a routing index, NOT the catalogs. Pick the ONE "
+                "source whose grain and purpose fit the question, then call "
+                "discover_business_terms(source=<that name>) for its full "
+                "catalog (field names, operators, values, examples). Do not "
+                "fetch more than one catalog per question."
+            ),
+        }
 
     # -- query ----------------------------------------------------------------
     @staticmethod
@@ -176,7 +205,7 @@ class DomainQueryService:
                 # suggestions so it can self-correct without a new tool.
                 from bqs.suggestions import build_suggestions
 
-                sugg = build_suggestions(req, spec, dialect)
+                sugg = build_suggestions(req, spec, dialect, plan=plan)
                 if sugg:
                     result["suggestions"] = sugg
             else:
@@ -251,11 +280,13 @@ class DomainQueryService:
             self._enrich_result(result, req, spec, dialect, len(rows), plan)
             t_enrich = time.perf_counter()
             # enrich is NOT free: build_suggestions runs a DISTINCT probe per
-            # suggestable filter on 0 rows, and build_disambiguation runs one
-            # bounded DISTINCT probe whenever an entity-name filter's field was
-            # not projected as a dimension. Both are serial, after the answer is
-            # already in hand — so a large `enrich` here means an extra
-            # round-trip the agent could have avoided by projecting that field.
+            # suggestable filter on 0 rows (scoped by the request's own WHERE
+            # minus the guessed values, so pushdown keeps each probe bounded),
+            # and build_disambiguation runs one bounded DISTINCT probe whenever
+            # an entity-name filter's field was not projected as a dimension.
+            # Both are serial, after the answer is already in hand — so a large
+            # `enrich` here means an extra round-trip the agent could have
+            # avoided by projecting that field.
             logger.info(
                 "BQS timing source=%s metric=%s rows=%d | build=%.2fs "
                 "execute=%.2fs format=%.2fs enrich=%.2fs total=%.2fs",

@@ -78,6 +78,18 @@ class ResolvedOrder:
 
 
 @dataclass
+class ResolvedPartition:
+    """Top-N-per-group: keep `limit` ranked rows inside each group of `by`.
+
+    `by` holds OUTPUT ALIASES (business names), validated as a proper subset of
+    the projected dimensions. The ranking order is plan.orders (defaulted to
+    the metric descending when the request names none)."""
+
+    by: list[str]
+    limit: int
+
+
+@dataclass
 class ResolvedHaving:
     """A resolved post-aggregation threshold (HAVING) on a metric."""
 
@@ -110,6 +122,7 @@ class QueryPlan:
     having: list[ResolvedHaving] = field(default_factory=list)
     time_grain: ResolvedTimeGrain | None = None
     orders: list[ResolvedOrder] = field(default_factory=list)
+    partition: ResolvedPartition | None = None
     limit: int = 0
     offset: int = 0
 
@@ -132,9 +145,27 @@ def _validate_filter(spec: OntologySpec, f: BQSFilter) -> ResolvedFilter:
             code="operator_not_allowed",
         )
     # Shape checks for value-carrying operators.
+    #
+    # value=None must be rejected here, not passed through: the model defaults
+    # value to None, so a typo'd key ({"val": ...}) validates silently, and the
+    # dialect renders None as the literal NULL — `col = NULL` is never true, so
+    # the banker gets "no data" for a request whose real defect was a typo.
+    if f.value is None and f.op.value not in ("is_null", "is_not_null"):
+        raise BQSError(
+            f"Filter '{f.field}' with op '{f.op.value}' requires a 'value'. "
+            f"Use is_null/is_not_null to test for missing data.",
+            code="bad_filter_value",
+        )
     if f.op.value in ("in", "not_in") and not isinstance(f.value, (list, tuple)):
         raise BQSError(
             f"Filter '{f.field}' with op '{f.op.value}' needs a list value.",
+            code="bad_filter_value",
+        )
+    if f.op.value in ("in", "not_in") and not f.value:
+        raise BQSError(
+            f"Filter '{f.field}' with op '{f.op.value}' got an EMPTY list — "
+            f"that renders IN () which no warehouse accepts. Send the values, "
+            f"or drop the filter.",
             code="bad_filter_value",
         )
     if f.op.value == "between" and (
@@ -509,18 +540,74 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
         # promises two runs order rows the same way, so page 2 can repeat or
         # skip rows from page 1. A GROUP BY guarantees distinct dimension
         # tuples, so ordering by every projected dimension is fully
-        # deterministic — do that rather than refuse.
+        # deterministic — do that rather than refuse. The time-grain bucket is
+        # part of the group too: without it, a monthly series inside one
+        # dimension value ties on every sort key and pages non-deterministically
+        # — silently wrong trend data, the worst kind.
         orders = [
             ResolvedOrder(column_alias=d.business_name, direction="ASC") for d in dims
         ]
+        if time_grain:
+            orders.append(
+                ResolvedOrder(
+                    column_alias=time_grain.business_name, direction="ASC"
+                )
+            )
         if not orders:
             raise BQSError(
                 "offset needs a deterministic sort, and this request has no "
-                "dimensions to order by. An aggregate with no dimensions "
-                "returns a single row, so there is nothing to page through — "
-                "drop the offset.",
+                "dimensions and no time_grain to order by. An aggregate with "
+                "neither returns a single row, so there is nothing to page "
+                "through — drop the offset.",
                 code="offset_without_order",
             )
+
+    partition = None
+    if req.per_partition_limit and not req.partition_by:
+        raise BQSError(
+            "per_partition_limit only makes sense with partition_by — name "
+            "the dimension(s) that define the groups.",
+            code="bad_partition",
+        )
+    if req.partition_by:
+        projected = [d.business_name for d in dims]
+        if time_grain:
+            projected.append(time_grain.business_name)
+        allowed = set(projected)
+        bad = [p for p in req.partition_by if p not in allowed]
+        if bad:
+            raise BQSError(
+                f"partition_by fields {bad} must also be projected — add them "
+                f"to `dimensions` (or use the time_grain bucket). Projected: "
+                f"{sorted(allowed)}",
+                code="bad_partition",
+            )
+        if len(set(req.partition_by)) >= len(allowed):
+            raise BQSError(
+                "partition_by lists EVERY projected dimension, so each group "
+                "is a single row and nothing gets ranked. Partition by the "
+                "grouping dimension(s) only (e.g. sector) and keep the "
+                "identifying ones (deal_name, deal_id) out of partition_by.",
+                code="bad_partition",
+            )
+        if offset:
+            raise BQSError(
+                "offset cannot be combined with partition_by — ranked groups "
+                "are not a pageable stream. Narrow the partitions with "
+                "filters, or raise per_partition_limit.",
+                code="bad_partition",
+            )
+        if not orders:
+            # The natural reading of "top per group" ranks by the metric.
+            orders = [
+                ResolvedOrder(
+                    column_alias=metric.business_name, direction="DESC"
+                )
+            ]
+        partition = ResolvedPartition(
+            by=list(dict.fromkeys(req.partition_by)),
+            limit=req.per_partition_limit or 1,
+        )
 
     return QueryPlan(
         spec=spec,
@@ -532,6 +619,7 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
         having=having,
         time_grain=time_grain,
         orders=orders,
+        partition=partition,
         limit=limit,
         offset=offset,
     )
