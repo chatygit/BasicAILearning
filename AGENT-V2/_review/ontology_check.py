@@ -995,6 +995,27 @@ if MCPSERVER.exists():
           "[trap] SKILL.md: the no-lookalike-substitution self-check is gone "
           "— when the routed object lacks the concept's field the agent will "
           "swap in the nearest number instead of re-routing")
+    # CONVERTIBLE PREFERRED (QA 2026-08-13): three product_type literals, no
+    # working LIKE stem ('Pfd' has no 'pref'; '%CONV%' drags in the bonds) —
+    # and a class ask ranked by a tranche metric must stay one request with
+    # product_type PROJECTED, since the tranche view carries no equity_type.
+    check(has(SKILL, "no working stem"),
+          "[trap] SKILL.md: the convertible-preferred no-stem rule is gone — "
+          "'%PREF%' silently misses Conv. Pfd and the class undercounts")
+    check(has(SKILL, "PROJECTION instruction"),
+          "[trap] SKILL.md: lost the 'with product type = projection' rule — "
+          "the agent will flip the filter axis instead of adding a column")
+    # ONE ASK = ONE TABLE (QA 2026-08-13): deal_size + total_allocation live
+    # on different objects; the agent ran both and presented two disjoint
+    # ranked lists. The merge is client-side: second metric fetched for the
+    # ranking's exact ids and merged by id.
+    check(has(SKILL, "ONE TABLE"),
+          "[answer] SKILL.md: the two-objects-one-table merge rule is gone — "
+          "a two-metric ask degrades into two independently-ranked lists")
+    check(has(ROOT / "adk" / "config" / "agents.yaml",
+              "ONE ask = ONE\n      table"),
+          "[answer] agents.yaml: the one-ask-one-table clause is gone from "
+          "the fallback answer style")
     # Both sides of the contract: the server EMITS the scope, the skill READS
     # it.
     check(has(SKILL, "entitled_products"),

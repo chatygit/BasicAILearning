@@ -198,3 +198,20 @@ Verify each against the code before acting — some may rot as the repo moves.
 ### [low/M] Declared unsupported_intents are mostly dead server-side — only field-shaped ids can ever fire
 - File: `AGENT-V2/app/bqs/planner.py`  (auditor: planner-capability)
 - Proposed: Extend UnsupportedIntentSpec (ontology.py:189-199) with optional `trigger_fields: list[str]` and `trigger_products: list[str]`; _check_unsupported fires when a request references any trigger_field while scoped to a trigger_product (reuse the product-scope derivation from _check_product_applicability). Keep `patterns` discovery-only. Ontology model + ~15 planner lines + yaml keys per intent; verify ontology_check stays green (it is textual, no import needed).
+
+## View-batch candidates (queued 2026-08-13 — next 2-4 day view deploy cycle)
+
+### Denormalize EQUITY_TYPE onto VW_TRANCHE_SUMMARY
+QA 2026-08-13: "top 5 Convertible Preferred deals by tranche size with product
+type" cannot filter the class axis on the tranche object — EQUITY_TYPE exists
+only on VW_DEAL_SUMMARY (view-columns.md col 10). Interim doctrine (shipped):
+apply the class as its product_type subtype in-list (Conv. Pfd / ADR Conv. Pref
+/ Mandatory Convertible Preferred Stock) and project product_type. That proxy
+holds only for the convertible-preferred class; other equity classes ranked by
+tranche metrics have no product_type equivalent. The structural fix follows the
+established "deal attributes never force a hop" pattern (sector, deal_status,
+use_of_proceeds already denormalized down): ECM branch carries
+ETX.EQUITY_TYPE, DCM branch CAST(NULL AS VARCHAR2(4000)) — plus ontology
+dimension/filter (products: ["ECM"]), a products-pin in the gate, and a
+class-word-map update to prefer the real column. Pairs with the existing order
+view round-2 list (bnd_bank, deal_sharing_type, offering_type).

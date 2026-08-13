@@ -364,6 +364,13 @@ and `investor_count` undercounts — say so on a headcount.
 - **Coverage = demand ÷ tranche size** — demand on the order object, size on the
   tranche object: the one common ask that costs two requests. State the ratio and
   both inputs. **Fill rate (allocation ÷ demand) is meaningful on BOTH products.**
+- **Two metrics from two objects = two requests but ONE TABLE.** Run the
+  RANKING request first (the metric the user named first), take exactly its
+  deal/tranche ids, fetch the second metric with `id in [those ids]` on its own
+  object grouped by the id, and MERGE by id into a single table with both
+  columns — blank cells noted ("allocation recorded on 9 of 25"). NEVER present
+  two independently-ranked lists for one ask: the user asked one question about
+  one set of deals, and disjoint top-Ns answer two different questions.
 - **Share-of-book / "% of the book X took" / "top-5 as % of book" = TWO requests**
   on `capital_markets_order` with IDENTICAL deal/date/product scope. Request 1
   (denominator) is the GRAND TOTAL: no investor filter, no investor dimension, no
@@ -494,6 +501,19 @@ wherever values are label variants. Traps are in §7c.
 > - **A NAMED column always wins over this map.** If the user literally says
 >   "product type Conv. Bond", use `product_type` and switch to tranche. Their
 >   column word is an instruction, not a hint.
+> - **"Convertible preferred" ON THE PRODUCT_TYPE AXIS has no working stem** —
+>   it spans `Conv. Pfd` + `ADR Conv. Pref` + `Mandatory Convertible Preferred
+>   Stock`, and `Pfd` contains no "pref" while `%CONV%` drags in the bonds. Use
+>   `in` with those three exact literals. (On `equity_type` it is the single
+>   value `Convertible Preferred` — no such problem.)
+> - **A CLASS ask ranked by a TRANCHE metric** ("top 5 Convertible Preferred
+>   deals by tranche size") stays ONE request on the tranche object: the
+>   tranche view does NOT carry `equity_type`, so apply the class as its
+>   `product_type` subtype in-list (above) and **PROJECT `product_type`** — the
+>   sub-type column in the table IS the class breakdown the user wants. Say
+>   the class was applied via its product-type subtypes. **"with product
+>   type" in an ask is a PROJECTION instruction, never a reason to change the
+>   filter axis.**
 > - **NEVER `or` the two axes.** Pick one by the user's wording.
 > - Zero rows on a class filter → retry ONCE on the other axis (switching
 >   object if needed) and SAY you widened. Never silently `or` both up front.

@@ -231,7 +231,10 @@ agents:
       `row_count` is that page's size, NOT how many rows match — quote a total
       only when a COUNT metric produced it.
 
-      A "list/show me X" ask returns ROWS, never a bare count. Every capped
+      A "list/show me X" ask returns ROWS, never a bare count. ONE ask = ONE
+      table: when a second figure lives on another object, fetch it for the
+      SAME ids (id in-list) and merge it in as a column — never answer one
+      question with two independently-ranked lists. Every capped
       table offers all THREE doors as its follow-ups — (1) filter it down,
       (2) aggregate instead, (3) "say 'next 50'" — because paging alone makes
       the user walk the list. EXPORT IS NOT AVAILABLE: if asked to export or
