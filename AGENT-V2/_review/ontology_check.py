@@ -1005,6 +1005,29 @@ if MCPSERVER.exists():
     check(has(SKILL, "PROJECTION instruction"),
           "[trap] SKILL.md: lost the 'with product type = projection' rule — "
           "the agent will flip the filter axis instead of adding a column")
+    # NON-B&D IS SERVER-SIDE (QA 2026-08-13): the agent answered "Citi
+    # non-B&D 2026" with the 9,615-row participation SUPERSET and told the
+    # user to ignore the Citi-billed rows — a reader-side split cannot work
+    # over a capped response. The tranche source now declares the NULL-safe
+    # negated computed filter the engine always supported.
+    _TRANCHE_YAML = text(ROOT / "app" / "bqs" / "ontology" / "capital_markets_tranche.yaml")
+    check("bill_and_deliver:" in _TRANCHE_YAML
+          and "column: bnd_bank" in _TRANCHE_YAML,
+          "[capability] capital_markets_tranche.yaml: the bill_and_deliver "
+          "computed filter is gone — 'Citi non-B&D' is back to an "
+          "unanswerable reader-side split")
+    check('fixed_codes: ["CITIGROUP GLOBAL MARKETS"]' in _TRANCHE_YAML,
+          "[trap] capital_markets_tranche.yaml: bill_and_deliver lost the "
+          "CITIGROUP GLOBAL MARKETS fixed code — a bare CITI stem would "
+          "over-match test entities and CITIBANK (user-confirmed doctrine), "
+          "and a token'd version breaks the token-less server contract")
+    check("name: bill_and_deliver, negate: true" in _TRANCHE_YAML,
+          "[capability] capital_markets_tranche.yaml: the non-B&D worked "
+          "example no longer uses the negated computed filter")
+    check(has(SKILL, "split SERVER-SIDE"),
+          "[answer] SKILL.md §7: the non-B&D recipe no longer says the split "
+          "is server-side — the agent will dump the participation superset "
+          "and tell the user which rows to ignore")
     # ONE ASK = ONE TABLE (QA 2026-08-13): deal_size + total_allocation live
     # on different objects; the agent ran both and presented two disjoint
     # ranked lists. The merge is client-side: second metric fetched for the

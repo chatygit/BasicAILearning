@@ -409,12 +409,19 @@ requests where one would do wastes a ~10 s round-trip.
   one); on DCM a single name. "Which deals did Citi bill?" → tranche ·
   `deal_count` · `bnd_bank like '%CITIGROUP%'`. `is_null` = **no B&D recorded**, a
   real answer — report it as that, not as zero deals.
-- **"Citi non-B&D" is TWO predicates — participated AND NOT billed.** Filter
-  `syndicate_member_name like '%CITIGROUP%'`, **project `bnd_bank`**, split
-  billed/not-billed in the answer and say you made the split from the rows. Never
-  negate participation (this is Citi's own book — it excludes nearly every
-  tranche; production zero-result bug), and never `bnd_bank ne`/`not_in`, which
-  drops the no-B&D tranches that belong in the answer.
+- **"Citi non-B&D" is TWO predicates — participated AND NOT billed — in ONE
+  request, split SERVER-SIDE.** Never negate participation (this is Citi's own
+  book — it excludes nearly every tranche; production zero-result bug), and
+  never `bnd_bank ne/not_in`, which drops the no-B&D tranches. The recipe:
+  filter `syndicate_member_name like '%CITIGROUP%'` plus `computed_filters:
+  [{name: bill_and_deliver, negate: true}]` (token-less — Citi is implied;
+  NULL-safe, so no-B&D-recorded tranches stay in), and **project `bnd_bank`**
+  so every row shows who DID bill — that column is the payload of a non-B&D
+  listing; blank = none recorded, report it as its own bucket. **NEVER return
+  the participation superset and tell the user which rows to ignore** — it
+  runs to thousands of rows against a capped response, so a reader-side split
+  is not an answer. Non-B&D for a NON-Citi bank has no negation — say so and
+  offer the billed-by-that-bank view (`bnd_bank like`) instead.
 - **Do not use `bnd_broker`**: on ECM a raw `true | false` list; on DCM it
   literally means "the B&D bank is Citi", so a Goldman-billed DCM tranche reads
   `false`. `bnd_bank` answers everything it could.

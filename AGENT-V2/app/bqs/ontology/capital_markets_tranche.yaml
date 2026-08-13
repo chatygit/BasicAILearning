@@ -759,6 +759,27 @@ filters:
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
     description: "Tranche pricing timestamp. Trailing windows need both bounds (gte start, lt tomorrow-midnight)."
 
+computed_filters:
+  bill_and_deliver:
+    column: bnd_bank
+    # TOKEN-LESS (matches the server docstring contract): Citi is implied on
+    # its own platform, fixed_codes short-circuits the token. Citi doctrine
+    # (user-confirmed): ONLY the 'Citigroup Global Markets' stem is Citi for
+    # B&D — 'Citi (Test Syndicate CMG)' and CITIBANK entities do NOT count,
+    # so a bare CITI stem would over-match. Case-insensitivity ('(?i)') is
+    # added at render; the code is regex-escaped by the planner.
+    pattern_template: "{value}"
+    fixed_codes: ["CITIGROUP GLOBAL MARKETS"]
+    description: >-
+      Citi billed-and-delivered the tranche (matches the resolved bnd_bank
+      list; token-less — Citi is implied). With negate true this is the ONLY
+      correct "Citi non-B&D": NULL-safe, so tranches with NO B&D recorded are
+      included — a plain bnd_bank negation is not expressible (never bnd_bank
+      ne/not_in: they drop the no-B&D rows). "Citi non-B&D" =
+      syndicate_member_name like '%CITIGROUP%' (participated) + this filter
+      negated (did not bill), ONE request, server-side. Non-B&D for another
+      bank has no negation — say so and offer bnd_bank like / is_null instead.
+
 unsupported_intents:
   syndicate_on_dcm:
     patterns: ["syndicate members on the bond", "co-managers", "bookrunners for the DCM deal", "how many banks"]
@@ -904,10 +925,12 @@ examples:
     request:
       source: capital_markets_tranche
       metric: deal_count
-      # Project bnd_bank so the billed/not-billed split can be made in the
-      # answer. No computed_filters are declared on this source, and negating
-      # bnd_bank would drop tranches with NO B&D recorded — which belong in a
-      # non-B&D answer.
+      # The split is SERVER-SIDE: the negated bill_and_deliver computed filter
+      # is NULL-safe, so tranches with NO B&D recorded are included — they
+      # belong in a non-B&D answer. Client-side splitting cannot work: the
+      # participation superset can run to thousands of rows and the response
+      # caps at a page. bnd_bank stays PROJECTED so every row shows who DID
+      # bill (blank = none recorded — report that as its own bucket).
       dimensions: [deal_name, deal_id, bnd_bank]
       filters:
         - {field: product, op: eq, value: ECM}
@@ -915,6 +938,8 @@ examples:
         - {field: syndicate_member_name, op: like, value: "%CITIGROUP%"}
         - {field: pricing_date, op: gte, value: "2024-01-01"}
         - {field: pricing_date, op: lt, value: "2025-01-01"}
+      computed_filters:
+        - {name: bill_and_deliver, negate: true}
       order: [{field: deal_count, direction: desc}, {field: deal_id, direction: asc}]
   - question: Top 10 DCM tranches by size in USD, 2025
     request:
