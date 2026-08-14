@@ -185,6 +185,38 @@ def test_partition_by_plans_and_compiles():
     assert "ROW_NUMBER() OVER (PARTITION BY" in sql
     assert '"rank_in_group"' in sql
     assert '"rank_in_group" <= 2' in sql
+    # Defaulted ranking (no request order): groups stay together in the output.
+    assert 'ORDER BY "sector" ASC, "rank_in_group" ASC' in sql
+
+
+def test_partition_with_explicit_order_sorts_survivors_globally():
+    # The DEDUPE shape (QA 2026-08-14): "5 latest DEALS" on a tranche-grain
+    # object. Without this, a two-tranche deal eats two of the five slots —
+    # observed as "5 latest deals" returning 4 deals in 5 rows. The explicit
+    # order ranks inside each group AND sorts the surviving rows across groups.
+    if not _deps():
+        SKIPPED.append("partition global order (pydantic/yaml not installed)")
+        return
+    from bqs.dialects.trino import TrinoDialect
+    from bqs.sql_builder import build_sql
+
+    plan = _plan({
+        "source": "capital_markets_deal",
+        "metric": "deal_count",
+        "dimensions": ["sector", "deal_name", "deal_id"],
+        "partition_by": ["deal_name", "deal_id"],
+        "per_partition_limit": 1,
+        "order": [{"field": "sector", "direction": "desc"}],
+        "limit": 5,
+    })
+    assert plan.partition is not None and plan.partition.order_globally is True
+    sql = build_sql(plan, TrinoDialect()).sql
+    tail = sql[sql.index("ranked WHERE"):]
+    assert tail.startswith('ranked WHERE "rank_in_group" <= 1 ORDER BY "sector" DESC'), (
+        "the requested order must govern the survivors across groups — "
+        "otherwise LIMIT N takes the first N groups alphabetically, not the "
+        "N the user asked for"
+    )
 
 
 def test_partition_by_misuse_is_rejected():
@@ -296,6 +328,7 @@ CASES = [
     ("ECM-only field on DCM rejected", test_ecm_only_field_on_dcm_is_rejected_not_empty),
     ("same field on ECM accepted", test_same_field_on_ecm_is_accepted),
     ("partition_by plans and compiles", test_partition_by_plans_and_compiles),
+    ("partition explicit order sorts globally", test_partition_with_explicit_order_sorts_survivors_globally),
     ("partition_by misuse rejected", test_partition_by_misuse_is_rejected),
     ("missing value rejected", test_missing_value_on_value_bearing_op_is_rejected),
     ("empty in-list rejected", test_empty_in_list_is_rejected),

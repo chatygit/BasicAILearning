@@ -83,10 +83,16 @@ class ResolvedPartition:
 
     `by` holds OUTPUT ALIASES (business names), validated as a proper subset of
     the projected dimensions. The ranking order is plan.orders (defaulted to
-    the metric descending when the request names none)."""
+    the metric descending when the request names none).
+
+    `order_globally`: True when the REQUEST named an order — the surviving
+    rows are then sorted by it across groups (e.g. "5 latest deals": rank
+    tranches inside each deal by date, keep the latest, sort the deals by
+    date, limit 5). False (defaulted ranking) keeps groups together."""
 
     by: list[str]
     limit: int
+    order_globally: bool = False
 
 
 @dataclass
@@ -597,6 +603,7 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
                 "filters, or raise per_partition_limit.",
                 code="bad_partition",
             )
+        explicit_order = bool(req.order)
         if not orders:
             # The natural reading of "top per group" ranks by the metric.
             orders = [
@@ -607,6 +614,7 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
         partition = ResolvedPartition(
             by=list(dict.fromkeys(req.partition_by)),
             limit=req.per_partition_limit or 1,
+            order_globally=explicit_order,
         )
 
     return QueryPlan(

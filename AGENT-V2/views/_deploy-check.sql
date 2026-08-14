@@ -27,12 +27,16 @@ FROM (
   WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
   AND    column_name = 'SECURITIES_MATURITY'
   UNION ALL
-  -- 4. ECM currencies are CODES now, not internal ids (the 3-hop bug)
+  -- 4. ECM currencies are CODES now, not internal ids (the 3-hop bug).
+  -- Token-wise: '^[0-9]+$' only caught a WHOLE-string numeric value, so a
+  -- multi-currency fallback like '1 | 4' sailed through (QA 2026-08-14).
+  -- Numeric tokens are the view's unmapped-id fallback — expected to be RARE;
+  -- a large count here means the CURRENCY_NAME lookup is not joining.
   SELECT '4. ECM currencies are codes not ids', 'Y',
          CASE WHEN COUNT(*) = 0 THEN 'Y' ELSE 'N' END
   FROM   DGSTREAM.VW_DEAL_SUMMARY
   WHERE  PRODUCT = 'ECM' AND CURRENCIES IS NOT NULL
-  AND    REGEXP_LIKE(CURRENCIES, '^[0-9]+$')
+  AND    REGEXP_LIKE(CURRENCIES, '(^|\| )[0-9]+( \||$)')
   UNION ALL
   -- 5. DCM currency list is deduped ('USD | USD | USD' is gone)
   SELECT '5. DCM currencies deduped', 'Y',

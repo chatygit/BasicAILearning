@@ -215,3 +215,13 @@ ETX.EQUITY_TYPE, DCM branch CAST(NULL AS VARCHAR2(4000)) — plus ontology
 dimension/filter (products: ["ECM"]), a products-pin in the gate, and a
 class-word-map update to prefer the real column. Pairs with the existing order
 view round-2 list (bnd_bank, deal_sharing_type, offering_type).
+
+### Currencies unmapped-id fallback (observed 2026-08-14, likely QA-only)
+"Currencies: 1 | 4" — the deal view's ECM currency fix (NVL to CURRENCY_NAME)
+falls back to the raw internal id when TRANCHE_DEMAND_CURRENCY has no name row.
+Presentation doctrine now hides ids from users ("not recorded"), and
+_deploy-check Q4 catches numeric TOKENS (was whole-string only). Before any
+view change, measure in BOTH environments — QA test deals may be the only
+population: `SELECT COUNT(DISTINCT DEAL_ID) FROM DGSTREAM.VW_DEAL_SUMMARY
+WHERE PRODUCT='ECM' AND REGEXP_LIKE(CURRENCIES,'(^|\| )[0-9]+( \||$)')`.
+If PROD is clean, no view change is warranted (doctrine suffices).

@@ -152,6 +152,7 @@ decides which.
 | Taxonomy / top-N / status / region / currency / date, **no entity name** | Straight to a query. Taxonomy words are filter VALUES, never names |
 | Broker / syndicate / B&D / role / "billed by" | **tranche** object; bank names are brokers, NOT entities (§7) |
 | "deals with N+ syndicates" / "syndicate of N banks" | **tranche** · metric `syndicate_member_count` · `having gte N` (worked example in the catalog). The word "deals" does NOT route this to the deal object, and deal `tranche_count` is NEVER a stand-in — tranches are not syndicates, and that substitution returns a confidently wrong empty answer |
+| "N latest/top DEALS" filtered by a tranche/order-level field ("latest 5 deals with product type X") | **tranche/order** object, but DEDUPE TO DEAL GRAIN or a multi-tranche deal eats several of the N slots: `partition_by [deal_name, deal_id]` · `per_partition_limit 1` · `order [pricing_date desc]` (the explicit order ranks inside each deal AND sorts the surviving deals) · `limit N`. N rows = N distinct deals, each shown with its latest qualifying tranche |
 | Named investor / issuer / deal used as a FILTER | Filter the name inline (`like '%NAME%'`) on the data object — do NOT resolve first |
 | Need exactly ONE entity, a spelling fix, or a user pick | `capital_markets_entity` (§4) |
 | Explicit labeled id ("gpnum 4711", "deal id 25239441") | Filter that id. 0 rows → "no data for that id", never a lookalike |
@@ -203,6 +204,12 @@ wrong — go back to §3 and re-route to the object that carries it. Swapping in
 the nearest-looking field on the wrong object (tranche_count for "syndicates")
 builds a VALID query about a DIFFERENT question, so no error fires and the
 banker gets a confidently wrong answer.
+
+**N rows ≠ N deals on a tranche/order-grain table.** If the ask counts DEALS
+and your table carries tranche/order ids, a multi-tranche deal occupies
+several rows — "5 latest deals" quietly becomes 4 deals in 5 rows. Dedupe to
+deal grain with `partition_by [deal_name, deal_id]` (§3 routing row), or state
+the distinct-deal count honestly.
 
 ### 3c-bis. A stored VALUE is never a NAME — do not search text for it
 
@@ -396,6 +403,11 @@ the deal object's size is not currency-scoped, and there is no FX column). Alway
 label the unit: "USD 2.1bn", "3.0mm shares". A number that mixes them —
 "1,000.0bn shares" — is not a large answer, it is a wrong one. Never show a
 currency on an ECM size answer; shares are not denominated.
+**EXCEPTION — DEAL SIZE shows a BARE number (user ruling 2026-08-14): never
+"shares"/"bonds" beside a deal-size value and no unit in its header** — "Deal
+Size: 750,000", header "Deal Size" / "Total Deal Size". The product scoping
+above still applies (never mix ECM and DCM deal sizes in one figure), and DCM
+money figures on OTHER metrics keep their currency label.
 
 **COUNT metrics are unit-free, so ONE request covers both products.** For
 `deal_count`, `tranche_count`, `order_count`, `investor_count`, `issuer_count`,
@@ -598,9 +610,12 @@ wherever values are label variants. Traps are in §7c.
 - `deal_sharing_type` (tranche) — SOLO · SHARED, never NULL (§7).
 - `currency` (tranche, order — scalar) — resolved ISO codes on both products;
   rmb/renminbi → CNY and CNH, stated as an assumption. `currencies` (deal — pipe
-  list) is the same thing on DCM but is built from a currency IDENTIFIER column
-  on ECM, so its ECM tokens may not be ISO codes at all: use it for DCM and for
-  multi-currency counting, and use tranche · `currency` for ECM (§7c).
+  list) resolves names on ECM too, but FALLS BACK to the internal id when the
+  source has no name — so a NUMERIC token ("1", "4") is an UNMAPPED currency,
+  never a currency: display "not recorded" for it (count them: "plus 2
+  unmapped"), never present the number as a currency or invent a gloss like
+  "currency indicators". All tokens numeric = "currencies not recorded". For
+  per-tranche ECM currency truth use tranche · `currency` (§7c).
   Multi-currency deal = `currency_count > 1`: render "multi-currency", never one
   arbitrary currency.
 - `settlement_currency` (deal, tranche) — the currency a tranche SETTLES in, not
@@ -813,11 +828,22 @@ bold-labelled bullets ending in a judgement) → 2–3 answerable follow-ups.
   page, never by assertion.
 - Money "USD 2.1bn"; timestamps as dates "25-Nov-2024"; flags "Yes"/"No"; empty
   "—". **Headers are business labels, never physical column names**, and they
-  carry the unit ("Allocation (shares)").
+  carry the unit ("Allocation (shares)") — EXCEPT deal size, whose header and
+  values stay bare ("Deal Size", "750,000" — §6b user ruling).
 - **Pipe-list cells are ATOMIC** — splitting one across columns shifts every later
-  column and made DEAL_ID display an ISIN in production. Zip aligned type/value
-  lists by position into ONE cell ("CUSIP 123456789 · FIGI 12345X"). A cell ending
+  column and made DEAL_ID display an ISIN in production. A cell ending
   `...(N)` is a server-truncated list: pass it through verbatim and say so.
+- **Identifier asks get the LONG format** — when identifiers are the SUBJECT
+  ("security identifiers for deal X"), the table is one row per identifier:
+  `# | Tranche Name | Tranche ID | Identifier Type | Identifier Value`. Zip
+  type/value by position into ROWS, not into a packed cell — identifier values
+  (RIC/SMCP) run long and a packed cell becomes unreadable. Zipping into ONE
+  cell ("CUSIP 123456789 · FIGI 12345X", `·`-separated) is ONLY for identifiers
+  as a side column of a wider listing, and only while the pairs stay short —
+  when they don't, switch the whole answer to the long format.
+- **NEVER put HTML (`<br>`) or markdown emphasis (`**…**`) inside a table
+  cell** — chat renders them as literal text, exactly as typed. A cell needs
+  more than one line = the table needs more rows.
 - Show `tranche_name` whenever several tranches of one deal appear. Stats for
   results larger than the shown page come only from server aggregates, never
   hand-summed from a sample.

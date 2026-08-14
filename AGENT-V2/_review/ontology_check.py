@@ -470,6 +470,38 @@ check(has(TRANCHE, "never split a pipe list across table columns"),
       "[pipe] tranche lost the display rule (the DEAL_ID-shows-an-ISIN bug)")
 check(has(SKILL, "ATOMIC") and has(SKILL, "ISIN"),
       "[pipe] SKILL lost the pipe-list display rule")
+# IDENTIFIER PRESENTATION (QA 2026-08-14): the packed one-cell zip put literal
+# '<br>' and '**SMCP ID**' in front of a user — chat renders markup inside
+# table cells as typed. Identifier-focused asks list one ROW per type/value.
+check(has(SKILL, "LONG format"),
+      "[answer] SKILL.md: the identifier long-format rule is gone — "
+      "identifier asks go back to packed cells that render raw markup")
+check(has(SKILL, "NEVER put HTML"),
+      "[answer] SKILL.md: the no-HTML-in-cells rule is gone — <br> and "
+      "**bold** inside table cells render as literal text in chat")
+# DEAL SIZE IS A BARE NUMBER (user ruling 2026-08-14): never "shares"/"bonds"
+# beside a deal-size value or in its header. Other metrics keep the unit
+# doctrine (DCM money keeps its currency).
+# UNMAPPED CURRENCY IDS (QA 2026-08-14): the deal view's currency fix falls
+# back to the internal id when the source has no CURRENCY_NAME — a card showed
+# "Currencies: 1 | 4 (Multiple currency indicators)", an invented gloss over
+# raw ids. Numeric tokens must render as "not recorded", never as currencies.
+check(has(SKILL, "NUMERIC token") or has(SKILL, "a NUMERIC token"),
+      "[answer] SKILL.md: the numeric-currency-token rule is gone — unmapped "
+      "ids ('1 | 4') get presented as currencies again with an invented gloss")
+check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_deal.yaml",
+          "NUMERIC TOKENS ARE NOT CURRENCIES"),
+      "[answer] capital_markets_deal.yaml: currencies lost the numeric-token "
+      "rule — the id fallback leaks to users as a 'currency'")
+check(r"(^|\| )[0-9]+( \||$)" in text(ROOT / "views" / "_deploy-check.sql"),
+      "[deploy] _deploy-check.sql: check 4 is back to the whole-string regex "
+      "— a multi-currency id fallback like '1 | 4' passes the deploy check")
+check(has(SKILL, "DEAL SIZE shows a BARE number"),
+      "[answer] SKILL.md: the bare-deal-size ruling is gone — 'Deal Size: "
+      "750,000 shares' comes back (user ruled the unit word off, 2026-08-14)")
+check(has(ROOT / "adk" / "config" / "agents.yaml", "EXCEPT deal size"),
+      "[answer] agents.yaml: the fallback style lost the bare-deal-size "
+      "exception")
 
 # ---------------------------------------------------------------------------
 # 10. ENTITY RESOLUTION — one hop, not exact-then-fallback
@@ -1530,6 +1562,21 @@ check("ROW_NUMBER() OVER (PARTITION BY" in text(ROOT / "app" / "bqs" / "sql_buil
       and "rank_in_group" in text(ROOT / "app" / "bqs" / "sql_builder.py"),
       "[capability] sql_builder.py: the partitioned-rank wrapper is gone — "
       "partition_by requests would plan but not compile")
+# DEDUPE SHAPE (QA 2026-08-14): "5 latest DEALS" on a tranche-grain object
+# returned 4 deals in 5 rows — a multi-tranche deal ate two slots. An explicit
+# request order now sorts the partition survivors ACROSS groups, so
+# partition_by [deal ids] + order [date desc] + limit N = N distinct deals.
+check("order_globally" in text(PLANNER)
+      and "order_globally" in text(ROOT / "app" / "bqs" / "sql_builder.py"),
+      "[capability] planner/sql_builder: the partition order_globally flag is "
+      "gone — an explicit order no longer sorts partition survivors across "
+      "groups, so 'N latest deals' takes the first N groups alphabetically")
+check(has(SKILL, "DEDUPE TO DEAL GRAIN"),
+      "[answer] SKILL.md: the dedupe-to-deal-grain routing row is gone — "
+      "'N latest deals' with a tranche-level filter returns fewer deals than "
+      "rows again")
+check(has(SKILL, "N rows ≠ N deals"),
+      "[answer] SKILL.md: the N-rows-vs-N-deals self-check is gone")
 check("TOP-N-PER-GROUP" in text(ONTOLOGY_PY),
       "[capability] ontology.py: discovery no longer teaches partition_by — "
       "the agent cannot use a feature it never hears about")

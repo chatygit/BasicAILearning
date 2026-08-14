@@ -885,6 +885,24 @@ usage_notes:
   - Ids (deal_id, tranche_id, gfcid) are TEXT — quote them and keep leading zeros.
 
 examples:
+  - question: 5 latest deals with a given product type (one row per DEAL)
+    request:
+      source: capital_markets_tranche
+      # product_type is TRANCHE-grain, so without the partition a deal with
+      # two qualifying tranches eats two of the five slots ("5 latest deals"
+      # returning 4 deals in 5 rows — observed in QA). partition_by dedupes to
+      # deal grain (each deal's LATEST qualifying tranche, ranked by the
+      # explicit order), and that same order then sorts the deals newest-first.
+      metric: tranche_count
+      dimensions: [deal_name, deal_id, tranche_name, tranche_id, pricing_date, product_type]
+      partition_by: [deal_name, deal_id]
+      per_partition_limit: 1
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: product_type, op: like, value: "%REPLACE_WITH_TYPE%"}
+      # deal_id tiebreak: same-day deals otherwise reshuffle between turns.
+      order: [{field: pricing_date, direction: desc}, {field: deal_id, direction: asc}]
+      limit: 5
   - question: Top deal in EACH product type by tranche size (top-N-per-group)
     request:
       source: capital_markets_tranche
@@ -907,8 +925,11 @@ examples:
         - {field: product, op: eq, value: ECM}
         - {field: deal_id, op: eq, value: "REPLACE_WITH_DEAL_ID"}
       order: [{field: tranche_id, direction: asc}]
-      # Display: zip identifier_type with identifier_value by position into ONE
-      # cell per tranche ("CUSIP 123456789 · ISIN US1234567890").
+      # Display: LONG format — zip identifier_type with identifier_value by
+      # position into ROWS (# | Tranche Name | Tranche ID | Identifier Type |
+      # Identifier Value), one row per identifier. Identifier values (RIC/SMCP)
+      # run long, so a packed one-cell zip goes unreadable — and NEVER use
+      # <br> or bold inside a table cell; chat renders them literally.
   - question: Which deals did Citi bill and deliver in 2024 (ECM)
     request:
       source: capital_markets_tranche

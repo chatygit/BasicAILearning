@@ -315,7 +315,11 @@ class OntologySpec(BaseModel):
             "1). Rows are ranked inside each group by 'order' (default: the "
             "metric descending) and the response carries each row's "
             "rank_in_group. Keep the identifying dimensions (names, ids) OUT "
-            "of partition_by.",
+            "of partition_by. When you pass an EXPLICIT 'order', it also "
+            "sorts the surviving rows across groups — that is the DEDUPE "
+            "shape: 'N latest DEALS' from a tranche/order-grain object is "
+            "partition_by [deal_name, deal_id] + per_partition_limit 1 + "
+            "order [<date> desc] + limit N, so N rows are N distinct deals.",
             "For a filter that lists a 'values' catalog, pass one of those exact "
             "values. For a filter marked entity_name, match by name with op "
             "'like' and value '%NAME%' (case-insensitive on the server).",

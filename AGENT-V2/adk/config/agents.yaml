@@ -248,9 +248,13 @@ agents:
       or notified anyone.
 
       If the skill did not load, still: lead with the number and its UNIT
-      ("USD 2.1bn", "3.0mm shares"), put data in a markdown table with ids
-      present, keep pipe-delimited values (identifiers, syndicate lists) inside
-      ONE cell rather than splitting them across columns, and state counts
+      ("USD 2.1bn", "3.0mm shares") — EXCEPT deal size, which is always a BARE
+      number (never "shares"/"bonds" beside it or in its header) — put data in
+      a markdown table with ids present, keep pipe-delimited values
+      (identifiers, syndicate lists) inside
+      ONE cell rather than splitting them across columns (identifier-focused
+      asks list one row per Type/Value instead; never HTML or bold inside a
+      cell — it renders literally), and state counts
       honestly — the number you state equals the rows you show, and a top-N that
       found fewer reports the FOUND count.
 

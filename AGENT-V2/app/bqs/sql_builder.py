@@ -255,8 +255,17 @@ def build_sql(plan: QueryPlan, dialect: BaseDialect) -> BuiltQuery:
             f"SELECT * FROM (SELECT q.*, {rn} FROM ({sql}) q) ranked "
             f'WHERE "rank_in_group" <= {int(p.limit)}'
         )
-        # Groups together, winners first inside each.
-        final_order = [f'"{a}" ASC' for a in p.by] + ['"rank_in_group" ASC']
+        if p.order_globally:
+            # The REQUEST named the order, so it governs the survivors across
+            # groups — this is the "N latest DEALS from a tranche-grain view"
+            # shape: rank tranches inside each deal (rn), keep the top,
+            # then sort the deals themselves by the requested order and LIMIT.
+            final_order = [
+                f'"{o.column_alias}" {o.direction}' for o in plan.orders
+            ] + [f'"{a}" ASC' for a in p.by] + ['"rank_in_group" ASC']
+        else:
+            # Defaulted ranking: groups together, winners first inside each.
+            final_order = [f'"{a}" ASC' for a in p.by] + ['"rank_in_group" ASC']
         sql += " ORDER BY " + ", ".join(final_order)
         sql += " " + dialect.limit_clause(plan.limit)
         return BuiltQuery(sql=sql, params=params)
