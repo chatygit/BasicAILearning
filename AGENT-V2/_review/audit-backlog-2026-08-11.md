@@ -221,7 +221,11 @@ view round-2 list (bnd_bank, deal_sharing_type, offering_type).
 falls back to the raw internal id when TRANCHE_DEMAND_CURRENCY has no name row.
 Presentation doctrine now hides ids from users ("not recorded");
 _deploy-check row 4b reports the affected-deal count as INFO (view-logic
-check 4 stays whole-string). MEASURED: QA = 377 ECM deals (2026-08-14, user
-run). PROD count still pending — decision rule unchanged: `SELECT COUNT(DISTINCT DEAL_ID) FROM DGSTREAM.VW_DEAL_SUMMARY
+check 4 stays whole-string). MEASURED: QA = 377 ECM deals; unmapped id set is just {1, 2, 3, 4, 7, 67,
+76, 139} and the affected deal names are largely test junk (2026-08-14, user
+run). Next: _currency-check Q4 says whether those ids have names anywhere in
+OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY — names exist -> queue the
+global id->name second-fallback view change; no rows -> QA seed junk, close.
+PROD Q1 count still pending — decision rule unchanged: `SELECT COUNT(DISTINCT DEAL_ID) FROM DGSTREAM.VW_DEAL_SUMMARY
 WHERE PRODUCT='ECM' AND REGEXP_LIKE(CURRENCIES,'(^|\| )[0-9]+( \||$)')`.
 If PROD is clean, no view change is warranted (doctrine suffices).

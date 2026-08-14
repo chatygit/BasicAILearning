@@ -33,14 +33,18 @@ FROM (
   WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
   AND    column_name = 'SECURITIES_MATURITY'
   UNION ALL
-  -- 4. ECM currencies are CODES, not internal ids (the 3-hop bug). This is
-  -- the VIEW-LOGIC check: a whole-string numeric value means the
-  -- CURRENCY_NAME lookup join is broken and the fallback fires everywhere.
-  SELECT '4. ECM currencies are codes not ids', 'Y',
-         CASE WHEN COUNT(*) = 0 THEN 'Y' ELSE 'N' END
+  -- 4. ECM currency names RESOLVE (the 3-hop bug was: ids everywhere). A
+  -- numeric-row count cannot be the logic check — a single-tranche deal with
+  -- one unmapped id yields CURRENCIES='1', numeric whole-string, so QA seed
+  -- data fails it forever (measured 2026-08-14). The signal that separates
+  -- "join broken" from "some deals unmapped": a broken CURRENCY_NAME join
+  -- produces ZERO rows containing an alphabetic code; a healthy join
+  -- produces thousands. Unmapped volume is tracked by INFO row 4b.
+  SELECT '4. ECM currency names resolve (view logic)', 'Y',
+         CASE WHEN COUNT(CASE WHEN REGEXP_LIKE(CURRENCIES, '[A-Za-z]') THEN 1 END) > 0
+              THEN 'Y' ELSE 'N' END
   FROM   DGSTREAM.VW_DEAL_SUMMARY
   WHERE  PRODUCT = 'ECM' AND CURRENCIES IS NOT NULL
-  AND    REGEXP_LIKE(CURRENCIES, '^[0-9]+$')
   UNION ALL
   -- 4b. INFO, not a deploy verdict: deals carrying at least one UNMAPPED
   -- currency token ('1 | 4' — the NVL fallback for ids with no name row).
