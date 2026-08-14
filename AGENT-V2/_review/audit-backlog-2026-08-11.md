@@ -216,7 +216,7 @@ dimension/filter (products: ["ECM"]), a products-pin in the gate, and a
 class-word-map update to prefer the real column. Pairs with the existing order
 view round-2 list (bnd_bank, deal_sharing_type, offering_type).
 
-### Currencies unmapped-id fallback (observed 2026-08-14, likely QA-only)
+### Currencies unmapped-id fallback — READY FOR NEXT BATCH (resolved 2026-08-14)
 "Currencies: 1 | 4" — the deal view's ECM currency fix (NVL to CURRENCY_NAME)
 falls back to the raw internal id when TRANCHE_DEMAND_CURRENCY has no name row.
 Presentation doctrine now hides ids from users ("not recorded");
@@ -228,4 +228,9 @@ OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY — names exist -> queue the
 global id->name second-fallback view change; no rows -> QA seed junk, close.
 PROD Q1 count still pending — decision rule unchanged: `SELECT COUNT(DISTINCT DEAL_ID) FROM DGSTREAM.VW_DEAL_SUMMARY
 WHERE PRODUCT='ECM' AND REGEXP_LIKE(CURRENCIES,'(^|\| )[0-9]+( \||$)')`.
-If PROD is clean, no view change is warranted (doctrine suffices).
+RESOLVED: Q4 proved every leaked id has a globally known name (1=USD,
+2=EUR, 3=GBP, 4=CAD, 7=AED, 67=IRR, 76=KYD, 139=TZS) — a per-tranche join
+gap, not seed junk, and USD/EUR/CAD means PROD has the same shape. The
+global id->name second fallback is WRITTEN into views/vw_deal_summary.sql
+(deploys with the EQUITY_TYPE batch). Post-deploy check: _deploy-check 4b
+drops to ~0. Presentation doctrine stays as the last-resort net.

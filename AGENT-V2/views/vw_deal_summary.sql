@@ -31,6 +31,11 @@
 --      which vw_tranche_summary has always used for its CURRENCY column.
 --      -> ECM now lists CURRENCY_NAME, falling back to the id when unmapped,
 --         so ECM and DCM currencies are finally comparable.
+--      -> 2026-08-14 (NEXT BATCH): a GLOBAL id->name second fallback added —
+--         the per-tranche lookup misses tranches with no demand-currency row
+--         (377 QA deals leaked ids, all with globally known names, USD/EUR/
+--         CAD among them). Raw id remains the last resort; agent renders
+--         those "not recorded". Post-deploy: _deploy-check row 4b ~ 0.
 --
 -- DELIBERATELY UNCHANGED: row-exclusion policy. The ECM
 -- Confidential/Withdrawn/Terminated filter is preserved verbatim and no new
@@ -111,8 +116,19 @@ LEFT JOIN (
            LISTAGG(C.TRANCHE_CURRENCY_ID, ' | ' ON OVERFLOW TRUNCATE '...' WITH COUNT)
              WITHIN GROUP (ORDER BY C.TRANCHE_CURRENCY_ID) AS CURRENCIES
     FROM (
+        -- SECOND FALLBACK (queued 2026-08-14, deploy with the next batch):
+        -- the per-(transaction, tranche, currency) TDC join misses tranches
+        -- that carry no demand-currency row of their own, leaking raw ids
+        -- ('1 | 4') into CURRENCIES. Measured in QA: 377 deals, and EVERY
+        -- leaked id has a globally known name (1=USD 55k rows, 2=EUR, 4=CAD,
+        -- 3=GBP, 7=AED, 67=IRR, 76=KYD, 139=TZS — _currency-check.sql Q4),
+        -- so a global id->name lookup resolves them all. The raw id remains
+        -- the LAST fallback for ids unknown even globally (e.g. a brand-new
+        -- currency before its first mapped row); the agent renders those as
+        -- "not recorded".
         SELECT DISTINCT ET.DEAL_TRANSACTION_ID,
-               NVL(TDC.CURRENCY_NAME, TT.TRANCHE_CURRENCY_ID) AS TRANCHE_CURRENCY_ID
+               NVL(TDC.CURRENCY_NAME,
+                   NVL(GC.CURRENCY_NAME, TT.TRANCHE_CURRENCY_ID)) AS TRANCHE_CURRENCY_ID
         FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE TT
         JOIN (SELECT DISTINCT ECM_TRANSACTION_ID, DEAL_TRANSACTION_ID
               FROM DGSTREAM.OPUS_ECM_TRANSACTION) ET
@@ -126,6 +142,12 @@ LEFT JOIN (
           ON TDC.ECM_TRANSACTION_ID = TT.ECM_TRANSACTION_ID
          AND TDC.ECM_TRANSACTION_TRANCHE_ID = TT.ECM_TRANSACTION_TRANCHE_ID
          AND TDC.CURRENCY_ID = TT.TRANCHE_CURRENCY_ID
+        LEFT JOIN (
+            SELECT CURRENCY_ID, MAX(CURRENCY_NAME) AS CURRENCY_NAME
+            FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY
+            GROUP BY CURRENCY_ID
+        ) GC
+          ON GC.CURRENCY_ID = TT.TRANCHE_CURRENCY_ID
     ) C
     GROUP BY C.DEAL_TRANSACTION_ID
 ) TC
