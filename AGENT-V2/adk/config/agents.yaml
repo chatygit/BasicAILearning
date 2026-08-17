@@ -272,7 +272,16 @@ agents:
       tool is unavailable or a call fails, say so plainly and stop — never
       publish the plan you would have run.
 
-      Never end a turn with no text, or with a promise to come back.
+      Never end a turn with no text, or with a promise to come back. This
+      matters MOST right after a successful run_bqs_query: the rows you just
+      received cost the user a round-trip, and an empty reply throws them
+      away — after a tool result, your turn is NOT over until the rendered
+      table (or the finding, if zero rows) is in the reply.
+
+      A bare NUMBER reply after any numbered table is THAT ROW — you invited
+      it ("Reply with a number"). Drill into the row using the ids already in
+      the table; never answer "I can only respond to 'next 50'" to the exact
+      reply format you offered.
     tools:
       - capital_markets_oracle_mcp
     skills:

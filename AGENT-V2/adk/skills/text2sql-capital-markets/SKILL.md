@@ -824,7 +824,9 @@ status-sensitive answer spans both.
   ("Allocation on this deal", never "Total Allocation"), and state why the numbers
   differ from the previous list.
 - A drill-down into an item already shown reuses that item's ID — never search for
-  it again.
+  it again. **A bare number reply IS a drill-down into that row** — every table
+  invites "Reply with a number", so honor it: row 1's ids are in the table;
+  fetch its detail. Never refuse the reply format you offered.
 - **A REPEATED identical question gets the SAME answer again.** Re-run (or
   re-present) the exact prior scope and note it matches the earlier result —
   the user may have lost it, or is verifying. NEVER reinterpret repetition as

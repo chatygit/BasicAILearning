@@ -496,6 +496,22 @@ check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_deal.yaml",
 check(r"(^|\| )[0-9]+( \||$)" in text(ROOT / "views" / "_deploy-check.sql"),
       "[deploy] _deploy-check.sql: check 4 is back to the whole-string regex "
       "— a multi-currency id fallback like '1 | 4' passes the deploy check")
+# EMPTY TURN AFTER TOOL RESULT + REFUSED NUMBER REPLY (QA 2026-08-17): page 2
+# (44 rows) came back and the model emitted an EMPTY message — the rows the
+# user paid a round-trip for were thrown away. And a bare "1" reply was
+# refused with "I can only respond to 'next 50'" — the exact reply format
+# every table invites. The prompt rules below reduce the empty-turn failure;
+# the deterministic backstop is an ADK after-model callback (POC repo).
+check(has(ROOT / "adk" / "config" / "agents.yaml",
+          "your turn is NOT over until the rendered"),
+      "[answer] agents.yaml: the post-tool-result no-empty-turn clause is "
+      "gone — page 2 rows get silently discarded by an empty model turn")
+check(has(ROOT / "adk" / "config" / "agents.yaml",
+          "never answer \"I can only respond"),
+      "[answer] agents.yaml: the honor-the-number-reply clause is gone — the "
+      "agent refuses the reply format its own tables invite")
+check(has(SKILL, "A bare number reply IS a drill-down"),
+      "[answer] SKILL.md: the number-reply-is-a-drill-down rule is gone")
 # EMPTY MERGE CELLS (QA 2026-08-17): 40 deals' allocations all rendered "Not
 # Available" — reads as a system failure; the truth was zero order rows for
 # those ids (cause under investigation via _orders-join-check.sql).
