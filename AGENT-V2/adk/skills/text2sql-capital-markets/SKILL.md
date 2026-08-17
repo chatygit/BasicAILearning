@@ -129,8 +129,15 @@ request never even reached the server), and request 1's response is itself
 capped, so a huge id set means a SAMPLE anyway. When request 1 finds more than
 40 qualifying deals: do NOT emit the giant call. Either narrow honestly (ask
 for a tighter window or sector — say the qualifying set is too large to carry
-across objects in one request) or rank within a STATED sample ("the 40 most
-recently priced qualifying deals") and label every number as sample-scoped.
+across objects in one request) or rank within a STATED sample, chosen by the
+ask's PURPOSE: a RANKING ask ("top investors by allocation") samples the 40
+LARGEST qualifying deals (request 1 ordered by the size metric desc —
+allocation concentrates in the biggest books, so this is the best available
+proxy); a RECENCY ask samples the 40 most recently priced. Label every number
+sample-scoped ("within the 40 largest IPOs of the window"). Never invert the
+hops to dodge the cap: ranking investors WITHOUT the deal-side filter and
+scoping afterwards sums the wrong allocations — the filter must sit inside
+the aggregation.
 **Never blame a "system limitation"** — that phrase is a non-answer; name the
 real constraint and give the user the two doors.
 

@@ -532,6 +532,15 @@ check(has(SKILL, "INHERITS the prior scope"),
 check(has(SKILL, "CAPPED AT 40 IDS"),
       "[platform] SKILL.md: the id in-list cap is gone — ~100-id arrays "
       "corrupt the model's own function call at the platform layer")
+check(has(SKILL, "40\nLARGEST qualifying deals") or has(SKILL, "40 LARGEST qualifying deals"),
+      "[sample] SKILL.md: the largest-deals sampling rule is gone — ranking "
+      "asks fall back to an arbitrary 40-deal sample that misses the real "
+      "top investors")
+check(has(SKILL, "the filter must sit inside\nthe aggregation")
+      or has(SKILL, "filter must sit inside the aggregation"),
+      "[sample] SKILL.md: the no-hop-inversion rule is gone — ranking "
+      "without the deal-side filter then scoping afterwards sums the wrong "
+      "allocations")
 check(has(SKILL, 'Never blame a "system limitation"'),
       "[trust] SKILL.md: the no-invented-excuses rule is gone — failures get "
       "explained with fictional system limitations again")
