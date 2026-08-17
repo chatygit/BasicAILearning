@@ -496,6 +496,44 @@ check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_deal.yaml",
 check(r"(^|\| )[0-9]+( \||$)" in text(ROOT / "views" / "_deploy-check.sql"),
       "[deploy] _deploy-check.sql: check 4 is back to the whole-string regex "
       "— a multi-currency id fallback like '1 | 4' passes the deploy check")
+# MULTI-TURN SCOPE (QA 2026-08-17): a verbatim repeated question was
+# reinterpreted as "they must want DCM now" — with an invented USD filter on
+# top ("no DCM deals found in USD"). And a ~100-id in-list corrupted the
+# model's OWN function call (MALFORMED_FUNCTION_CALL — never reached the
+# server), which the agent explained away as a "system limitation".
+check(has(SKILL, "A REPEATED identical question gets the SAME answer"),
+      "[turns] SKILL.md: the repeated-question rule is gone — a verbatim "
+      "repeat gets reinterpreted as a product flip again")
+check(has(SKILL, "INHERITS the prior scope"),
+      "[turns] SKILL.md: the follow-up-inherits-scope rule is gone — the "
+      "agent invents constraints (a USD filter nobody asked for) on flips")
+check(has(SKILL, "CAPPED AT 40 IDS"),
+      "[platform] SKILL.md: the id in-list cap is gone — ~100-id arrays "
+      "corrupt the model's own function call at the platform layer")
+check(has(SKILL, 'Never blame a "system limitation"'),
+      "[trust] SKILL.md: the no-invented-excuses rule is gone — failures get "
+      "explained with fictional system limitations again")
+# ECOSYSTEM SEAMS (2026-08-14): this agent is one specialist behind the ask-
+# banking root, beside market-data / investor-targeting / wallet / news / doc
+# agents. Two surfaces keep the seams clean: the routing description carries
+# EXCLUSIONS (the root needs negative signal too), and the skill distinguishes
+# "outside this dataset — the assistant has specialists" from "not tracked".
+check(has(ROOT / "adk" / "config" / "agents.yaml", "Do NOT route here"),
+      "[routing] agents.yaml: the description lost its exclusions — the root "
+      "routes pricing/holders/fees asks here again and they dead-end")
+check(has(SKILL, 'is NOT "impossible."'),
+      "[routing] SKILL.md: the outside-my-dataset rule is gone — sibling-"
+      "owned asks get 'that data doesn't exist' instead of a redirect")
+# NO INVENTED CAUSALITY (banker-lens review 2026-08-14): an insights bullet
+# told a user "lack of demand momentum likely contributed to the decision to
+# postpone" — a guessed WHY from one order on a test deal. The user manages
+# these deals; a guessed cause costs the credibility of every number above it.
+check(has(SKILL, "never why it happened"),
+      "[trust] SKILL.md: the no-invented-causality rule is gone — insights "
+      "bullets go back to guessing why deals were postponed/priced/pulled")
+check(has(SKILL, "likely contributed to"),
+      "[trust] SKILL.md: the banned causal phrases list is gone — the exact "
+      "shipped phrase ('likely contributed to') is no longer named")
 check(has(SKILL, "DEAL SIZE shows a BARE number"),
       "[answer] SKILL.md: the bare-deal-size ruling is gone — 'Deal Size: "
       "750,000 shares' comes back (user ruled the unit word off, 2026-08-14)")

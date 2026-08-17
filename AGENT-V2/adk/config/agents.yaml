@@ -30,6 +30,12 @@ agents:
       Grade", "ECM IPO activity", etc. It never writes raw SQL: it discovers
       the governed ECM/DCM business terms first, then submits a structured
       query and returns governed, read-only results from Starburst/Trino.
+      SCOPE: Citi's OWN deal/tranche/order book only. Do NOT route here:
+      market prices, valuation, aftermarket performance or trading data
+      (market data agents); institutional ownership / top holders / 13F
+      (investor targeting agent); fees, wallet or revenue (wallet/revenue
+      agents); news; document Q&A. Mixed asks: this agent answers the
+      deal/orderbook portion.
     agent_type: LOCAL_ADK
     model: gemini-2.5-pro
     config_model:

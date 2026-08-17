@@ -234,3 +234,17 @@ gap, not seed junk, and USD/EUR/CAD means PROD has the same shape. The
 global id->name second fallback is WRITTEN into views/vw_deal_summary.sql
 (deploys with the EQUITY_TYPE batch). Post-deploy check: _deploy-check 4b
 drops to ~0. Presentation doctrine stays as the last-resort net.
+
+### Order view round-2 denorm — PROMOTED by the malformed-call trace (2026-08-17)
+QA: "top 15 long-only investors in IPOs over 10 years" → hop 1 returned ~100
+IPO deal_ids → Gemini corrupted its own function call emitting the 100-id
+in-list (MALFORMED_FUNCTION_CALL at the platform layer; the request never
+reached the MCP) → agent blamed a "system limitation" and dead-ended. Interim
+doctrine (shipped): id in-lists capped at 40, honest sample/narrow language,
+no invented excuses. STRUCTURAL FIX: denormalize OFFERING_TYPE (plus
+bnd_bank, deal_sharing_type — the original round-2 list) onto VW_ORDER_DETAIL,
+same pattern as round 1's issuer_name/sector/tranche_size. That makes
+"investors in IPOs" ONE request with no id list at all — the whole failure
+class disappears. Deploy with the same batch as the deal-view currency
+fallback (written) and tranche-view EQUITY_TYPE (queued). Ask when the batch
+is scheduled and the three view diffs get written together.
