@@ -496,9 +496,12 @@ filters:
       'pref' (so '%PREF%' misses it) while '%CONV%' over-matches Conv. Bond —
       use in with those three exact literals. This column owns the
       exclusive vocabulary ADR/ADS/GDR/GDS, 144A, Class A, Rights, Conv. Bond,
-      Conv. Pfd, Mandatory Convertible. For the deal-level instrument class
-      ('common stock', 'convertible', 'warrants') use capital_markets_deal.equity_type,
-      and NEVER blend the two — they are different axes.
+      Conv. Pfd, Mandatory Convertible. FILTER HERE ONLY for that exclusive
+      vocabulary or when the user literally says 'product type' — 99% of
+      class asks filter equity_type on capital_markets_deal (user ruling
+      2026-08-17): 'common stock', 'convertible', 'preferred', 'warrants' all
+      belong there, and this column is then a PROJECTION (the sub-type
+      breakdown column), not the filter. NEVER blend the two axes.
   exchange:
     column: exchange
     products: ["ECM"]

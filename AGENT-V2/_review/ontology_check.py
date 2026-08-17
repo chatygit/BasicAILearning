@@ -496,6 +496,12 @@ check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_deal.yaml",
 check(r"(^|\| )[0-9]+( \||$)" in text(ROOT / "views" / "_deploy-check.sql"),
       "[deploy] _deploy-check.sql: check 4 is back to the whole-string regex "
       "— a multi-currency id fallback like '1 | 4' passes the deploy check")
+# EMPTY MERGE CELLS (QA 2026-08-17): 40 deals' allocations all rendered "Not
+# Available" — reads as a system failure; the truth was zero order rows for
+# those ids (cause under investigation via _orders-join-check.sql).
+check(has(SKILL, 'never "Not Available"'),
+      "[answer] SKILL.md: the no-Not-Available rule is gone — empty id-scoped "
+      "fetches read as system failures instead of 'no orders recorded'")
 # MULTI-TURN SCOPE (QA 2026-08-17): a verbatim repeated question was
 # reinterpreted as "they must want DCM now" — with an invented USD filter on
 # top ("no DCM deals found in USD"). And a ~100-id in-list corrupted the
@@ -1075,6 +1081,25 @@ if MCPSERVER.exists():
     check(has(SKILL, "PROJECTION instruction"),
           "[trap] SKILL.md: lost the 'with product type = projection' rule — "
           "the agent will flip the filter axis instead of adding a column")
+    # EQUITY_TYPE IS THE DEFAULT AXIS (user ruling 2026-08-17): 99% of class
+    # asks filter equity_type; product_type is a FILTER only for its exclusive
+    # vocabulary or an explicit "product type". QA had shown "Equity type
+    # Convertible Preferred by tranche size" answered via the product_type
+    # subtype in-list with no disclosure.
+    check(has(SKILL, "IS THE DEFAULT AXIS"),
+          "[trap] SKILL.md: the equity_type-default ruling is gone — class "
+          "asks route back to product_type approximations")
+    check(has(SKILL, "99% of class asks"),
+          "[trap] SKILL.md: the 99%-ruling citation is gone — the default-"
+          "axis rule loses its authority marker")
+    check(has(SKILL, "disclosure is not optional"),
+          "[trap] SKILL.md: the mandatory subtype-disclosure clause is gone — "
+          "product_type approximations get presented as equity_type answers")
+    check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_tranche.yaml",
+              "FILTER HERE ONLY"),
+          "[trap] capital_markets_tranche.yaml: product_type lost the filter-"
+          "only-for-exclusive-vocabulary rule — the catalog invites the wrong "
+          "axis again")
     # NON-B&D IS SERVER-SIDE (QA 2026-08-13): the agent answered "Citi
     # non-B&D 2026" with the 9,615-row participation SUPERSET and told the
     # user to ignore the Citi-billed rows — a reader-side split cannot work

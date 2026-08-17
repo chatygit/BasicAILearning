@@ -399,6 +399,14 @@ and `investor_count` undercounts — say so on a headcount.
   columns — blank cells noted ("allocation recorded on 9 of 25"). NEVER present
   two independently-ranked lists for one ask: the user asked one question about
   one set of deals, and disjoint top-Ns answer two different questions.
+  **A blank cell means "no rows on that object for this id" — say THAT** ("no
+  orders recorded in the orderbook for these deals"), never "Not Available",
+  which reads as a system failure. When EVERY id comes back empty, lead with
+  that one finding instead of printing a table of empty cells — and remember
+  the deal card's `order_count` counts a WIDER population than the order
+  object (§6), so "the card shows orders but the orderbook object has none"
+  is a real, known state worth one honest sentence, not a reconciliation
+  attempt.
 - **Share-of-book / "% of the book X took" / "top-5 as % of book" = TWO requests**
   on `capital_markets_order` with IDENTICAL deal/date/product scope. Request 1
   (denominator) is the GRAND TOTAL: no investor filter, no investor dimension, no
@@ -546,14 +554,25 @@ wherever values are label variants. Traps are in §7c.
 >   Stock`, and `Pfd` contains no "pref" while `%CONV%` drags in the bonds. Use
 >   `in` with those three exact literals. (On `equity_type` it is the single
 >   value `Convertible Preferred` — no such problem.)
+> - **`equity_type` IS THE DEFAULT AXIS — 99% of class asks filter it (user
+>   ruling 2026-08-17).** `product_type` is a FILTER only when the user
+>   literally says "product type" or uses its EXCLUSIVE vocabulary (the
+>   abbreviations ADR/ADS/GDR/GDS · 144A · Class A · Rights · `Conv. Bond` /
+>   `Conv. Pfd` verbatim · Mandatory Convertible · Closed End Fund).
+>   Everything else — convertible(s), preferred, common stock, warrants, with
+>   or without the words "equity type" — filters `equity_type`.
 > - **A CLASS ask ranked by a TRANCHE metric** ("top 5 Convertible Preferred
->   deals by tranche size") stays ONE request on the tranche object: the
->   tranche view does NOT carry `equity_type`, so apply the class as its
->   `product_type` subtype in-list (above) and **PROJECT `product_type`** — the
->   sub-type column in the table IS the class breakdown the user wants. Say
->   the class was applied via its product-type subtypes. **"with product
->   type" in an ask is a PROJECTION instruction, never a reason to change the
->   filter axis.**
+>   deals by tranche size") therefore runs the TWO-STEP: request 1 on the
+>   deal object, `equity_type eq 'Convertible Preferred'` projecting
+>   `deal_id`; request 2 on tranche, `deal_id in [those ids]` ranked by the
+>   size metric (`partition_by [deal_name, deal_id]` for one row per deal),
+>   **projecting `product_type`** — the sub-type column is the breakdown, not
+>   the filter. ONLY if request 1 exceeds the 40-id cap: fall back to the
+>   `product_type` subtype in-list, and the disclosure is not optional — say
+>   "ranked via the product-type subtypes; the exact equity-type set is too
+>   large to carry across objects" or the approximation is being passed off
+>   as the real answer. **"with product type" in an ask is a
+>   PROJECTION instruction — never a reason to change the filter axis.**
 > - **NEVER `or` the two axes.** Pick one by the user's wording.
 > - Zero rows on a class filter → retry ONCE on the other axis (switching
 >   object if needed) and SAY you widened. Never silently `or` both up front.
