@@ -322,3 +322,11 @@ views/_issuer-name-check.sql (Q1 shape/keys, Q2 role vocabulary, Q3 grain/
 dedupe, Q4 gained/lost/disagree vs current, Q5 eyeball). Swap ships in the
 round-2 batch if Q4 shows net gain without losses; a MAX()/ROWID dedupe
 guards grain per Q3.
+BOTH PRODUCTS ARE IN SCOPE (Samir, 2026-08-18: "OB_DEAL_ISSUER.NAME is for
+ECM"): all three views' DCM branches currently source ISSUER_NAME from
+OB_DEAL_ISSUER.NAME via DEAL_ID||'-'||TRANCHE_ID — if that table is ECM-side,
+DCM issuer names are misdirected everywhere. Measure via check Q6-Q8
+(per-product population in the deployed views; table shape/keys; DCM join-hit
+rate). OPEN QUESTION for Samir: if not OB_DEAL_ISSUER, what IS the DCM issuer
+name source? (OB_DEAL_TRANCHE carries ISSUER_SECTOR but no known name
+column.)

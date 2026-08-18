@@ -71,3 +71,42 @@ WHERE  D.PRODUCT = 'ECM'
 AND    D.ISSUER_NAME IS NOT NULL
 AND    UPPER(D.ISSUER_NAME) <> UPPER(P.PARTY_NAME)
 FETCH FIRST 20 ROWS ONLY;
+
+-- ===========================================================================
+-- PART 2 — DCM side (Samir, 2026-08-18): "OB_DEAL_ISSUER.NAME is for ECM".
+-- ALL THREE views' DCM branches source ISSUER_NAME from OB_DEAL_ISSUER.NAME;
+-- if the table is ECM-side, DCM issuer names are misdirected everywhere.
+-- ===========================================================================
+
+-- Q6 — the symptom, measured: issuer-name population per product, per view.
+SELECT 'deal' AS V, PRODUCT, COUNT(*) AS ROWS_, COUNT(ISSUER_NAME) AS WITH_NAME,
+       ROUND(100 * COUNT(ISSUER_NAME) / COUNT(*), 1) AS PCT
+FROM DGSTREAM.VW_DEAL_SUMMARY GROUP BY PRODUCT
+UNION ALL
+SELECT 'tranche', PRODUCT, COUNT(*), COUNT(ISSUER_NAME),
+       ROUND(100 * COUNT(ISSUER_NAME) / COUNT(*), 1)
+FROM DGSTREAM.VW_TRANCHE_SUMMARY GROUP BY PRODUCT
+UNION ALL
+SELECT 'order', PRODUCT, COUNT(*), COUNT(ISSUER_NAME),
+       ROUND(100 * COUNT(ISSUER_NAME) / COUNT(*), 1)
+FROM DGSTREAM.VW_ORDER_DETAIL GROUP BY PRODUCT;
+
+-- Q7 — what OB_DEAL_ISSUER actually holds: shape + key format + sample.
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH
+FROM   ALL_TAB_COLUMNS
+WHERE  OWNER = 'DGSTREAM' AND TABLE_NAME = 'OB_DEAL_ISSUER'
+ORDER  BY COLUMN_ID;
+
+SELECT DEAL_TRANCHE_ID, NAME
+FROM   DGSTREAM.OB_DEAL_ISSUER
+FETCH FIRST 20 ROWS ONLY;
+
+-- Q8 — join-hit rate: how many DCM tranches actually find an issuer row via
+-- the views' join key (DEAL_ID || '-' || TRANCHE_ID)?
+SELECT COUNT(*) AS DCM_TRANCHES,
+       SUM(CASE WHEN DI.DEAL_TRANCHE_ID IS NOT NULL THEN 1 ELSE 0 END) AS WITH_ISSUER_ROW
+FROM (
+    SELECT DISTINCT DEAL_ID, TRANCHE_ID FROM DGSTREAM.OB_DEAL_TRANCHE
+) DT
+LEFT JOIN DGSTREAM.OB_DEAL_ISSUER DI
+  ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID;
