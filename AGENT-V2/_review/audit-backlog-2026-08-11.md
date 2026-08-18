@@ -315,7 +315,17 @@ attribution, not a mirrored designation. SPEC FINAL for the round-2 diff:
     the 53% of tranches where per-order billing varies. (V1 also asserted 'at
     most one true per row' — Q25's 850 multi-B&D tranches disprove it.)
 
-### Issuer name source swap — batch item 5 (tech guidance, queued 2026-08-18)
+### Issuer name source swap — ON HOLD, blocked on join path (2026-08-18)
+MEASURED: current ECM issuer source is 100% DEAD in QA (0 of 21,195 deals
+carry a name — explains every "—" in traces). But the proposed source
+does not join: TRANSACTION_ID matches 2/21,195 ECM and 0/46,931 DCM deal
+ids, and PARTY_NAME is NULL on ~98% of Primary Client rows (59,839 of
+~61k transactions have zero non-null names; only 1,390 carry one).
+BLOCKED on Dumitru: what does TRANSACTION_ID join to (bridge table —
+OPUS_BASE_TRANSACTION?), and is QA's copy of PARTY_NAME populated?
+DOES NOT HOLD THE BATCH — items 1-4 ship without it.
+
+### (original notes) Issuer name source swap — batch item 5 (tech guidance, queued 2026-08-18)
 Ibanescu (5/28): ECM issuer name should be PARTY_NAME from
 OPUS_BASE_TRANSACTION_RELATED_PARTIES where PARTY_ROLE='Primary Client' — not
 OPUS_ECM_TRANSACTION.ISSUER_NAME_FROM_SOURCE. Matches the QA symptom (Issuer
