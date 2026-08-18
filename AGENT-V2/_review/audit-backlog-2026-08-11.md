@@ -413,3 +413,22 @@ OPEN (query J): ~47.8k I-format (deal,tranche) pairs live in OB_DEAL_TRANCHE,
 which the DCM branches read with NO product filter — check whether I-format
 deals appear in the views as 'DCM' rows (possible cross-platform
 contamination of the DCM population).
+
+
+### I-format DCM population — CLOSED, legitimate (query L, 2026-08-18)
+Eyeball of I-format 'DCM' view rows: bond tranches ('5 YR FXD USD', '15Y45F',
+'10 yr', USD notionals, announced/draft) = IPREO-sourced DCM (OB_DEAL_TRANCHE
+carries IPREO_DEAL_ID/IPREO_TRANCHE_ID; two source systems, one product). NO
+contamination; DCM counts are sound; no product filter needed. Issuer
+investigation fully closed — see views/_issuer-name-check.sql archive header.
+
+### OB_DEAL_TRANCHE riches (214 cols, recorded in base-table-columns.md)
+DCM-side treasure (population unmeasured): COUPON, YIELD, PRICE +
+PRICE_GUIDANCE, BOOK_SIZE + ORDER_BOOK_SIZE_USD/EUR (USD-NORMALIZED book
+sizes!), ALLOCATION_SIZE_USD/EUR, FX_RATE, FEES at four grains (TOTAL_FEE,
+SELLING_CONSESSION_FEE, UNDERWRITING_FEE, MANAGEMENT_FEES, PRAECIPIUM_FEES,
+RETAIL_UW_FEE), ANNOUNCEMENT/ISSUE/SETTLEMENT/TRADE dates, ROAD_SHOW dates +
+participants, TRANCHE_CUSIP, SMC_* ratings (FITCH/MOODY/SP), IS_CONVERTIBLE,
+GOVERNING_LAW, PARENT_ISSUER_NAME. Combined with the OPUS-side riches, the
+fee/pricing/announced-date "not tracked" refusals are all potentially
+closable in future batches — measure population first, always.

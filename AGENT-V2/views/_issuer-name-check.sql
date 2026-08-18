@@ -1,3 +1,20 @@
+-- =========================================================================
+-- ARCHIVE — issuer identity investigation, CLOSED 2026-08-18. Verdicts:
+--  * ECM issuer names: were 100% dead; FIXED three-layer in all views
+--    (party master -> OB_DEAL_ISSUER GFCID -> old column). ~6,892 QA
+--    deals named on deploy; PROD higher.
+--  * DCM issuer names: NEVER broken — V1 concat join hits 74,276/74,281
+--    tranches; party master layered above for PROD.
+--  * I-format 'DCM' rows (query L): LEGITIMATE DCM — bond tranches
+--    ('5 YR FXD USD', '15Y45F', '10 yr', USD notionals) from the IPREO
+--    source system (IPREO_DEAL_ID/IPREO_TRANCHE_ID exist on
+--    OB_DEAL_TRANCHE). Two source systems, one product. No
+--    contamination; no product filter needed.
+--  * All table shapes recorded in views/_reference/base-table-columns.md
+--    — never re-desc these.
+-- Nothing left to run. Kept for the audit trail.
+-- =========================================================================
+
 -- ===========================================================================
 -- ISSUER IDENTITY — final round: does V1's DCM join actually match?
 -- 2026-08-18. State: ECM is FIXED (party master -> OB_DEAL_ISSUER GFCID ->
