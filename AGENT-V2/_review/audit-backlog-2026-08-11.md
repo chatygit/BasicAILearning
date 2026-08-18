@@ -385,3 +385,19 @@ sources)). The SHIPPED OB_DEAL_ISSUER GFCID fix stays as the fallback layer —
 measured working (0 -> 6,892 QA deals) and PROD-safe. QA sparseness caveat
 stands: PARTY_NAME null on ~98% of Primary Client rows in QA — the master may
 only shine in PROD; keep NVL fallbacks permanent.
+
+### Issuer identity — PARTY MASTER LAYERED (2026-08-18 pm); join mystery solved
+Sample G proved RELATED_PARTIES.TRANSACTION_ID IS the deal id family — the
+direct join was right; QA's copy is just unloaded (~1,390 named transactions,
+PARTY_GFCID null even on named rows; the 2/21,195 was real overlap, not a key
+mismatch). No bridge needed. The PCM layer (Primary Client, latest VERSION by
+PUBLISHED_TS, one row per transaction) is WRITTEN into all three ECM branches:
+NAME/GFCID/TICKER = NVL(party master, existing chain). QA behavior unchanged
+(layer joins ~nothing); PROD gets the intended master. Fallbacks permanent.
+
+### OPUS_BASE_TRANSACTION riches (desc'd 2026-08-18) — future batches
+DEAL_FEE_MM + DEAL_FEE_CURRENCY — FEES AT SOURCE (banker-lens "impossible
+tier" gap may be closable!). DEAL_SIZE_MM + DEAL_SIZE_CURRENCY (deal size in
+MONEY — the ECM valuation gap). PRODUCT / SUB_PRODUCT (business-line axis),
+MANDATE_STATUS, PROJECT_NAME, TRANSACTION_STATUS. Population unmeasured —
+measure before any doctrine or view change (the dead-column lesson).

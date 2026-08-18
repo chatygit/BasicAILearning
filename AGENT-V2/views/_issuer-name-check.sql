@@ -11,7 +11,10 @@
 --     is our deal id family (the deal view already joins it for DEAL_REGION).
 --   * QA caveat: PARTY_NAME is null on ~98% of Primary Client rows in QA —
 --     the master may only shine in PROD; NVL fallbacks stay permanent.
--- Run F then G; two screenshots finish the design.
+-- RESOLVED (F+G, 2026-08-18 pm): TRANSACTION_ID IS the deal id family —
+-- direct join, no bridge; QA's copy is just unloaded. The PCM layer is
+-- WRITTEN into all three views (NVL over the OB_DEAL_ISSUER fix and old
+-- sources). Nothing left to run — this file is history now.
 -- ===========================================================================
 
 -- F — the bridge table's keys: which column does RELATED_PARTIES.BASE_ID

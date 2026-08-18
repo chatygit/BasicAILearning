@@ -69,9 +69,9 @@ SELECT
     'ECM' AS PRODUCT,
     T.DEAL_TRANSACTION_ID AS DEAL_ID,
     T.SYNDICATE_DEAL_NAME AS DEAL_NAME,
-    NVL(OIN.ISSUER_NAME_BY_GFCID, T.ISSUER_NAME_FROM_SOURCE) AS ISSUER_NAME,
-    T.ISSUER_GFCID AS GFCID,
-    T.ISSUER_TICKER AS TICKER,
+    NVL(PCM.PARTY_NAME, NVL(OIN.ISSUER_NAME_BY_GFCID, T.ISSUER_NAME_FROM_SOURCE)) AS ISSUER_NAME,
+    NVL(PCM.PARTY_GFCID, T.ISSUER_GFCID) AS GFCID,
+    NVL(PCM.PARTY_TICKER, T.ISSUER_TICKER) AS TICKER,
     T.ISSUER_INDUSTRY_SECTOR AS SECTOR,
     OBT.DEAL_REGION AS DEAL_REGION,
     TO_CHAR(TT.ECM_TRANSACTION_TRANCHE_ID) AS TRANCHE_ID,
@@ -235,6 +235,26 @@ LEFT JOIN (
     GROUP BY GFCID
 ) OIN
     ON OIN.GFCID = T.ISSUER_GFCID
+
+LEFT JOIN (
+    -- ISSUER IDENTITY MASTER (tech end-state, Dumitru + Samir 2026-08-18):
+    -- PARTY_NAME/PARTY_GFCID/PARTY_TICKER at PARTY_ROLE='Primary Client'.
+    -- Joins DIRECTLY on TRANSACTION_ID = our deal id family (proven by
+    -- sample G); QA's copy is largely unloaded (~1,390 named transactions),
+    -- so in QA this layer joins almost nothing and the NVL fallbacks carry —
+    -- in PROD it becomes the primary source. Latest VERSION wins (the table
+    -- appends versions, up to 1,232 rows per transaction measured);
+    -- PUBLISHED_TS is NOT NULL. One row per transaction — no fan-out.
+    SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PARTY_TICKER
+    FROM (
+        SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PARTY_TICKER,
+               ROW_NUMBER() OVER (PARTITION BY TRANSACTION_ID
+                                  ORDER BY PUBLISHED_TS DESC) AS RN_
+        FROM DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
+        WHERE PARTY_ROLE = 'Primary Client'
+    ) WHERE RN_ = 1
+) PCM
+    ON PCM.TRANSACTION_ID = T.DEAL_TRANSACTION_ID
 
 UNION ALL
 
