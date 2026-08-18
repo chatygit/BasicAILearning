@@ -389,7 +389,9 @@ check(has(SKILL, "RUSSIA"), "[region] SKILL lost the %US% warning")
 # ---------------------------------------------------------------------------
 TRAPS = [
     ("1x1 meeting literal", ORDER, "1x1"),
-    ("1x1 excludes No Meeting", ORDER, "No Meeting"),
+    # User ruling 2026-08-18: 'No Meeting' IS a meeting type — "other than
+    # 1x1" keeps those orders (the old rule excluded them).
+    ("No Meeting is a kept value", ORDER, "IS a meeting type"),
     ("M & A spacing", DEAL, "M & A"),
     ("refi split across two values", DEAL, "Debt Repayment"),
     ("Oil & Gas is not Energy", DEAL, "Oil & Gas"),
@@ -496,6 +498,16 @@ check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_deal.yaml",
 check(r"(^|\| )[0-9]+( \||$)" in text(ROOT / "views" / "_deploy-check.sql"),
       "[deploy] _deploy-check.sql: check 4 is back to the whole-string regex "
       "— a multi-currency id fallback like '1 | 4' passes the deploy check")
+# SUPERLATIVE TIES (QA 2026-08-18): "the investor with max allocation" ran
+# LIMIT 1 — one row cannot reveal a tie, so co-winners get silently dropped
+# and the singular answer is wrong. Superlatives fetch limit 3 as tie
+# detection; ties are co-winners, named together.
+check(has(SKILL, "NEVER uses `limit 1`"),
+      "[trap] SKILL.md: the superlative-tie rule is gone — 'who has the max' "
+      "runs limit 1 again and silently drops co-winners")
+check("CO-WINNERS" in text(ROOT / "app" / "bqs" / "ontology.py"),
+      "[trap] ontology.py: discovery's how_to_use no longer teaches the "
+      "limit-3 superlative recipe")
 # EMPTY TURN AFTER TOOL RESULT + REFUSED NUMBER REPLY (QA 2026-08-17): page 2
 # (44 rows) came back and the model emitted an EMPTY message — the rows the
 # user paid a round-trip for were thrown away. And a bare "1" reply was
@@ -1060,10 +1072,15 @@ if MCPSERVER.exists():
           "[answer] mcpserver.py: discovery no longer carries "
           "entitled_products — the agent can only learn its product scope by "
           "paying for a denied query")
-    check(src.count("_attach_entitlement_scope(") >= 2,
-          "[answer] mcpserver.py: _attach_entitlement_scope is defined but "
-          "not CALLED from discover_business_terms — the scope never reaches "
-          "the agent")
+    check(src.count("_attach_entitlement_scope(") >= 3,
+          "[answer] mcpserver.py: _attach_entitlement_scope must be called "
+          "from BOTH discover_business_terms AND run_bqs_query — the scope "
+          "stated once at session start gets buried in long conversations "
+          "and the agent drifts to unentitled products (QA 2026-08-18)")
+    check("note=False" in src,
+          "[answer] mcpserver.py: query responses lost the bare-key scope "
+          "stamp — either the ambient scope is gone or every response now "
+          "carries the full note's token cost")
     # ASK-IN-LOGS (added 2026-08-12): the user's prompt lives in the ADK layer
     # and never reaches this server, so QA debugging meant matching queries to
     # questions by timestamp alone. run_bqs_query now takes a log-only

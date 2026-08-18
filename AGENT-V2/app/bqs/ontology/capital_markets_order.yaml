@@ -156,8 +156,11 @@ how_to_use:
      are compared side by side, and never present the two as the same measure."
   - "VALUE TRAPS on this object: meeting_type's stored literal is '1:1', NOT
      'One-to-One' (that spelling exists only in meeting_type_key, as
-     ONE_TO_ONE); 'other than 1:1' must exclude BOTH '1:1' and 'No Meeting', and
-     the answer must say the no-meeting orders were excluded. investor_category
+     ONE_TO_ONE); 'No Meeting' IS a meeting type (user ruling 2026-08-18):
+     'other than 1:1' excludes ONLY '1:1' and KEEPS the No Meeting orders —
+     project meeting_type so the No Meeting bucket is visible. Exclude No
+     Meeting only when the words require a meeting to have HAPPENED ('investors
+     we MET other than 1x1'), and say so. investor_category
      is a CATEGORY — 'classification' is a different, untracked taxonomy whose
      values do not overlap it; see unsupported_intents."
 
@@ -429,8 +432,10 @@ filters:
       twin of meeting_type (NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL,
       SMALL_GROUP, GROUP_MEETING). FILTER here ('one-on-one' → ONE_TO_ONE, no
       colon to get wrong), PROJECT meeting_type for display. "Other than 1:1"
-      is not_in [ONE_TO_ONE, NO_MEETING] — and say the no-meeting orders were
-      excluded.
+      is not_in [ONE_TO_ONE] ONLY — NO_MEETING is a meeting type and its orders
+      BELONG in the answer (user ruling 2026-08-18). Add NO_MEETING to the
+      exclusion only when the words require an actual meeting ('we MET other
+      than 1x1'), and say so.
   meeting_type:
     column: meeting_type
     products: ["ECM"]
@@ -441,9 +446,10 @@ filters:
       ECM-ONLY (hard NULL on DCM). Meeting type — the stored set is 'No Meeting',
       '1:1', 'Conference Call', 'Small Group', 'Group Meeting'. The literal is '1:1' —
       'One-to-One' matches NOTHING (it exists only in meeting_type_key, as
-      ONE_TO_ONE). "Other than 1:1" must exclude BOTH '1:1' AND 'No Meeting'
-      (not_in ['1:1','No Meeting']), and the answer must say the no-meeting
-      orders were excluded, or the count reads as if everyone met. There is NO
+      ONE_TO_ONE). 'No Meeting' IS a meeting type (user ruling 2026-08-18):
+      "other than 1:1" is not_in ['1:1'] ONLY and keeps the No Meeting orders —
+      project meeting_type so that bucket is visible. Exclude No Meeting only
+      when the phrasing requires a meeting to have happened, and say so. There is NO
       stored 'roadshow' value: treating 'roadshow' / 'met the issuer' as
       not_in ['No Meeting'] is an interpretation — use it, but state it.
   order_type:
@@ -647,7 +653,7 @@ examples:
         # Never like '%US%' — it matches RUSSIA and AUSTRIA.
         - {field: investor_region, op: in, value: ["United States", "US"]}
       order: [{field: total_allocation, direction: desc}, {field: investor_id, direction: asc}]
-  - question: Investors who met the issuer other than 1:1 (ECM)
+  - question: Orders other than 1x1 on a deal (ECM)
     request:
       source: capital_markets_order
       metric: order_count
@@ -655,8 +661,12 @@ examples:
       filters:
         - {field: product, op: eq, value: ECM}
         - {field: deal_id, op: eq, value: "REPLACE_WITH_DEAL_ID"}
-        # Excludes BOTH the 1x1 literal and No Meeting — disclose the exclusion.
-        - {field: meeting_type, op: not_in, value: ["1:1", "No Meeting"]}
+        # ONLY 1:1 is excluded — 'No Meeting' IS a meeting type and belongs in
+        # the answer (user ruling 2026-08-18); meeting_type is projected so the
+        # No Meeting bucket is visible. Add 'No Meeting' to the exclusion only
+        # when the ask requires a meeting to have HAPPENED ('investors we MET
+        # other than 1x1'), and say so.
+        - {field: meeting_type, op: not_in, value: ["1:1"]}
       order: [{field: order_count, direction: desc}, {field: investor_id, direction: asc}]
   - question: Top 10 investors on a DCM deal by allocation, USD only
     request:

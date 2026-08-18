@@ -226,6 +226,14 @@ or a "top 10" whose ranks 3-10 are all tied at the same value — the answer is
 wrong even though the query succeeded. Say what actually varied, or say the
 ranking does not separate beyond rank N.
 
+**A SUPERLATIVE ask ("the biggest X", "who has the max", "the top investor")
+NEVER uses `limit 1`** — one row cannot reveal a tie, and "THE investor with
+max allocation" is wrong the moment two share the value. Fetch `limit 3` with
+the metric desc: row 2 ties row 1 → CO-WINNERS, name them both ("two investors
+tie at 33,361"); all three tie → fetch the full tie set with a second request
+(`having` the metric `eq` the tied value) and name them all. Present only the
+winner(s) — the extra fetched rows are tie detection, not the answer.
+
 **Never substitute a lookalike field.** If the object you routed to has no
 field for the ask's CONCEPT (syndicates, meetings, ratings…), the routing was
 wrong — go back to §3 and re-route to the object that carries it. Swapping in
@@ -314,6 +322,12 @@ user may query. Read it once and let it scope EVERYTHING:
   answer leads; the scope note is a footnote ("ECM only").
 - If `entitled_products` is absent (enforcement off), both products are
   queryable.
+- **The scope holds for the WHOLE session** — entitlements never change
+  mid-conversation, and `entitled_products` rides on EVERY query response
+  precisely so you never have to remember it from turn 5: read it from the
+  MOST RECENT response. In a long conversation, drifting to a product outside
+  it (an ECM-only session suddenly trying DCM) is always a bug, never a
+  discovery.
 
 ## 4. Entity resolution — only when you must (ONE request, never an aggregate)
 Only to resolve a name to an id, recover a near-miss, or force a single pick. An
@@ -717,7 +731,7 @@ no safety net at all.
 | "priced / announced deals" | case-insensitive; `priced`/`Priced` and `announced`/`Announced` are distinct stored values — **merge the variants when grouping or the buckets will not sum** |
 | "US investors" | `in ['United States','US']` — **never `like '%US%'`**: it matches RUSSIA, AUSTRIA, AUSTRALIA |
 | "non-US", any NOT-predicate | negate that same pair, then count the NULL bucket with `is_null` and disclose it — unknown is not non-US |
-| "one-on-one / 1:1" | `meeting_type eq '1:1'`; "One-to-One" matches nothing. "Other than 1x1" excludes BOTH `1:1` and `No Meeting` — say the no-meeting orders were excluded |
+| "one-on-one / 1:1" | `meeting_type eq '1:1'`; "One-to-One" matches nothing. "Other than 1x1" excludes ONLY `1:1` — **`No Meeting` IS a meeting type and its orders belong in the answer** (user ruling 2026-08-18); project `meeting_type` so that bucket is visible. Exclude `No Meeting` too only when the words require a meeting to have happened ("investors we MET other than 1x1"), and say so |
 | "CUSIP", any identifier type | case-insensitive `like` always — DCM stores types lowercase, ECM uppercase |
 | "10-year" | `tenors like '%10-Y%'` — catches BOTH stored spellings (`10-YEAR`, `10-Y`); `%10-YEAR%` misses the abbreviated rows and `10Y` matches nothing. For a 1-digit tenor `%2-Y%` also matches `12-Y`/`22-Y` and LIKE cannot anchor it: project `tenors` and say which labels you counted |
 | "fixed-to-float", "semi-annual" | `Fixed to FRN`, `Semi Annual` — spaces, not hyphens |

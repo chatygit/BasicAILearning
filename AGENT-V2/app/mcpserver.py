@@ -386,7 +386,9 @@ def _entitlement_preflight() -> tuple[dict | None, list[str]]:
     return None, entitled
 
 
-def _attach_entitlement_scope(result: dict, entitled: list[str]) -> dict:
+def _attach_entitlement_scope(
+    result: dict, entitled: list[str], note: bool = True
+) -> dict:
     """Put the caller's entitled products INTO the discovery response.
 
     The skill has always said "scope to what the user is entitled to and never
@@ -401,17 +403,27 @@ def _attach_entitlement_scope(result: dict, entitled: list[str]) -> dict:
     Attached only when the gate is active (non-empty `entitled`); when
     enforcement is off the key is absent and the skill treats both products as
     queryable.
+
+    ``note=False`` attaches the bare `entitled_products` key without the
+    instruction text — used on EVERY query response, because a scope delivered
+    once at session start does not survive a long conversation: observed
+    2026-08-18, a 50+-event session drifted to DCM on an ECM-only login and
+    failed, with the discovery payload (and its scope) buried dozens of turns
+    back or evicted by context trimming. Ambient on every response, the scope
+    is always within the most recent tool result.
     """
     if entitled and isinstance(result, dict) and not result.get("error"):
         result["entitled_products"] = list(entitled)
-        result["entitlement_note"] = (
-            "These are the ONLY products this user may query — treat the list "
-            "as complete. Scope every request to it from the start; never run "
-            "a query for, offer, or suggest a product outside it. If the user "
-            "explicitly names an unentitled product, say access does not cover "
-            "it in one line — WITHOUT running the query — and answer with the "
-            "entitled portion."
-        )
+        if note:
+            result["entitlement_note"] = (
+                "These are the ONLY products this user may query — treat the "
+                "list as complete, for the WHOLE session (entitlements never "
+                "change mid-conversation). Scope every request to it from the "
+                "start; never run a query for, offer, or suggest a product "
+                "outside it. If the user explicitly names an unentitled "
+                "product, say access does not cover it in one line — WITHOUT "
+                "running the query — and answer with the entitled portion."
+            )
     return result
 
 
@@ -715,7 +727,14 @@ if _BQS_AVAILABLE:
             logger.info("run_bqs_query: entitlement denied (code=%s)", denial.get("code"))
             return denial
         logger.info("run_bqs_query: source=%s metric=%s", source, metric)
-        return _get_bqs_service().run(request)
+        # The caller's product scope rides on EVERY response (bare key, no
+        # note) — a scope stated once at session start gets buried or trimmed
+        # in long conversations, and the agent drifts to unentitled products.
+        # The gate just ran, so this preflight is a cache hit.
+        _, _entitled_now = _entitlement_preflight()
+        return _attach_entitlement_scope(
+            _get_bqs_service().run(request), _entitled_now, note=False
+        )
 
 
 # ---------------------------------------------------------------------------

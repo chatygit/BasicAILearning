@@ -308,7 +308,10 @@ class OntologySpec(BaseModel):
             "single 'between' with a 2-item [start, end] list.",
             "To rank/sort, use 'order': [{\"field\", \"direction\"}] where "
             "'field' is the metric or a selected dimension, and set 'limit' for "
-            "'top N' questions (e.g. order desc by the metric, limit 10).",
+            "'top N' questions (e.g. order desc by the metric, limit 10). For "
+            "a SUPERLATIVE ('the single biggest/max X') use limit 3, never 1: "
+            "if the top rows tie on the metric they are CO-WINNERS — name them "
+            "all, present only the winner(s).",
             "TOP-N-PER-GROUP ('the biggest X in EACH Y', 'top 3 investors per "
             "deal'): set 'partition_by' to the grouping dimension(s) — a "
             "subset of 'dimensions' — and 'per_partition_limit' to N (default "

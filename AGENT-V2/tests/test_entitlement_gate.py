@@ -260,6 +260,20 @@ def test_discovery_carries_entitled_products():
     )
 
 
+def test_bare_scope_for_query_responses():
+    # Every run_bqs_query response carries the bare key (no note) — a scope
+    # stated once at session start gets buried/trimmed in long conversations
+    # (observed 2026-08-18: 50+-event ECM-only session drifted to DCM).
+    result = mcpserver._attach_entitlement_scope(
+        {"error": False, "rows": []}, ["ECM"], note=False
+    )
+    assert result["entitled_products"] == ["ECM"]
+    assert "entitlement_note" not in result, (
+        "query responses carry the bare key; the instruction text rides only "
+        "on discovery — per-response notes would cost tokens on every turn"
+    )
+
+
 def test_scope_not_attached_when_gate_inactive_or_error():
     # Enforcement off -> entitled=[] -> key absent; the skill then treats both
     # products as queryable (dev mode must not look like a one-product user).
@@ -290,6 +304,7 @@ CASES = [
     ("product ne rejected, not inverted", test_negated_product_filter_is_rejected_not_inverted),
     ("invalid product rejected, not widened", test_invalid_product_value_is_rejected_not_widened),
     ("discovery carries entitled_products", test_discovery_carries_entitled_products),
+    ("query responses carry bare scope", test_bare_scope_for_query_responses),
     ("scope absent when inactive/error", test_scope_not_attached_when_gate_inactive_or_error),
     ("import failure + flag on refuses", test_import_failure_with_enforcement_on_refuses),
     ("import failure + flag off permissive", test_import_failure_with_flag_off_stays_permissive),

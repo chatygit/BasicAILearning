@@ -248,3 +248,22 @@ same pattern as round 1's issuer_name/sector/tranche_size. That makes
 class disappears. Deploy with the same batch as the deal-view currency
 fallback (written) and tranche-view EQUITY_TYPE (queued). Ask when the batch
 is scheduled and the three view diffs get written together.
+
+### PLATFORM BUG — preset follow-ups dead-end at the root (2026-08-18)
+Trace: session opened with the /capital_markets_agent_v2 PRESET (turn 1 runs
+the sub-agent directly — no transfer event). Every follow-up then routes to
+ask_banking_root_agent, which calls run_bqs_query ITSELF and fails with
+"Tool 'run_bqs_query' not found. Available tools: transfer_to_agent" —
+repeating identically on each follow-up. Mechanism: in preset sessions the
+root's context contains NO example of its own transfer_to_agent call, only
+the sub-agent's run_bqs_query calls, so Gemini imitates the wrong tool.
+NOT fixable in this repo (root instruction + preset router are platform
+components). Handoff to the platform team, either fix suffices, both is best:
+  1. PRESET STICKINESS: when a session starts with a preset agent, route
+     follow-up messages to that agent directly (the platform already carries
+     State: preset_name), not to the root.
+  2. ROOT HARDENING: add to ask_banking_root_agent's instruction: "Your ONLY
+     tool is transfer_to_agent. Tool calls visible in history (run_bqs_query,
+     discover_business_terms, load_skill...) belong to SUB-AGENTS — seeing
+     them is not availability; never call them yourself. On 'Tool not found',
+     do not retry the call — transfer to the agent that owns the domain."
