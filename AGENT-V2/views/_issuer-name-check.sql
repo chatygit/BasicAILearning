@@ -6,8 +6,21 @@
 -- behavior — VIEW-SPLIT-PROPOSAL.md:158). The A2 sample showed only
 -- 'I-...' ECM-format keys, but 15 rows is not a census — these two queries
 -- decide whether V1's DCM join ever produced a name.
+-- RESOLVED (H+I, 2026-08-18): BOTH key families exist (26,463 DCM-format
+-- 100% named; 47,813 I-format) and V1's concat join hits 74,276/74,281 DCM
+-- tranches — DCM issuer names were NEVER broken; the QA "—" symptoms were
+-- ECM-only. Everything as written stands. ONE integrity question remains:
 -- ===========================================================================
 
+-- J — do I-format deals leak into our views as 'DCM' rows? OB_DEAL_TRANCHE
+--     holds ~47.8k I-format pairs and the DCM branches read it with NO
+--     product filter. >0 here = another platform's deals mislabeled DCM.
+SELECT COUNT(*) AS DCM_ROWS_WITH_I_FORMAT_DEAL_ID,
+       COUNT(DISTINCT DEAL_ID) AS DISTINCT_I_DEALS
+FROM   DGSTREAM.VW_TRANCHE_SUMMARY
+WHERE  PRODUCT = 'DCM' AND DEAL_ID LIKE 'I-%';
+
+-- (original H below for the record)
 -- H — key-format census of OB_DEAL_ISSUER: are there any non-'I-' keys
 --     (i.e. DCM 'dealid-trancheid' format) at all, and do they carry names?
 SELECT CASE WHEN DEAL_TRANCHE_ID LIKE 'I-%' THEN 'I-format (ECM)'

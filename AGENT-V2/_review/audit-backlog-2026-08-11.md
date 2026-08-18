@@ -401,3 +401,15 @@ tier" gap may be closable!). DEAL_SIZE_MM + DEAL_SIZE_CURRENCY (deal size in
 MONEY — the ECM valuation gap). PRODUCT / SUB_PRODUCT (business-line axis),
 MANDATE_STATUS, PROJECT_NAME, TRANSACTION_STATUS. Population unmeasured —
 measure before any doctrine or view change (the dead-column lesson).
+
+
+### DCM issuer names — NEVER BROKEN (H+I, 2026-08-18 close)
+OB_DEAL_ISSUER holds BOTH key families: 26,463 DCM-format rows (100% named)
++ 47,813 I-format; V1's concat join hits 74,276/74,281 DCM tranches (99.99%).
+Samir's "is for ECM" and the I-format sample led us astray — the A2 FETCH
+FIRST 15 surfaced only I-format rows. DCM layer final: party master (PROD) ->
+V1 concat join (WORKING primary in QA). All view edits stand unchanged.
+OPEN (query J): ~47.8k I-format (deal,tranche) pairs live in OB_DEAL_TRANCHE,
+which the DCM branches read with NO product filter — check whether I-format
+deals appear in the views as 'DCM' rows (possible cross-platform
+contamination of the DCM population).
