@@ -267,3 +267,33 @@ components). Handoff to the platform team, either fix suffices, both is best:
      discover_business_terms, load_skill...) belong to SUB-AGENTS — seeing
      them is not availability; never call them yourself. On 'Tool not found',
      do not retry the call — transfer to the agent that owns the domain."
+
+### Billed-by goes ORDER-LEVEL in round 2 (Q1 verdict 2026-08-18)
+OB_ORDER.BND holds a real bank NAME per order (Q1: Citigroup Global Markets
+Inc. 802k orders; 1.33M NULL; name variants incl. a truncated 'J.P. Morgan P';
+'DB Account 2' = QA junk). It is a SCALAR — so "orders billed by X" becomes a
+one-hop like-filter AND a billed-by league table (GROUP BY) becomes possible,
+which pipe lists structurally denied. Round-2 order-view spec upgrades from
+"inherit tranche bnd_bank" to "pull OB_ORDER.BND AS BILLED_BY" (like-only
+matching, stem doctrine transfers; NULL = 'no billing bank recorded').
+Q2 (2026-08-18): 3,687,996 of 5,020,472 orders carry BND = 73.5% — viable
+with the 'no billing bank recorded' disclosure for the rest. NOTE: OB_ORDER
+(5.02M) has FEWER rows than the order view's measured spine (~5.87M) — the
+round-2 diff joins BND via LEFT JOIN on the order key so unmatched view rows
+fold into 'not recorded'. Q3 (2026-08-18): 10,042 of 18,909 tranches with
+BND orders (53%) carry MORE THAN ONE distinct BND — genuine order-level
+attribution, not a mirrored designation. SPEC FINAL for the round-2 diff:
+  * vw_order_detail: LEFT JOIN OB_ORDER on the order key, project
+    OB_ORDER.BND AS BILLED_BY (both products; NULL = 'no billing bank
+    recorded').
+  * capital_markets_order ontology: billed_by dimension + filter (like-only,
+    never eq — name variants incl. truncated 'J.P. Morgan P'; Citi stem
+    doctrine transfers: '%CITIGROUP GLOBAL MARKETS%'), suggestable, no curated
+    values (QA junk like 'DB Account 2' exists). Plus a token-less
+    bill_and_deliver computed filter on THIS object (column billed_by, fixed
+    code CITIGROUP GLOBAL MARKETS) so 'Citi non-B&D ORDERS' negates
+    NULL-safely at order grain, mirroring the tranche filter.
+  * SKILL: billed-by asks at ORDER grain route here one-hop; billed-by league
+    tables (GROUP BY billed_by) are now possible on BOTH products; the
+    tranche BND_BANK remains the DESIGNATION list and the two can disagree
+    legitimately (order-level truth wins for 'billed by' asks).

@@ -49,3 +49,14 @@ AND    T.BND_BANK LIKE '%|%'
 GROUP  BY O.TRANCHE_ID, T.BND_BANK, S.BND
 ORDER  BY O.TRANCHE_ID
 FETCH FIRST 40 ROWS ONLY;
+
+-- Q5 — the product split: is BND a DCM-side fact? (Q4 returned 0 rows: no
+-- multi-B&D ECM tranche has BND-carrying orders, suggesting ECM orders
+-- largely lack BND and the 3.7M populated values are DCM.)
+SELECT O.PRODUCT,
+       COUNT(*)                              AS ORDERS_,
+       COUNT(S.BND)                          AS WITH_BND,
+       ROUND(100 * COUNT(S.BND) / COUNT(*), 1) AS PCT_WITH_BND
+FROM   DGSTREAM.OB_ORDER S
+JOIN   DGSTREAM.VW_ORDER_DETAIL O ON O.ORDER_ID = S.ORDER_ID
+GROUP  BY O.PRODUCT;
