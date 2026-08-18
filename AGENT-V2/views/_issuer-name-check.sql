@@ -39,3 +39,24 @@ FROM (
 ) DT
 LEFT JOIN DGSTREAM.OB_DEAL_ISSUER DI
   ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID;
+
+-- J RESULT (2026-08-18): 47,758 'DCM' tranche rows / 31,558 distinct deals
+-- carry I-format ids — two-thirds of the DCM population. NOT caused by any
+-- current edit (pre-existing in the deployed views; DCM branches read
+-- OB_DEAL_TRANCHE with no source discriminator). Classify before judging:
+-- I-format may be Ipreo-SOURCED DCM (legitimate, second id family) or a
+-- foreign population (contamination inflating every DCM total).
+
+-- K — what discriminator does OB_DEAL_TRANCHE carry? (source system /
+--     product / type columns)
+SELECT COLUMN_NAME, DATA_TYPE, NULLABLE
+FROM   ALL_TAB_COLUMNS
+WHERE  OWNER = 'DGSTREAM' AND TABLE_NAME = 'OB_DEAL_TRANCHE'
+ORDER  BY COLUMN_ID;
+
+-- L — eyeball the I-format 'DCM' rows: do they read as bonds (money sizes,
+--     coupons-ish names, real currencies) or as something else?
+SELECT DEAL_ID, DEAL_NAME, TRANCHE_NAME, CURRENCY, TRANCHE_SIZE, DEAL_STATUS
+FROM   DGSTREAM.VW_TRANCHE_SUMMARY
+WHERE  PRODUCT = 'DCM' AND DEAL_ID LIKE 'I-%'
+FETCH FIRST 15 ROWS ONLY;
