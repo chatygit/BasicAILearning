@@ -297,6 +297,64 @@ def test_ok_with_no_products_refuses_when_flag_on():
     assert entitled == []
 
 
+# --------------------------------------------------------------------------
+# stale relative window guard (added 2026-08-18)
+#
+# QA: the model fired run_bqs_query in the SAME turn as discovery, before the
+# date_anchor existed, and anchored "this year" on its training cutoff — the
+# 2024 window ran and was answered as fact. The server knows today; when the
+# ask says now-relative time and every date bound is before Jan 1 of the
+# current year, the window cannot be what the user meant.
+# --------------------------------------------------------------------------
+
+def _dt_filters(*bounds):
+    ops = ["gte", "lt"]
+    return [
+        {"field": "last_priced", "op": ops[i % 2], "value": b}
+        for i, b in enumerate(bounds)
+    ]
+
+
+def test_stale_this_year_window_is_refused():
+    denial = mcpserver._check_relative_date_mismatch(
+        "break down ecm deals by region this year, grouped by month",
+        _dt_filters("2024-01-01", "2025-01-01"),
+    )
+    assert denial and denial["code"] == "stale_relative_window"
+    assert "TODAY IS" in denial["message"], (
+        "the refusal must carry the real date — it is the anchor the model "
+        "was missing"
+    )
+
+
+def test_explicit_historical_ask_passes():
+    # "deals in 2024" has no relative phrase — history is queryable, never
+    # refused (the date-anchor doctrine's own HISTORY rule).
+    assert mcpserver._check_relative_date_mismatch(
+        "ecm deals by region in 2024, grouped by month",
+        _dt_filters("2024-01-01", "2025-01-01"),
+    ) is None
+
+
+def test_correctly_anchored_relative_window_passes():
+    from datetime import date, timedelta
+    today = date.today()
+    assert mcpserver._check_relative_date_mismatch(
+        "top investors in the last 3 years",
+        _dt_filters(
+            f"{today.year - 3}-01-01",
+            (today + timedelta(days=1)).isoformat(),
+        ),
+    ) is None
+
+
+def test_guard_noops_without_question_or_dates():
+    assert mcpserver._check_relative_date_mismatch(None, _dt_filters("2024-01-01")) is None
+    assert mcpserver._check_relative_date_mismatch(
+        "this year", [{"field": "sector", "op": "eq", "value": "Energy"}]
+    ) is None
+
+
 CASES = [
     ("dual + eq ECM stays ECM", test_dual_entitled_eq_ecm_stays_ecm),
     ("dual + unscoped injects both", test_dual_entitled_unscoped_gets_both_injected),
@@ -305,6 +363,10 @@ CASES = [
     ("invalid product rejected, not widened", test_invalid_product_value_is_rejected_not_widened),
     ("discovery carries entitled_products", test_discovery_carries_entitled_products),
     ("query responses carry bare scope", test_bare_scope_for_query_responses),
+    ("stale this-year window refused", test_stale_this_year_window_is_refused),
+    ("explicit historical ask passes", test_explicit_historical_ask_passes),
+    ("anchored relative window passes", test_correctly_anchored_relative_window_passes),
+    ("guard noops without question/dates", test_guard_noops_without_question_or_dates),
     ("scope absent when inactive/error", test_scope_not_attached_when_gate_inactive_or_error),
     ("import failure + flag on refuses", test_import_failure_with_enforcement_on_refuses),
     ("import failure + flag off permissive", test_import_failure_with_flag_off_stays_permissive),

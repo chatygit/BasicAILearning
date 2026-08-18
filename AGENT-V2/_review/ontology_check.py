@@ -498,6 +498,25 @@ check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_deal.yaml",
 check(r"(^|\| )[0-9]+( \||$)" in text(ROOT / "views" / "_deploy-check.sql"),
       "[deploy] _deploy-check.sql: check 4 is back to the whole-string regex "
       "— a multi-currency id fallback like '1 | 4' passes the deploy check")
+# STALE RELATIVE WINDOW (QA 2026-08-18): the model fired run_bqs_query in
+# the SAME turn as discovery — before the date_anchor existed — and "this
+# year" ran as 2024, answered as fact. Three layers now hold: the server
+# guard (deterministic), the no-query-in-discovery-turn rule, and the ambient
+# current_date on every response.
+check('"code": "stale_relative_window"' in text(ROOT / "app" / "mcpserver.py"),
+      "[time] mcpserver.py: the stale-relative-window guard is gone — a "
+      "query built before discovery anchors 'this year' on the training "
+      "cutoff and runs a past year as fact")
+check('result["current_date"]' in text(ROOT / "app" / "mcpserver.py"),
+      "[time] mcpserver.py: query responses no longer carry current_date — "
+      "the ambient date anchor is gone and long sessions drift again")
+check(has(ROOT / "adk" / "config" / "agents.yaml",
+          "NEVER fire run_bqs_query in that same first turn"),
+      "[time] agents.yaml: the no-query-in-the-discovery-turn rule is gone")
+check(has(SKILL, "stale_relative_window"),
+      "[time] SKILL.md: lost the same-turn prohibition / guard recovery rule "
+      "— the agent no longer knows how to read and recover from the server's "
+      "stale-window refusal")
 # SUPERLATIVE TIES (QA 2026-08-18): "the investor with max allocation" ran
 # LIMIT 1 — one row cannot reveal a tie, so co-winners get silently dropped
 # and the singular answer is wrong. Superlatives fetch limit 3 as tie

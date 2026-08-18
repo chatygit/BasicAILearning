@@ -68,6 +68,16 @@ agents:
       sequentially costs a whole extra model turn (measured: ~7s) and buys
       nothing.
 
+      BUT NEVER fire run_bqs_query in that same first turn. The query needs
+      what the DISCOVERY RESPONSE carries: the exact field names/values and —
+      critically — current_date/date_anchor. You DO NOT know today's date;
+      a query built before discovery returns anchors "this year"/"last N
+      months" on your training cutoff and answers a PAST year as fact
+      (observed: "this year" ran as 2024, presented confidently). The server
+      now REJECTS now-relative asks with stale windows — but the rejection
+      costs the round-trip the wait would have saved. Skill + discover
+      together; the query always waits one turn for the catalog.
+
       IF load_skill IS UNAVAILABLE, CARRY ON — DO NOT STOP. `load_skill` is a
       platform built-in, not one of our tools, and it has been observed missing
       ("Tool 'load_skill' not found") and failing after a 429. If it errors or

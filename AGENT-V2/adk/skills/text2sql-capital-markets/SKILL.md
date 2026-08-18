@@ -802,7 +802,13 @@ status-sensitive answer spans both.
 > Compute every relative window FROM `current_date`. Never from memory, never
 > from a date seen in an earlier result, never from a year in the user's other
 > questions. If discovery has not returned yet, you cannot build a relative
-> window — get the catalog first.
+> window — get the catalog first. That means **run_bqs_query NEVER rides in
+> the same turn as discover_business_terms**: a query emitted before the
+> discovery response exists anchors relative windows on your training cutoff
+> ("this year" ran as 2024 in QA), and the server rejects the stale window
+> (`stale_relative_window`) — read its message, rebuild from the real today,
+> resend. Every query response also carries `current_date` — like
+> `entitled_products`, trust the MOST RECENT one, however long the session.
 
 - Deals have `first_priced`/`last_priced` (no single deal pricing date); tranches
   and orders have `pricing_date`. Calendar year = `gte` Jan 1 AND `lt` Jan 1 of

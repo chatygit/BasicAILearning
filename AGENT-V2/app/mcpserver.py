@@ -427,6 +427,69 @@ def _attach_entitlement_scope(
     return result
 
 
+_RELATIVE_TIME_RE = None
+
+
+def _check_relative_date_mismatch(question: str | None, filters: list) -> dict | None:
+    """Refuse a query whose ASK says now-relative time but whose WINDOW is stale.
+
+    The date anchor arrives in the DISCOVERY RESPONSE — and QA 2026-08-18
+    showed the model firing run_bqs_query in the same turn as discovery, before
+    any response existed, so "this year" was anchored on the model's training
+    cutoff: 2024, answered confidently as fact. A prompt rule already forbade
+    that and lost; this guard is the deterministic backstop. The server knows
+    today, the `question` field carries the ask, and the filters carry the
+    window — when the ask contains a now-relative phrase and EVERY date bound
+    lies before Jan 1 of the current year, the window cannot be what the user
+    meant. Explicit historical asks ("deals in 2024") carry no relative phrase
+    and are untouched; a correctly built "last 3 years" has an upper bound
+    near tomorrow and passes.
+    """
+    global _RELATIVE_TIME_RE
+    if not question:
+        return None
+    import re as _re
+    from datetime import date as _date
+    if _RELATIVE_TIME_RE is None:
+        _RELATIVE_TIME_RE = _re.compile(
+            r"(?i)\b(this (year|month|quarter|week)|ytd|year.to.date|"
+            r"(last|past|previous|trailing) \d+ (day|week|month|year)s?|"
+            r"(last|past) (few|couple)|recent|latest|newest|today|yesterday|"
+            r"so far)\b"
+        )
+    if not _RELATIVE_TIME_RE.search(question):
+        return None
+    bounds = []
+    for f in filters or []:
+        if str(f.get("op", "")).strip().lower() not in (
+            "gt", "gte", "lt", "lte", "between", "eq"
+        ):
+            continue
+        vals = f.get("value")
+        vals = vals if isinstance(vals, (list, tuple)) else [vals]
+        for v in vals:
+            m = _re.match(r"^\s*(\d{4})-(\d{2})-(\d{2})", str(v or ""))
+            if m:
+                bounds.append(_date(int(m.group(1)), int(m.group(2)), int(m.group(3))))
+    if not bounds:
+        return None
+    today = _date.today()
+    if max(bounds) >= _date(today.year, 1, 1):
+        return None
+    return {
+        "error": True,
+        "code": "stale_relative_window",
+        "message": (
+            f"The question says a NOW-relative period but every date bound in "
+            f"the request is before {today.year}-01-01 — the window was built "
+            f"from a guessed 'today'. TODAY IS {today.isoformat()}; you do not "
+            f"know the date without the discovery response's date_anchor. "
+            f"Rebuild the window from today (e.g. 'this year' = >= "
+            f"{today.year}-01-01 AND < {today.year + 1}-01-01) and resend."
+        ),
+    }
+
+
 def _entitlement_gate(request: dict) -> dict | None:
     """Enforce ECM/DCM entitlement on a BQS request (mutates it in place).
 
@@ -715,6 +778,16 @@ if _BQS_AVAILABLE:
             "run_bqs_query: ask=%r",
             (question or "<not provided>")[:300],
         )
+        # Deterministic date-anchor backstop: an ask that says "this year"
+        # with a window entirely in a past year was anchored on a guessed
+        # today — refuse with the real date before wasting the round-trip.
+        denial = _check_relative_date_mismatch(question, request.get("filters"))
+        if denial is not None:
+            logger.warning(
+                "run_bqs_query: stale relative window refused (ask=%r)",
+                (question or "")[:120],
+            )
+            return denial
         # Identity first: no caller SOEID, no data. Checked before the
         # entitlement gate so it applies even when the gate is flagged off.
         denial = _require_caller_soeid()
@@ -727,14 +800,17 @@ if _BQS_AVAILABLE:
             logger.info("run_bqs_query: entitlement denied (code=%s)", denial.get("code"))
             return denial
         logger.info("run_bqs_query: source=%s metric=%s", source, metric)
-        # The caller's product scope rides on EVERY response (bare key, no
-        # note) — a scope stated once at session start gets buried or trimmed
-        # in long conversations, and the agent drifts to unentitled products.
-        # The gate just ran, so this preflight is a cache hit.
+        # The caller's product scope AND today's date ride on EVERY response —
+        # facts stated once at session start get buried or trimmed in long
+        # conversations. The gate just ran, so the preflight is a cache hit.
         _, _entitled_now = _entitlement_preflight()
-        return _attach_entitlement_scope(
+        result = _attach_entitlement_scope(
             _get_bqs_service().run(request), _entitled_now, note=False
         )
+        if isinstance(result, dict) and not result.get("error"):
+            from datetime import date as _date
+            result["current_date"] = _date.today().isoformat()
+        return result
 
 
 # ---------------------------------------------------------------------------
