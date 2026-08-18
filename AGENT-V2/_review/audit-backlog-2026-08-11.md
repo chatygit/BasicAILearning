@@ -371,3 +371,17 @@ proves existence != populated; measure before any doctrine change):
     cross-system deal ids, OFFERING_FORMAT, ISSUE_STATE_VALUE.
 No living issuer-NAME sibling — issuer fix stays on the OB_DEAL_ISSUER GFCID
 path (A1-A3).
+
+### Issuer identity — INTENDED END-STATE per tech team (Samir, 2026-08-18 pm)
+Samir: PARTY_GFCID and PARTY_TICKER from RELATED_PARTIES should also replace
+GFCID and TICKER — combined with Dumitru's name guidance, RELATED_PARTIES is
+the intended issuer-identity MASTER (name + GFCID + ticker). Bridge
+hypothesis: RELATED_PARTIES.BASE_ID (NUMBER NOT NULL) -> OPUS_BASE_TRANSACTION
+(whose TRANSACTION_ID = our DEAL_TRANSACTION_ID family — the deal view
+already joins it for DEAL_REGION); my failed direct join skipped the bridge.
+Confirm via F (desc OPUS_BASE_TRANSACTION) + G (named-row sample). End-state
+layering once confirmed: NAME/GFCID/TICKER = NVL(party master, NVL(current
+sources)). The SHIPPED OB_DEAL_ISSUER GFCID fix stays as the fallback layer —
+measured working (0 -> 6,892 QA deals) and PROD-safe. QA sparseness caveat
+stands: PARTY_NAME null on ~98% of Primary Client rows in QA — the master may
+only shine in PROD; keep NVL fallbacks permanent.

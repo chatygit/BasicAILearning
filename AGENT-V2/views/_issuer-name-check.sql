@@ -1,43 +1,29 @@
 -- ===========================================================================
--- ISSUER NAME HUNT — round 2. Query A found the lead: OB_DEAL_ISSUER carries
--- GFCID + NAME, and Samir's "OB_DEAL_ISSUER.NAME is for ECM" now reads as
--- the ANSWER, not a warning — our views use it only in DCM branches (wrong
--- side) and never for ECM (right side). Established: current ECM source is
--- 100% dead; ECM deals DO carry ISSUER GFCID. Four queries confirm the fix.
+-- ISSUER IDENTITY — round 3: confirm the RELATED_PARTIES bridge.
+-- 2026-08-18. State so far:
+--   * ECM ISSUER NAME IS FIXED in the view diffs: OB_DEAL_ISSUER GFCID join
+--     (0 -> ~6,892 named QA deals; 96% of GFCID-carrying deals). Shipping.
+--   * Tech end-state (Dumitru + Samir): RELATED_PARTIES is the issuer-
+--     identity MASTER — PARTY_NAME, PARTY_GFCID, PARTY_TICKER should feed
+--     NAME, GFCID, TICKER. But the direct join failed (TRANSACTION_ID
+--     matched 2/21,195 ECM deals) — hypothesis: the real path is the BRIDGE
+--     RELATED_PARTIES.BASE_ID -> OPUS_BASE_TRANSACTION, whose TRANSACTION_ID
+--     is our deal id family (the deal view already joins it for DEAL_REGION).
+--   * QA caveat: PARTY_NAME is null on ~98% of Primary Client rows in QA —
+--     the master may only shine in PROD; NVL fallbacks stay permanent.
+-- Run F then G; two screenshots finish the design.
 -- ===========================================================================
 
--- A1 — OB_DEAL_ISSUER full shape (we only know DEAL_TRANCHE_ID, NAME, GFCID).
-SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE
+-- F — the bridge table's keys: which column does RELATED_PARTIES.BASE_ID
+--     point at, and confirm TRANSACTION_ID is the deal id family.
+SELECT COLUMN_NAME, DATA_TYPE, NULLABLE
 FROM   ALL_TAB_COLUMNS
-WHERE  OWNER = 'DGSTREAM' AND TABLE_NAME = 'OB_DEAL_ISSUER'
+WHERE  OWNER = 'DGSTREAM' AND TABLE_NAME = 'OPUS_BASE_TRANSACTION'
 ORDER  BY COLUMN_ID;
 
--- A2 — population + eyeball: are NAME and GFCID filled, and what do the
---     keys look like?
-SELECT COUNT(*) AS ROWS_, COUNT(NAME) AS WITH_NAME, COUNT(GFCID) AS WITH_GFCID
-FROM   DGSTREAM.OB_DEAL_ISSUER;
-
-SELECT DEAL_TRANCHE_ID, GFCID, NAME
-FROM   DGSTREAM.OB_DEAL_ISSUER
-WHERE  NAME IS NOT NULL
+-- G — the NAMED party rows: id families on both keys, and whether
+--     PARTY_GFCID / PARTY_TICKER are filled where names are.
+SELECT TRANSACTION_ID, BASE_ID, PARTY_ROLE, PARTY_NAME, PARTY_GFCID, PARTY_TICKER
+FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
+WHERE  PARTY_NAME IS NOT NULL
 FETCH FIRST 15 ROWS ONLY;
-
--- A3 (THE DECIDER) — coverage: how many ECM deals get a name via the GFCID
---     join? (Also shows how many ECM deals carry a GFCID at all.)
-SELECT COUNT(*)        AS ECM_DEALS,
-       COUNT(D.GFCID)  AS DEALS_WITH_GFCID,
-       SUM(CASE WHEN OI.GFCID IS NOT NULL THEN 1 ELSE 0 END) AS DEALS_GETTING_A_NAME
-FROM   DGSTREAM.VW_DEAL_SUMMARY D
-LEFT JOIN (
-    SELECT DISTINCT GFCID
-    FROM   DGSTREAM.OB_DEAL_ISSUER
-    WHERE  NAME IS NOT NULL AND GFCID IS NOT NULL
-) OI ON OI.GFCID = D.GFCID
-WHERE  D.PRODUCT = 'ECM';
-
--- B — still worth one look: OPUS_ECM_TRANSACTION's full column list — a
---     living sibling of the dead name column would be even simpler.
-SELECT COLUMN_NAME, DATA_TYPE
-FROM   ALL_TAB_COLUMNS
-WHERE  OWNER = 'DGSTREAM' AND TABLE_NAME = 'OPUS_ECM_TRANSACTION'
-ORDER  BY COLUMN_ID;
