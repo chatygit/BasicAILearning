@@ -315,7 +315,18 @@ attribution, not a mirrored designation. SPEC FINAL for the round-2 diff:
     the 53% of tranches where per-order billing varies. (V1 also asserted 'at
     most one true per row' — Q25's 850 multi-B&D tranches disprove it.)
 
-### Issuer name source swap — ON HOLD, blocked on join path (2026-08-18)
+### Issuer name — ECM FIXED via OB_DEAL_ISSUER GFCID join (2026-08-18);
+### DCM source still open with Samir
+RESOLVED (ECM): OB_DEAL_ISSUER maps GFCID->NAME (74,124/74,276 named;
+A3: 6,892 of 7,195 GFCID-carrying ECM deals resolve = 96%; deals without
+GFCID are largely QA test junk). OIN join written into ALL THREE views'
+ECM branches (grouped per GFCID - no fan-out; old column kept as NVL
+fallback). Samir's 'OB_DEAL_ISSUER.NAME is for ECM' was the ANSWER, not
+a warning: its DEAL_TRANCHE_ID keys are I-prefixed ECM-source format, so
+the DCM branches' concat join has likely NEVER matched - DCM issuer
+source is the remaining open question for Samir. Deploy check: row 1e.
+
+### (superseded) Issuer name source swap — ON HOLD, blocked on join path (2026-08-18)
 MEASURED: current ECM issuer source is 100% DEAD in QA (0 of 21,195 deals
 carry a name — explains every "—" in traces). But the proposed source
 does not join: TRANSACTION_ID matches 2/21,195 ECM and 0/46,931 DCM deal
@@ -343,3 +354,20 @@ DCM issuer names are misdirected everywhere. Measure via check Q6-Q8
 rate). OPEN QUESTION for Samir: if not OB_DEAL_ISSUER, what IS the DCM issuer
 name source? (OB_DEAL_TRANCHE carries ISSUER_SECTOR but no known name
 column.)
+
+### SOURCE RICHES on OPUS_ECM_TRANSACTION (desc'd 2026-08-18) — future batches
+Full column inventory falsifies three "not tracked" doctrines AT SOURCE
+(population UNMEASURED — the dead ISSUER_NAME_FROM_SOURCE on this same table
+proves existence != populated; measure before any doctrine change):
+  * ANNOUNCE_TS / PITCH_TS / LAUNCH_TS / CLOSING_TS (+LAUNCH_OCCURRED,
+    FILING_OCCURRED) — "announced date not tracked" may be wrong.
+  * BASE_PRICE / REOFFER_LOW_PRICE / REOFFER_HIGH_PRICE / PAR_VALUE /
+    CONVERSION_RATIO — pricing exists; ECM deal VALUE (shares x price), the
+    banker-lens #1 gap, may be derivable.
+  * FX_RATE / FX_SOURCE (+SIZE_CURRENCY_*) — "no FX column" wrong at source;
+    USD-equivalent totals may be possible.
+  * Also: ISSUER_LEID, ISSUER_RATING(+AGENCY), ISSUER_WEBSITE, DEAL_CAPTAIN,
+    PRODUCT_EQUITY_CLASS_VALUE (3rd instrument axis), BB/DMS/CMG/DEAL_LOGIC
+    cross-system deal ids, OFFERING_FORMAT, ISSUE_STATE_VALUE.
+No living issuer-NAME sibling — issuer fix stays on the OB_DEAL_ISSUER GFCID
+path (A1-A3).

@@ -36,6 +36,15 @@ FROM (
           FROM DGSTREAM.VW_ORDER_DETAIL)
   FROM   dual
   UNION ALL
+  -- 1e. ROUND 2 INFO: ECM deals with an issuer name. Pre-fix this was ZERO
+  -- (the old source is 100% dead in QA); the GFCID join resolves ~6,892 in
+  -- QA (more in PROD, where deals are real and carry GFCIDs). Zero here
+  -- post-deploy means the OB_DEAL_ISSUER join regressed.
+  SELECT '1e. ECM deals with issuer name (INFO)', '(info)',
+         (SELECT TO_CHAR(COUNT(ISSUER_NAME)) || ' of ' || TO_CHAR(COUNT(*))
+          FROM DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'ECM')
+  FROM   dual
+  UNION ALL
   -- 2. tranche size is a real NUMBER on BOTH views, not VARCHAR2
   SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
          'NUMBER,NUMBER',
