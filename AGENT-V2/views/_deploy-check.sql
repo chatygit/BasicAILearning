@@ -45,6 +45,29 @@ FROM (
           FROM DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'ECM')
   FROM   dual
   UNION ALL
+  -- 1f/1g. BATCH 3 (ticket #100): DCM deal-region + settlement roll-ups.
+  -- Measured pre-deploy at the source (R3): 8,260 of 46,931 DCM deals carry
+  -- a region, 30,749 a settlement date. Zero on either post-deploy means
+  -- the batch-3 deal-view rollups did not land.
+  SELECT '1f. DCM deals with region (INFO, expect ~8,260)', '(info)',
+         (SELECT TO_CHAR(COUNT(DEAL_REGION)) || ' of ' || TO_CHAR(COUNT(*))
+          FROM DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'DCM')
+  FROM   dual
+  UNION ALL
+  SELECT '1g. DCM deals with settlement_ts (INFO, expect ~30,749)', '(info)',
+         (SELECT TO_CHAR(COUNT(SETTLEMENT_TS)) || ' of ' || TO_CHAR(COUNT(*))
+          FROM DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'DCM')
+  FROM   dual
+  UNION ALL
+  -- 1h. BATCH 3: ECM tranche region now inherits the deal region (its own
+  -- column measured 3/36,352). Expect roughly the ECM deal-region rate
+  -- (~5%; R1: 1,457/29,384 deal transactions). Staying at 0-3 means the
+  -- NVL fallback did not deploy.
+  SELECT '1h. ECM tranches with a region (INFO, expect ~5%)', '(info)',
+         (SELECT TO_CHAR(COUNT(TRANCHE_REGION)) || ' of ' || TO_CHAR(COUNT(*))
+          FROM DGSTREAM.VW_TRANCHE_SUMMARY WHERE PRODUCT = 'ECM')
+  FROM   dual
+  UNION ALL
   -- 2. tranche size is a real NUMBER on BOTH views, not VARCHAR2
   SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
          'NUMBER,NUMBER',

@@ -245,7 +245,7 @@ dimensions:
   ticker: {column: ticker, description: "Issuer ticker symbol. A ticker is a direct filter, never an entity to resolve."}
   sector: {column: sector, description: "Issuer industry sector. Closed 28-value list — 'Oil & Gas' is a SEPARATE value from 'Energy'."}
   deal_status: {column: deal_status, description: "Deal lifecycle status, on BOTH products (no hop to the deal object). Case variants exist ('priced'/'Priced') — merge them when you GROUP BY. On DCM this is the same source column as tranche_status."}
-  deal_region: {column: deal_region, description: "DEAL-level region (NAM/EMEA/APAC). Wired on both products here. '<region> DEALS' means this; a bare region mention or a tranche-level ask means tranche_region."}
+  deal_region: {column: deal_region, description: "DEAL-level region (NAM/EMEA/APAC, rare JAPAN/LATAM). Wired on both products here. '<region> DEALS' means this; a bare region mention or a tranche-level ask means tranche_region. Sparse — blanks mean 'not captured'."}
   use_of_proceeds: {column: use_of_proceeds, description: "Purpose of the raise, both products. ECM has a ~19-value vocabulary, DCM only three. A purpose word NEVER implies a product."}
   settlement_currency: {column: settlement_currency, description: "Currency the tranche SETTLES in — distinct from 'currency' (denomination/pricing). Population unmeasured; treat blanks as 'not captured'."}
   # --- tranche grain ---
@@ -254,7 +254,7 @@ dimensions:
   tranche_size: {column: tranche_size, description: "Tranche size as a NUMBER (ECM shares / DCM notional money). 0 means NO size recorded at source; NULL means a size was recorded but could not be parsed. The currency-comparable money figure for DCM."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field)."}
   currency: {column: currency, description: "Pricing/denomination currency (scalar at this grain). Required alongside any DCM money figure. Can be NULL on ECM."}
-  tranche_region: {column: tranche_region, description: "Tranche target region (NAM/EMEA/APAC). This is the TRANCHE's market, not the investor's geography (that lives on capital_markets_order)."}
+  tranche_region: {column: tranche_region, description: "Tranche target region (NAM/EMEA/APAC). This is the TRANCHE's market, not the investor's geography (that lives on capital_markets_order). ~1 in 5 DCM tranches carry one; ECM effectively empty."}
   # --- ECM-only ---
   product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the instrument CLASS ('common stock', 'convertible') use equity_type — now on THIS object too."}
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…) — denormalized from the deal (round 2), so class asks ranked by tranche metrics are ONE request here. Same values and rules as the deal object's equity_type. NULL on DCM."}
@@ -369,23 +369,30 @@ filters:
     suggestable: true
     case_insensitive: true
     description: >-
-      Tranche target region — NAM, EMEA, APAC. A NOT-region predicate also drops
-      NULL-region rows — count them with is_null and disclose the number.
+      Tranche target region — NAM, EMEA, APAC. Populated on roughly one DCM
+      tranche in five and effectively EMPTY on ECM (QA measure 2026-08-18;
+      the equity source never filled it) — a region filter reads only the
+      minority of the book that carries a region, so SAY SO in the answer.
+      A NOT-region predicate also drops NULL-region rows — count them with
+      is_null and disclose the number.
   deal_region:
     column: deal_region
     operators: [eq, ne, in, not_in, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
     description: >-
-      DEAL-level region — NAM, EMEA, APAC (there is no 'AMER'). Wired on both
-      products on this object, so an "EMEA deals with a 10-year tenor" ask is
-      ONE request here. Use it only for a DEAL noun; a tranche/bond noun or a
-      bare region mention is tranche_region. ECM is populated but the source
-      carries CONFLICTING regions on some transactions and the view keeps the
-      alphabetically-last, so a per-deal region is a best-guess, not a fact
-      worth footnoting. DCM population is unmeasured — if it comes back empty,
-      fall back to tranche_region and say you did. A NOT-region predicate drops
-      NULL-region rows: count and disclose.
+      DEAL-level region — NAM, EMEA, APAC, plus rare JAPAN and LATAM (there
+      is no 'AMER'). Wired on both products on this object, so an "EMEA
+      deals with a 10-year tenor" ask is ONE request here. Use it only for a
+      DEAL noun; a tranche/bond noun or a bare region mention is
+      tranche_region. COVERAGE IS PARTIAL (QA measure 2026-08-18: ~5% of
+      ECM deals — the region-rich rows of the source belong to OTHER
+      business lines — and ~18% of DCM rows; PROD may differ): a
+      region-filtered answer reads only the slice that carries a region, so
+      blanks mean 'not captured', never 'no region' — disclose the scoping.
+      Where an ECM region exists, conflicting versions resolve
+      alphabetically-last (best-guess, not footnote-worthy). A NOT-region
+      predicate drops NULL-region rows: count and disclose.
   deal_status:
     column: deal_status
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]

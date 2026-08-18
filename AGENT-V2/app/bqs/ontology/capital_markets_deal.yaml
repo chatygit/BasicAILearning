@@ -257,7 +257,7 @@ dimensions:
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Offering type — only 'IPO' and 'FO' (follow-on) are stored. 'Rights' is a tranche product_type, 'Convertible' is an equity_type, 'Block' is not stored at all. NULL on DCM."}
   deal_status: {column: deal_status, description: "Deal lifecycle status. CASE VARIANTS ARE REAL — 'priced'/'Priced' and 'announced'/'Announced' are distinct stored values on DCM (Q17), so match case-insensitively and merge the variants before reporting a breakdown or the buckets will not sum. On DCM this is MAX() across the deal's tranche statuses and can disagree with the tranche object."}
   execution_status: {column: execution_status, products: ["ECM"], description: "DEAD COLUMN — carries no information and has no filter. The view fills it from a subquery already restricted to one status type, so every ECM row reads the same literal and every DCM row is NULL. Any 'execution status' ask is a deal_status ask. Kept only because an exposed column is never removed (diagnostics scope rule 2, which also withdrew the request for a real execution status). Do not project it."}
-  deal_region: {column: deal_region, products: ["ECM"], description: "ECM. Deal-level region (NAM/EMEA/APAC); NULL on DCM. On the TRANCHE object the same business name is populated on both products — this ECM-only rule is specific to the deal object."}
+  deal_region: {column: deal_region, description: "Deal-level region (NAM/EMEA/APAC, rare JAPAN/LATAM). On BOTH products since the 2026-08-18 view batch (DCM was a NULL placeholder before). Sparse — blanks mean 'not captured', never 'no region'."}
   settlement_currency: {column: settlement_currency, description: "Settlement currency — the currency a TRANCHE settles in (same concept as capital_markets_tranche.settlement_currency), distinct from the pricing currencies in 'currencies'. At DEAL grain it is a MAX() collapse, so a deal whose tranches settle in two currencies shows ONE of them, not both — go to the tranche object when the settlement currency has to be right per tranche. Population UNVERIFIED (see the filter)."}
   tranche_count: {column: tranche_count, description: "Pre-computed tranche count for the deal. Filterable — 'deals with more than one tranche' is answered here with no hop. Can be NULL on ECM when no tranche rows joined."}
   order_count: {column: order_count, description: "Pre-computed order count for the deal. Filterable. NULL (not 0) when the deal has no orders. Counts a wider population than capital_markets_order — see total_order_count."}
@@ -265,6 +265,7 @@ dimensions:
   currencies: {column: currencies, description: "Pipe-delimited, DEDUPED and sorted list of the deal's pricing currencies. NUMERIC TOKENS ARE NOT CURRENCIES: the view falls back to the internal currency id when the source has no name for it, so a token like '1' or '4' means UNMAPPED — display 'not recorded' for those tokens (count them: 'plus 2 unmapped'), never show the number as a currency and never invent a gloss for it. All tokens numeric = 'currencies not recorded for this deal'. Display as ONE cell — never split a pipe list across table columns (that made DEAL_ID display an ISIN in production). A trailing truncation marker means the list overflowed and is partial — pass it through verbatim and say so."}
   first_priced: {column: first_priced, description: "Earliest tranche pricing timestamp on the deal (MIN). Equals last_priced on a single-tranche deal — present one date, not two."}
   last_priced: {column: last_priced, description: "Latest tranche pricing timestamp on the deal (MAX) and the default deal date field. Equals first_priced on a single-tranche deal."}
+  settlement_ts: {column: settlement_ts, description: "Settlement timestamp (deal grain = MAX across tranches, i.e. the LAST settlement). Partial coverage (QA 2026-08-18: ~66% of DCM deals, ~26% of ECM) — blanks mean 'not captured'. 'Deals settling in <period>' filters here; a bare 'Settled deals' is a deal_status ask."}
 
 # -------------------------------- FILTERS ----------------------------------
 filters:
@@ -448,22 +449,25 @@ filters:
       and say you widened. NULL on DCM.
   deal_region:
     column: deal_region
-    products: ["ECM"]
     operators: [eq, ne, in, not_in, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
     description: >-
-      ECM. Deal-level region — the stored set is NAM, EMEA and APAC (there is no
-      'AMER'). NULL on DCM, so a DCM-scoped region filter on this object returns
-      nothing; the tranche object carries a region on both products. A NOT-region
-      predicate also drops NULL-region rows — use is_null to count them and say
-      how many were excluded. The region word attaches to a NOUN: "<region>
-      DEALS" is this filter; tranches, orders and bare region mentions are the
-      tranche object's tranche_region. CAVEAT: the view pre-aggregates with
-      MAX(DEAL_REGION) and V11 found 261 transaction keys whose duplicate rows
-      hold DIFFERENT regions — on those deals one region is chosen, not merged.
-      The NAM/EMEA/APAC set is V1-confirmed and was not re-measured in the
-      diagnostics.
+      Deal-level region — NAM, EMEA, APAC, plus rare JAPAN and LATAM (there is
+      no 'AMER'). Wired on BOTH products since the 2026-08-18 view batch (DCM
+      was a NULL placeholder before — a 0-row DCM result on an older deploy
+      means the batch has not landed, not 'no such deals'). COVERAGE IS
+      PARTIAL (QA 2026-08-18: ~5% of ECM deals — the region-rich source rows
+      belong to OTHER business lines — and ~18% of DCM deals; PROD may
+      differ): a region-filtered answer reads only the slice that carries a
+      region, so blanks mean 'not captured', never 'no region' — disclose the
+      scoping. A NOT-region predicate also drops NULL-region rows — use
+      is_null to count them and say how many were excluded. The region word
+      attaches to a NOUN: "<region> DEALS" is this filter; tranches, orders
+      and bare region mentions are the tranche object's tranche_region.
+      CAVEAT: the view pre-aggregates with MAX(DEAL_REGION) and V11 found 261
+      transaction keys whose duplicate rows hold DIFFERENT regions — on those
+      deals (and on multi-region DCM deals) one region is chosen, not merged.
   settlement_currency:
     column: settlement_currency
     operators: [eq, ne, in, not_in, is_null, is_not_null]
@@ -478,8 +482,8 @@ filters:
       carried this column over as a placeholder with no data flowing (scope rule
       2) and no query has measured it since. Treat a zero-row result as expected
       rather than as "no such deals", and say the field may not be captured.
-      Do NOT conflate it with a settlement DATE — that column is 100% NULL and is
-      refused (see the settlement_date unsupported intent).
+      Do NOT conflate it with the settlement DATE — that is settlement_ts, a
+      separate (partially populated) filter on this object.
   ticker:
     column: ticker
     operators: [eq, ne, in, not_in, like]
@@ -547,29 +551,35 @@ filters:
       Latest tranche pricing timestamp (MAX) — the default deal date field and
       the right one for "priced in <period>". Trailing windows need BOTH bounds
       (gte start, lt tomorrow-midnight).
+  settlement_ts:
+    column: settlement_ts
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      Settlement timestamp at deal grain — MAX() across the deal's tranches,
+      i.e. the LAST settlement of a multi-tranche deal. SUPPORTED since the
+      2026-08-18 view batch; the old 'placeholder — refuse' doctrine is DEAD
+      (the Q32 zero-population reading no longer holds: the ECM source
+      re-measured ~26% populated, and DCM now rolls up the tranche
+      settlement dates, ~66% of deals; PROD may differ). COVERAGE IS
+      PARTIAL — a settlement-window listing reads only the deals that carry
+      a date, so disclose the blanks and NEVER substitute a pricing date. A
+      bare 'Settled deals' (no date window) is still a deal_status ask, not
+      a date ask. Trailing windows need BOTH bounds (gte start, lt
+      tomorrow-midnight).
 
 unsupported_intents:
   announced_date:
     patterns: ["announced", "announcement date", "launch date", "when was it launched", "created date"]
     reason: >-
-      Only pricing dates exist on the deal — first_priced and last_priced. There
-      is no announcement, launch or creation date, and the settlement timestamp
-      the older wording promised is a 100%-NULL placeholder (Q32).
+      No announcement, launch or creation date exists — the ECM source's
+      ANNOUNCE_TS/LAUNCH_TS/CLOSING_TS columns measured ALL ZERO
+      (2026-08-18). The deal carries pricing dates and a partially-populated
+      settlement_ts only.
     user_message: >-
-      Announcement/launch dates aren't tracked — the deal carries pricing dates
-      only. I can show first/last priced instead, or filter on an "announced"
+      Announcement/launch dates aren't tracked — the deal carries pricing
+      dates and (for many deals) a settlement date. I can show first/last
+      priced or the settlement date instead, or filter on an "announced"
       STATUS if that's what you meant. Would either work?
-  settlement_date:
-    patterns: ["settled on", "settlement date", "when did it settle", "settlement window", "settlement timestamp"]
-    reason: >-
-      The settlement timestamp is a placeholder — Q32 measured 22,347 ECM deals
-      with ZERO populated values, and the DCM branch is a NULL cast. It is
-      deliberately not modelled as a dimension or a filter. Do not substitute a
-      pricing date for it.
-    user_message: >-
-      Settlement dates aren't populated in this data — the field exists but
-      carries no values. I can show pricing dates, or the "Settled" deal status,
-      or the settlement currency. Which would help?
   issuer_country_domicile:
     patterns: ["country of domicile", "domicile is", "domicile country", "incorporated in", "country of incorporation", "issuer country", "headquartered in"]
     reason: >-
@@ -614,8 +624,9 @@ usage_notes:
     deal_region and 115 with conflicting deal_status (V11). So a deal-object
     scalar is the deal's best single value, not a guarantee that its tranches
     all carry it; when the per-tranche truth matters, ask capital_markets_tranche.
-    tranche_count, order_count, investor_count, currencies, first_priced and
-    last_priced are NOT in this class — they are genuine roll-ups."
+    tranche_count, order_count, investor_count, currencies, first_priced,
+    last_priced and settlement_ts are NOT in this class — they are genuine
+    roll-ups (settlement_ts = the LAST settlement)."
   - One row per deal — deal listings need no deduplication and no aggregation of
     tranche fields. If you need a tranche/order attribute, switch objects.
   - DCM deal-size money is not currency-scoped on this object; for currency

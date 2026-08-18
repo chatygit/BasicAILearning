@@ -467,9 +467,30 @@ Per-field status:
   wired; the remaining 74% is upstream completeness.
 * ANNOUNCE_TS/LAUNCH_TS/CLOSING_TS all ZERO in QA — the "announce date
   riches" batch is DEPRIORITIZED until PROD shows data.
-BATCH 3 handover: only after batch 2 verifies via _deploy-check.sql. When
-handing batch 3 over, add deploy-check rows for DCM DEAL_REGION /
-SETTLEMENT_TS and ECM TRANCHE_REGION (expected numbers from R1/R3), and
-only AFTER batch 3 deploys: consider exposing settlement_ts on the deal
-ontology object ("deals settling this week" is a real banker ask; DCM 67.6%
-covered) and update tranche-yaml deal_region prose per R2's vocabulary.
+CLOSED 2026-08-18 (R1/R2/R3 answered; user: "dont wait, we can push the
+view changes" — batch 3 + configs ship together):
+* R1 = 1,457/29,384 (5%): ECM deal region is a REAL SOURCE GAP — the
+  95,592 region-rich base rows are other business lines; batch 2 only
+  lifts 1,340→~1,457. Close = data-team ticket (text below) + partial-
+  coverage doctrine (applied).
+* R2 = NAM/EMEA/APAC + rare JAPAN(768)/LATAM(68) — no vocabulary break;
+  JAPAN/LATAM added to ontology prose.
+* R3 = 8,260/46,931 DCM deals with region, 30,749 with settlement —
+  deploy-check rows 1f/1g (added, INFO); 1h = ECM tranche-region fallback.
+* CONFIG FLIP APPLIED: deal yaml settlement_ts dimension+filter (range
+  ops), settlement_date unsupported-intent DELETED, announced_date refusal
+  re-grounded (ANNOUNCE/LAUNCH/CLOSING_TS all zero), deal_region
+  de-scoped ECM-only→both products (retired _PRODUCT_PINS entry), tranche
+  yaml region prose rewritten (sparse-coverage disclosure), SKILL §3b row
+  flipped to answer-it + §3a region prose + §9 announce bullet. Gate
+  [round3] pins guard the flip. If the BATCH-3 VIEW DEPLOY ROLLS BACK,
+  revert: the settlement_ts/deal_region configs assume the deal-view DCM
+  rollups (a stale deploy just returns 0 rows for DCM — degraded, not
+  broken, because the columns exist as NULL placeholders since batch 1).
+* DATA-TEAM TICKET (ECM region + residual gaps), ready to paste: "ECM deal
+  region: only ~5-6% of OPUS ECM deal transactions carry DEAL_REGION on
+  any OPUS_BASE_TRANSACTION version (QA). DCM tranche region: 81% of
+  OB_DEAL_TRANCHE rows carry no REGION/TRANCHE_REGION. ECM settlement:
+  SETTLEMENT_TS populated on only 26% of OPUS_ECM_TRANSACTION rows;
+  ANNOUNCE_TS/LAUNCH_TS/CLOSING_TS are 100% NULL. Please advise whether
+  upstream loads can backfill these."

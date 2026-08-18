@@ -26,8 +26,25 @@
 -- vw_tranche_summary.sql (ECM branch). Hand over AFTER batch 2 verifies.
 -- ===========================================================================
 
--- THREE QUERIES REMAIN (run when convenient — they size expectations, they
--- don't block the batch-3 SQL, which is already written):
+-- R1/R2/R3 RESULTS (2026-08-18) — ALL ANSWERED, ticket #100 CLOSED our side:
+--  * R1: 1,457 of 29,384 ECM deal transactions (5%) find a region. The
+--    95,592 region-rich base rows belong to OTHER business lines — batch 2's
+--    pre-aggregated join only lifts ECM from 1,340 to ~1,457 (batch 1
+--    already had a raw join). ECM deal region is a REAL DATA GAP at the
+--    source -> data-team ticket is the close; ontology now teaches partial
+--    coverage instead of promising the field.
+--  * R2: vocabulary is NAM 20,366 / EMEA 19,249 / APAC 55,141 + JAPAN 768 +
+--    LATAM 68 — same family as DCM, no doctrine break; JAPAN/LATAM added to
+--    the ontology as rare-but-real values.
+--  * R3: deal-grain DCM coverage — 8,260/46,931 deals with region (17.6%),
+--    30,749 with settlement (65.5%). These are deploy-check rows 1f/1g.
+-- CONFIG FLIP APPLIED SAME DAY (user: push views, don't wait): deal object
+-- gains settlement_ts (dimension+filter, range ops); settlement_date
+-- unsupported-intent DELETED; deal_region de-scoped from ECM-only to both
+-- products; announced_date refusal re-grounded on the all-zero
+-- ANNOUNCE/LAUNCH/CLOSING_TS measure; SKILL 3b refusal row flipped to
+-- answer-it; sparse-coverage disclosure doctrine added everywhere. Gate
+-- [round3] pins guard all of it.
 
 -- R1 — the ECM overlap: of the deals actually in the view, how many find a
 --      region via the OBT join? This is the number _deploy-check should

@@ -1629,7 +1629,10 @@ check("products" in text(ONTOLOGY_PY),
 _PRODUCT_PINS = [
     ("capital_markets_deal.yaml", "equity_type", "ECM"),
     ("capital_markets_deal.yaml", "offering_type", "ECM"),
-    ("capital_markets_deal.yaml", "deal_region", "ECM"),
+    # ("capital_markets_deal.yaml", "deal_region", "ECM") — RETIRED 2026-08-18:
+    # the batch-3 views populate DCM deal_region (MAX(OB_DEAL_TRANCHE.REGION),
+    # measured 8,260/46,931 QA deals), so the declaration was deleted ON
+    # PURPOSE. The [round3] pins below guard the replacement doctrine.
     ("capital_markets_deal.yaml", "execution_status", "ECM"),
     ("capital_markets_order.yaml", "investor_category", "ECM"),
     ("capital_markets_order.yaml", "investor_category_key", "ECM"),
@@ -1695,6 +1698,31 @@ check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_tranche.yaml",
 check(has(SKILL, "ONE request now"),
       "[round2] SKILL.md: the collapsed one-request recipes (IPO / class-"
       "ranked) are gone — the agent re-learns the dead two-steps")
+# ROUND 3 / TICKET #100 (2026-08-18, batch-3 views: DCM deal_region +
+# settlement_ts rollups from OB_DEAL_TRANCHE, ECM tranche_region fallback).
+# settlement_ts FLIPPED from an unsupported_intent to a real filter (the Q32
+# zero-population reading was re-measured false: ECM ~26%, DCM ~66% of
+# deals), and deal_region lost its products: ["ECM"] declaration ON PURPOSE
+# (retired entry noted in _PRODUCT_PINS). Losing any of these re-teaches the
+# agent to refuse fields the deployed views now carry — or worse, to trust a
+# region/settlement listing as complete when coverage is partial.
+check(has(DEAL, "  settlement_ts:"),
+      "[round3] capital_markets_deal.yaml: the settlement_ts filter is gone "
+      "— the deployed deal view carries a settlement date the agent refuses")
+check(not has(DEAL, "settlement_date:"),
+      "[round3] capital_markets_deal.yaml: a settlement_date unsupported-"
+      "intent is BACK — it would re-refuse the live settlement_ts filter")
+check(has(DEAL, "announced_date:"),
+      "[round3] capital_markets_deal.yaml: the announced_date refusal is "
+      "gone — ANNOUNCE/LAUNCH/CLOSING_TS measured ALL ZERO (2026-08-18); "
+      "without it the agent substitutes pricing dates for 'announced on'")
+check(has(DEAL, "JAPAN"),
+      "[round3] capital_markets_deal.yaml: the JAPAN/LATAM region vocabulary "
+      "is gone — the closed NAM/EMEA/APAC set is FALSE (measured census) and "
+      "a JAPAN deal becomes unfindable")
+check(has(SKILL, "settlement_ts"),
+      "[round3] SKILL.md: the settlement_ts answer-it row is gone — the "
+      "agent re-learns the dead '100% empty — refuse' doctrine")
 # TOP-N-PER-GROUP (added 2026-08-11 — closed QA ask #17, the one true V1
 # architectural regression). The feature spans four layers; losing any one of
 # them strands the others.
