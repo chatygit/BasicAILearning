@@ -1,32 +1,28 @@
 -- ===========================================================================
--- ISSUER IDENTITY — round 3: confirm the RELATED_PARTIES bridge.
--- 2026-08-18. State so far:
---   * ECM ISSUER NAME IS FIXED in the view diffs: OB_DEAL_ISSUER GFCID join
---     (0 -> ~6,892 named QA deals; 96% of GFCID-carrying deals). Shipping.
---   * Tech end-state (Dumitru + Samir): RELATED_PARTIES is the issuer-
---     identity MASTER — PARTY_NAME, PARTY_GFCID, PARTY_TICKER should feed
---     NAME, GFCID, TICKER. But the direct join failed (TRANSACTION_ID
---     matched 2/21,195 ECM deals) — hypothesis: the real path is the BRIDGE
---     RELATED_PARTIES.BASE_ID -> OPUS_BASE_TRANSACTION, whose TRANSACTION_ID
---     is our deal id family (the deal view already joins it for DEAL_REGION).
---   * QA caveat: PARTY_NAME is null on ~98% of Primary Client rows in QA —
---     the master may only shine in PROD; NVL fallbacks stay permanent.
--- RESOLVED (F+G, 2026-08-18 pm): TRANSACTION_ID IS the deal id family —
--- direct join, no bridge; QA's copy is just unloaded. The PCM layer is
--- WRITTEN into all three views (NVL over the OB_DEAL_ISSUER fix and old
--- sources). Nothing left to run — this file is history now.
+-- ISSUER IDENTITY — final round: does V1's DCM join actually match?
+-- 2026-08-18. State: ECM is FIXED (party master -> OB_DEAL_ISSUER GFCID ->
+-- old column). DCM branches now ALSO layer the party master, with V1's
+-- OB_DEAL_ISSUER concat join kept underneath as the fallback (verbatim V1
+-- behavior — VIEW-SPLIT-PROPOSAL.md:158). The A2 sample showed only
+-- 'I-...' ECM-format keys, but 15 rows is not a census — these two queries
+-- decide whether V1's DCM join ever produced a name.
 -- ===========================================================================
 
--- F — the bridge table's keys: which column does RELATED_PARTIES.BASE_ID
---     point at, and confirm TRANSACTION_ID is the deal id family.
-SELECT COLUMN_NAME, DATA_TYPE, NULLABLE
-FROM   ALL_TAB_COLUMNS
-WHERE  OWNER = 'DGSTREAM' AND TABLE_NAME = 'OPUS_BASE_TRANSACTION'
-ORDER  BY COLUMN_ID;
+-- H — key-format census of OB_DEAL_ISSUER: are there any non-'I-' keys
+--     (i.e. DCM 'dealid-trancheid' format) at all, and do they carry names?
+SELECT CASE WHEN DEAL_TRANCHE_ID LIKE 'I-%' THEN 'I-format (ECM)'
+            ELSE 'other format' END AS KEY_FORMAT,
+       COUNT(*) AS ROWS_, COUNT(NAME) AS WITH_NAME
+FROM   DGSTREAM.OB_DEAL_ISSUER
+GROUP  BY CASE WHEN DEAL_TRANCHE_ID LIKE 'I-%' THEN 'I-format (ECM)'
+               ELSE 'other format' END;
 
--- G — the NAMED party rows: id families on both keys, and whether
---     PARTY_GFCID / PARTY_TICKER are filled where names are.
-SELECT TRANSACTION_ID, BASE_ID, PARTY_ROLE, PARTY_NAME, PARTY_GFCID, PARTY_TICKER
-FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
-WHERE  PARTY_NAME IS NOT NULL
-FETCH FIRST 15 ROWS ONLY;
+-- I — the join-hit rate itself: how many DCM tranches find an issuer row
+--     via V1's concat key?
+SELECT COUNT(*) AS DCM_TRANCHES,
+       SUM(CASE WHEN DI.DEAL_TRANCHE_ID IS NOT NULL THEN 1 ELSE 0 END) AS WITH_ISSUER_ROW
+FROM (
+    SELECT DISTINCT DEAL_ID, TRANCHE_ID FROM DGSTREAM.OB_DEAL_TRANCHE
+) DT
+LEFT JOIN DGSTREAM.OB_DEAL_ISSUER DI
+  ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID;
