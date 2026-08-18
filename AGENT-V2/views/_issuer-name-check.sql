@@ -1,0 +1,73 @@
+-- ===========================================================================
+-- ISSUER NAME SOURCE CHECK — tech guidance (Ibanescu, 5/28): ECM issuer name
+-- should be PARTY_NAME from OPUS_BASE_TRANSACTION_RELATED_PARTIES where
+-- PARTY_ROLE = 'Primary Client', not OPUS_ECM_TRANSACTION.ISSUER_NAME_FROM_
+-- SOURCE (which shows as "—" on many QA answers). Measure before the swap —
+-- it touches the ECM branch of ALL THREE data views (deal, tranche, order).
+-- ===========================================================================
+
+-- Q1 — the table's shape (join keys are unknown; adjust Q2-Q5 to match).
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE
+FROM   ALL_TAB_COLUMNS
+WHERE  OWNER = 'DGSTREAM'
+AND    TABLE_NAME = 'OPUS_BASE_TRANSACTION_RELATED_PARTIES'
+ORDER  BY COLUMN_ID;
+
+-- Q2 — the role vocabulary (is 'Primary Client' the exact literal? case?).
+SELECT PARTY_ROLE, COUNT(*) AS ROWS_
+FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
+GROUP  BY PARTY_ROLE
+ORDER  BY ROWS_ DESC;
+
+-- ---------------------------------------------------------------------------
+-- Q3-Q5 assume the join key is the base/deal transaction id — CONFIRM the
+-- actual key column from Q1 and adjust (candidates: BASE_TRANSACTION_ID,
+-- DEAL_TRANSACTION_ID, TRANSACTION_ID).
+-- ---------------------------------------------------------------------------
+
+-- Q3 — grain: multiple 'Primary Client' rows per transaction? (dedupe need)
+SELECT MULTI_ROWS, COUNT(*) AS TRANSACTIONS
+FROM (
+    SELECT BASE_TRANSACTION_ID, COUNT(*) AS MULTI_ROWS
+    FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
+    WHERE  PARTY_ROLE = 'Primary Client'
+    GROUP  BY BASE_TRANSACTION_ID
+)
+GROUP  BY MULTI_ROWS
+ORDER  BY MULTI_ROWS;
+
+-- Q4 — coverage vs the CURRENT source, over the deal view's ECM population:
+-- how many deals gain a name, how many disagree, how many lose one.
+SELECT COUNT(*) AS ECM_DEALS,
+       COUNT(D.ISSUER_NAME)                        AS CURRENT_HAS_NAME,
+       COUNT(P.PARTY_NAME)                         AS PROPOSED_HAS_NAME,
+       SUM(CASE WHEN D.ISSUER_NAME IS NULL AND P.PARTY_NAME IS NOT NULL
+                THEN 1 ELSE 0 END)                 AS GAINED,
+       SUM(CASE WHEN D.ISSUER_NAME IS NOT NULL AND P.PARTY_NAME IS NULL
+                THEN 1 ELSE 0 END)                 AS LOST,
+       SUM(CASE WHEN D.ISSUER_NAME IS NOT NULL AND P.PARTY_NAME IS NOT NULL
+                 AND UPPER(D.ISSUER_NAME) <> UPPER(P.PARTY_NAME)
+                THEN 1 ELSE 0 END)                 AS DISAGREE
+FROM   DGSTREAM.VW_DEAL_SUMMARY D
+LEFT JOIN (
+    SELECT BASE_TRANSACTION_ID, MAX(PARTY_NAME) AS PARTY_NAME
+    FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
+    WHERE  PARTY_ROLE = 'Primary Client'
+    GROUP  BY BASE_TRANSACTION_ID
+) P ON P.BASE_TRANSACTION_ID = D.DEAL_ID
+WHERE  D.PRODUCT = 'ECM';
+
+-- Q5 — eyeball the disagreements (which source looks right?).
+SELECT D.DEAL_ID, D.DEAL_NAME, D.ISSUER_NAME AS CURRENT_NAME,
+       P.PARTY_NAME AS PROPOSED_NAME
+FROM   DGSTREAM.VW_DEAL_SUMMARY D
+JOIN (
+    SELECT BASE_TRANSACTION_ID, MAX(PARTY_NAME) AS PARTY_NAME
+    FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
+    WHERE  PARTY_ROLE = 'Primary Client'
+    GROUP  BY BASE_TRANSACTION_ID
+) P ON P.BASE_TRANSACTION_ID = D.DEAL_ID
+WHERE  D.PRODUCT = 'ECM'
+AND    D.ISSUER_NAME IS NOT NULL
+AND    UPPER(D.ISSUER_NAME) <> UPPER(P.PARTY_NAME)
+FETCH FIRST 20 ROWS ONLY;

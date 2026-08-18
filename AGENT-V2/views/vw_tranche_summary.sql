@@ -57,6 +57,12 @@
 -- vw_deal_summary (which takes MAX across tranches). Q17 shows the column has
 -- case-variant duplicates (priced/Priced), making MAX() unsound either way.
 -- Deferred with the other status work.
+-- ROUND 2 (2026-08-18, deploy with the batch): EQUITY_TYPE denormalized
+-- down from OPUS_ECM_TRANSACTION (same deduped T join, one column added) —
+-- the instrument-class axis was deal-view-only, forcing a two-step for every
+-- class ask ranked by a tranche metric. DCM branch: CAST(NULL) (ECM-only
+-- concept). Ontology/skill flips are STAGED in
+-- _review/round2-config-staged.md — apply ONLY after this view deploys.
 -- ===========================================================================
 CREATE OR REPLACE VIEW "DGSTREAM"."VW_TRANCHE_SUMMARY" AS
 SELECT
@@ -102,7 +108,8 @@ SELECT
     CAST(NULL AS VARCHAR2(4000)) AS ISSUER_RATINGS,
     CAST(NULL AS VARCHAR2(4000)) AS TENORS,
     CAST(NULL AS VARCHAR2(4000)) AS SECURITIES_MATURITY,
-    NVL(DST.DEAL_SHARING_TYPE, 'SHARED') AS DEAL_SHARING_TYPE
+    NVL(DST.DEAL_SHARING_TYPE, 'SHARED') AS DEAL_SHARING_TYPE,
+    T.PRODUCT_EQUITY_TYPE_VALUE AS EQUITY_TYPE
 FROM (
     SELECT W.*
     FROM (
@@ -124,6 +131,7 @@ INNER JOIN (
                ET.SYNDICATE_DEAL_NAME, ET.ISSUER_NAME_FROM_SOURCE,
                ET.ISSUER_GFCID, ET.ISSUER_TICKER, ET.ISSUER_INDUSTRY_SECTOR,
                ET.USE_OF_PROCEEDS, ET.SETTLEMENT_CURRENCY_NAME,
+               ET.PRODUCT_EQUITY_TYPE_VALUE,
                ROW_NUMBER() OVER (PARTITION BY ET.ECM_TRANSACTION_ID
                                   ORDER BY ET.ROWID) AS RN_
         FROM DGSTREAM.OPUS_ECM_TRANSACTION ET
@@ -267,7 +275,8 @@ SELECT
          ELSE ODT.TENOR_VALUE || '-' || ODT.TENOR_PERIOD
     END AS TENORS,
     ODT.MATURITY_DATE AS SECURITIES_MATURITY,
-    NVL(DST.DEAL_SHARING_TYPE, 'SHARED') AS DEAL_SHARING_TYPE
+    NVL(DST.DEAL_SHARING_TYPE, 'SHARED') AS DEAL_SHARING_TYPE,
+    CAST(NULL AS VARCHAR2(4000)) AS EQUITY_TYPE
 FROM (
     SELECT V.*
     FROM (

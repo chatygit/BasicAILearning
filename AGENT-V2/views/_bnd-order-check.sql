@@ -60,3 +60,19 @@ SELECT O.PRODUCT,
 FROM   DGSTREAM.OB_ORDER S
 JOIN   DGSTREAM.VW_ORDER_DETAIL O ON O.ORDER_ID = S.ORDER_ID
 GROUP  BY O.PRODUCT;
+
+-- Q6 — ECM order-level billed-by EXISTS after all: OB_ECM_ORDER carries
+-- BILLEDBY_BROKER_CODE VARCHAR2(100) (found via desc, 2026-08-18). It is a
+-- broker CODE (CITIUSA-style vocabulary), unlike DCM's full bank name.
+-- Measure before shipping (the settlement column was 100% empty): content —
+SELECT BILLEDBY_BROKER_CODE, COUNT(*) AS ORDERS_
+FROM   DGSTREAM.OB_ECM_ORDER
+GROUP  BY BILLEDBY_BROKER_CODE
+ORDER  BY ORDERS_ DESC
+FETCH FIRST 20 ROWS ONLY;
+
+-- Q7 — and population.
+SELECT COUNT(*)                                            AS ALL_ECM_ORDERS,
+       COUNT(BILLEDBY_BROKER_CODE)                         AS WITH_BILLEDBY,
+       ROUND(100 * COUNT(BILLEDBY_BROKER_CODE) / COUNT(*), 1) AS PCT
+FROM   DGSTREAM.OB_ECM_ORDER;

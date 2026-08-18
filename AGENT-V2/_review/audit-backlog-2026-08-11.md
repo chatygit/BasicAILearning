@@ -283,17 +283,42 @@ round-2 diff joins BND via LEFT JOIN on the order key so unmatched view rows
 fold into 'not recorded'. Q3 (2026-08-18): 10,042 of 18,909 tranches with
 BND orders (53%) carry MORE THAN ONE distinct BND — genuine order-level
 attribution, not a mirrored designation. SPEC FINAL for the round-2 diff:
-  * vw_order_detail: LEFT JOIN OB_ORDER on the order key, project
-    OB_ORDER.BND AS BILLED_BY (both products; NULL = 'no billing bank
-    recorded').
-  * capital_markets_order ontology: billed_by dimension + filter (like-only,
-    never eq — name variants incl. truncated 'J.P. Morgan P'; Citi stem
-    doctrine transfers: '%CITIGROUP GLOBAL MARKETS%'), suggestable, no curated
-    values (QA junk like 'DB Account 2' exists). Plus a token-less
+  * vw_order_detail: DCM branch LEFT JOINs OB_ORDER on the order key and
+    projects OB_ORDER.BND AS BILLED_BY; ECM branch CAST(NULL AS
+    VARCHAR2(4000)) — Q5 (2026-08-18) proved ZERO ECM orders join to
+    OB_ORDER (it is the DCM order source; 4.97M of its 5.02M rows are the
+    view's DCM spine). DCM population 74%; NULL = 'no billing bank
+    recorded'.
+  * capital_markets_order ontology: billed_by dimension + filter with
+    products: ["DCM"] (joins the gate's _PRODUCT_PINS table on ship);
+    like-only, never eq (name variants incl. truncated 'J.P. Morgan P'; Citi
+    stem doctrine transfers: '%CITIGROUP GLOBAL MARKETS%'), suggestable, no
+    curated values (QA junk like 'DB Account 2'). Plus a token-less
     bill_and_deliver computed filter on THIS object (column billed_by, fixed
     code CITIGROUP GLOBAL MARKETS) so 'Citi non-B&D ORDERS' negates
-    NULL-safely at order grain, mirroring the tranche filter.
-  * SKILL: billed-by asks at ORDER grain route here one-hop; billed-by league
-    tables (GROUP BY billed_by) are now possible on BOTH products; the
-    tranche BND_BANK remains the DESIGNATION list and the two can disagree
-    legitimately (order-level truth wins for 'billed by' asks).
+    NULL-safely at order grain — DCM only.
+  * SKILL: DCM billed-by asks at ORDER grain route here one-hop, and DCM
+    billed-by league tables (GROUP BY billed_by) become possible — order-level
+    truth that disagrees with the tranche's single designation on half of
+    tranches. ECM billed-by stays the tranche-designation doctrine (B&D
+    first-token; the 850-multi-B&D ambiguity remains and is disclosed) — a
+    neat REVERSAL of the syndicate asymmetry: ECM has the rich syndicate,
+    DCM has the rich per-order billing.
+  * V1 COMPARISON (checked 2026-08-18): V1 never had order-level billing on
+    either product — ECM was the BND_BROKER 'true'-index extraction over the
+    tranche designation replicated per order row, DCM was the single
+    designation string; OB_ORDER.BND sat UNUSED. So round-2 BILLED_BY is not
+    V1 parity — it CORRECTS a designation-vs-actual imprecision V1 carried on
+    the 53% of tranches where per-order billing varies. (V1 also asserted 'at
+    most one true per row' — Q25's 850 multi-B&D tranches disprove it.)
+
+### Issuer name source swap — batch item 5 (tech guidance, queued 2026-08-18)
+Ibanescu (5/28): ECM issuer name should be PARTY_NAME from
+OPUS_BASE_TRANSACTION_RELATED_PARTIES where PARTY_ROLE='Primary Client' — not
+OPUS_ECM_TRANSACTION.ISSUER_NAME_FROM_SOURCE. Matches the QA symptom (Issuer
+Name "—" across ECM answers). Touches the ECM branch of ALL THREE data views
+(deal, tranche, order — each carries ISSUER_NAME). Measure first via
+views/_issuer-name-check.sql (Q1 shape/keys, Q2 role vocabulary, Q3 grain/
+dedupe, Q4 gained/lost/disagree vs current, Q5 eyeball). Swap ships in the
+round-2 batch if Q4 shows net gain without losses; a MAX()/ROWID dedupe
+guards grain per Q3.

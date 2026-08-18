@@ -27,6 +27,21 @@
 --
 -- Dedupes order by ROWID: deterministic, and no assumption about which
 -- columns exist for a "latest row" tiebreak. Duplicate counts are small.
+--
+-- ROUND 2 (2026-08-18, deploy with the batch):
+--   * BILLED_BY — OB_ORDER.BND, the per-order billing bank the source always
+--     had and no view ever read (74% of DCM orders populated; VARIES within
+--     53% of tranches, so the tranche designation was hiding real
+--     attribution). ECM: CAST(NULL AS VARCHAR2(800)) — Q5 proved OB_ORDER
+--     holds ZERO ECM rows; ECM billing exists only as the tranche
+--     designation. VARCHAR2(800) pairs BND's declared type (ORA-01790 rule).
+--   * OFFERING_TYPE — denormalized from OPUS_ECM_TRANSACTION (existing
+--     deduped T join): makes "investors in IPOs" ONE request, killing the
+--     40-id ferry that corrupted a function call in QA. DCM: CAST(NULL).
+--   * deal_sharing_type DEFERRED: it would need the syndicate join chain
+--     added to a 5.8M-row view; "sole deals' orders" 2-hops via tranche ids.
+-- Ontology/skill flips are STAGED in _review/round2-config-staged.md —
+-- apply ONLY after this view deploys.
 -- ===========================================================================
 CREATE OR REPLACE VIEW "DGSTREAM"."VW_ORDER_DETAIL" AS
 SELECT
@@ -56,7 +71,9 @@ SELECT
          WHEN REGEXP_LIKE(TO_CHAR(TT.TRANCHE_OFFER_SIZE),
                           '^\s*[+-]?[0-9]+(\.[0-9]+)?([Ee][+-]?[0-9]+)?\s*$')
          THEN TO_NUMBER(TRIM(TO_CHAR(TT.TRANCHE_OFFER_SIZE)))
-         ELSE NULL END AS TRANCHE_SIZE
+         ELSE NULL END AS TRANCHE_SIZE,
+    CAST(NULL AS VARCHAR2(800)) AS BILLED_BY,
+    T.PRODUCT_OFFERING_TYPE_VALUE AS OFFERING_TYPE
 FROM (
     SELECT E.*
     FROM (
@@ -71,7 +88,7 @@ INNER JOIN (
     FROM (
         SELECT ET.ECM_TRANSACTION_ID, ET.DEAL_TRANSACTION_ID,
                ET.SYNDICATE_DEAL_NAME, ET.ISSUER_NAME_FROM_SOURCE,
-               ET.ISSUER_INDUSTRY_SECTOR,
+               ET.ISSUER_INDUSTRY_SECTOR, ET.PRODUCT_OFFERING_TYPE_VALUE,
                ROW_NUMBER() OVER (PARTITION BY ET.ECM_TRANSACTION_ID
                                   ORDER BY ET.ROWID) AS RN_
         FROM DGSTREAM.OPUS_ECM_TRANSACTION ET
@@ -151,12 +168,14 @@ SELECT
          WHEN REGEXP_LIKE(TO_CHAR(ODT.TRANCHE_SIZE),
                           '^\s*[+-]?[0-9]+(\.[0-9]+)?([Ee][+-]?[0-9]+)?\s*$')
          THEN TO_NUMBER(TRIM(TO_CHAR(ODT.TRANCHE_SIZE)))
-         ELSE NULL END AS TRANCHE_SIZE
+         ELSE NULL END AS TRANCHE_SIZE,
+    O.BND AS BILLED_BY,
+    CAST(NULL AS VARCHAR2(4000)) AS OFFERING_TYPE
 FROM (
     SELECT D.*
     FROM (
         SELECT DO.ORDER_ID, DO.ROOT_ID, DO.PARENT_ID, DO.NAME, DO.GPID,
-               DO.FINAL_ALLOC,
+               DO.FINAL_ALLOC, DO.BND,
                ROW_NUMBER() OVER (PARTITION BY DO.ORDER_ID ORDER BY DO.ROWID) AS RN_
         FROM DGSTREAM.OB_ORDER DO
     ) D
