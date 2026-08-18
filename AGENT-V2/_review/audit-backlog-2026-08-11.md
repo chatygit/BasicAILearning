@@ -445,12 +445,31 @@ Bars: 1094/206/104. POST-DEPLOY: run _deploy-check.sql (rows 1b/1c/1d/1e);
 if the view deploy ROLLS BACK, these configs must be reverted with it.
 
 ### Data-dictionary ticket #100 — remaining fields (2026-08-18)
-ISSUER_NAME fixed (deploying batch). DEAL_REGION / TRANCHE_REGION /
-SETTLEMENT_TS not yet: measure candidates via views/_region-settlement-check
-.sql — ECM region: OPUS_BASE_TRANSACTION.ASSIGNED_DEAL_REGION,
-OPUS_ECM_TRANSACTION.EXEC_DEAL_REGION; DCM region: OB_DEAL_TRANCHE.REGION /
-TRANCHE_REGION / TARGET_MARKET; settlement: OB_DEAL_TRANCHE.SETTLEMENT_DATE
-(DCM, never checked) + OPUS_ECM_TRANSACTION ANNOUNCE/LAUNCH/CLOSING_TS
-siblings. Winners join the NEXT view batch (NVL layering, issuer pattern).
-If a field has NO populated candidate anywhere, the honest close is a data-
-team ticket + the existing skill refusal doctrine (settlement already has it).
+MEASURED (Q1-Q5 results archived in views/_region-settlement-check.sql).
+Per-field status:
+* ISSUER_NAME — fixed, in the deploying batch (batch 2).
+* DEAL_REGION ECM — the MAX-over-versions OBT join is ALREADY IN BATCH 2
+  (entered adk v19/v20; Q1's 6.3% measured the old deployed view). Source
+  has 95,592 real values, zero 'Not Specified' — that old claim is FALSE
+  here. R1 predicts the post-deploy coverage; R2 checks the vocabulary
+  against the NAM/EMEA/APAC doctrine (ontology prose changes if it differs).
+* DEAL_REGION DCM + SETTLEMENT_TS DCM — were NULL placeholders; BATCH 3
+  edits written in vw_deal_summary.sql: MAX(REGION) (13,978 rows, clean
+  NAM/EMEA/APAC census) and MAX(SETTLEMENT_DATE) (67.6%, TIMESTAMP(3)
+  cast to (6)) rolled up from OB_DEAL_TRANCHE. R3 sizes deal-grain
+  expectations for the future batch-3 deploy-check rows.
+* TRANCHE_REGION ECM — TT.REGION dead (3/36,352); BATCH 3 edit in
+  vw_tranche_summary.sql: NVL fallback to deal region.
+* TRANCHE_REGION DCM — view already reads all the source has (13,947 vs
+  13,978). TARGET_MARKET is not region vocabulary; not blended. The 81%
+  gap is upstream → data-team ticket is the honest close.
+* SETTLEMENT_TS ECM — source NOT dead (7,763/29,514 = 26.3%), already
+  wired; the remaining 74% is upstream completeness.
+* ANNOUNCE_TS/LAUNCH_TS/CLOSING_TS all ZERO in QA — the "announce date
+  riches" batch is DEPRIORITIZED until PROD shows data.
+BATCH 3 handover: only after batch 2 verifies via _deploy-check.sql. When
+handing batch 3 over, add deploy-check rows for DCM DEAL_REGION /
+SETTLEMENT_TS and ECM TRANCHE_REGION (expected numbers from R1/R3), and
+only AFTER batch 3 deploys: consider exposing settlement_ts on the deal
+ontology object ("deals settling this week" is a real banker ask; DCM 67.6%
+covered) and update tranche-yaml deal_region prose per R2's vocabulary.

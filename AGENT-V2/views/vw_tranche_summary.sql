@@ -83,7 +83,10 @@ SELECT
          ELSE NULL END AS TRANCHE_SIZE,
     CAST(TT.PRICING_TS AS TIMESTAMP(3)) AS PRICING_TS,
     TDC.CURRENCY_NAME AS CURRENCY,
-    TT.REGION AS TRANCHE_REGION,
+    -- 2026-08-18 (BATCH 3, ticket #100): TT.REGION measured 3/36,352 — dead at
+    -- the ECM tranche source. Fall back to the deal's region (ECM deals are
+    -- mostly single-tranche, so the deal region IS the tranche's market).
+    NVL(TT.REGION, OBT.DEAL_REGION) AS TRANCHE_REGION,
     CAST(NULL AS VARCHAR2(4000)) AS PRODUCT_CLASS,
     CAST(NULL AS VARCHAR2(400)) AS SENIORITY,
     CAST(NULL AS VARCHAR2(400)) AS REG_CATEGORY,

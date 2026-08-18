@@ -1,59 +1,63 @@
 -- ===========================================================================
--- REGION + SETTLEMENT HUNT — the remaining three fields from data-dictionary
--- ticket #100 (ISSUER_NAME is fixed in the deploying batch). 2026-08-18.
--- Candidate sources come from the table inventories in
--- _reference/base-table-columns.md — never re-desc. Measure population per
--- candidate; winners join the NEXT view batch with NVL layering, exactly the
--- issuer-name pattern.
+-- REGION + SETTLEMENT (data-dictionary ticket #100) — MEASURED 2026-08-18.
+-- Q1-Q5 verdicts:
+--  * ECM deal region: OPUS_BASE_TRANSACTION.DEAL_REGION has 95,592 REAL
+--    values (zero 'Not Specified' — the old ~98% claim is FALSE in this QA
+--    copy). The MAX-over-versions OBT join already exists in the views and
+--    entered in adk v19/v20 — i.e. it is IN THE BATCH DEPLOYING NOW. Q1's
+--    6.3% measured the OLD deployed view. R1 below predicts the post-deploy
+--    number. ASSIGNED_DEAL_REGION duplicates DEAL_REGION (identical counts);
+--    EXEC_DEAL_REGION is dead (416/29,514).
+--  * DCM deal region: was a NULL placeholder. FIXED (batch 3) — MAX(REGION)
+--    rolled up from OB_DEAL_TRANCHE (13,978/74,281 rows; census is clean:
+--    NAM 11,971 / EMEA 1,561 / APAC 446 — no junk values).
+--  * ECM tranche region: TT.REGION is dead (3/36,352). FIXED (batch 3) —
+--    NVL fallback to the deal's region.
+--  * DCM tranche region: view already reads all the source has (13,947 vs
+--    13,978). TARGET_MARKET (7,771) is NOT region vocabulary — not blended.
+--    Remaining gap is upstream: data-team ticket.
+--  * SETTLEMENT_TS: ECM source is NOT dead — 7,763/29,514 (26.3%), already
+--    wired in the view. DCM was a NULL placeholder. FIXED (batch 3) —
+--    MAX(SETTLEMENT_DATE) from OB_DEAL_TRANCHE (50,198/74,281 = 67.6%,
+--    stored TIMESTAMP(3), cast to TIMESTAMP(6) for the UNION pairing).
+--  * ANNOUNCE_TS / LAUNCH_TS / CLOSING_TS: ALL ZERO in QA — the "announce
+--    date riches" are deprioritized until PROD shows otherwise.
+-- Batch-3 edits live in vw_deal_summary.sql (DCM branch) and
+-- vw_tranche_summary.sql (ECM branch). Hand over AFTER batch 2 verifies.
 -- ===========================================================================
 
--- Q1 — the SYMPTOM, measured: region population in the deployed views.
-SELECT 'deal' AS V, PRODUCT, COUNT(*) AS ROWS_,
-       COUNT(DEAL_REGION) AS WITH_REGION,
-       ROUND(100 * COUNT(DEAL_REGION) / COUNT(*), 1) AS PCT
-FROM DGSTREAM.VW_DEAL_SUMMARY GROUP BY PRODUCT
-UNION ALL
-SELECT 'tranche', PRODUCT, COUNT(*), COUNT(TRANCHE_REGION),
-       ROUND(100 * COUNT(TRANCHE_REGION) / COUNT(*), 1)
-FROM DGSTREAM.VW_TRANCHE_SUMMARY GROUP BY PRODUCT;
+-- THREE QUERIES REMAIN (run when convenient — they size expectations, they
+-- don't block the batch-3 SQL, which is already written):
 
--- Q2 — ECM deal-region candidates (OPUS_BASE_TRANSACTION is versioned; raw
---     row counts are indicative, latest-version refinement comes after a
---     winner emerges).
-SELECT COUNT(*) AS ROWS_,
-       COUNT(DEAL_REGION)          AS DEAL_REGION_,
-       COUNT(ASSIGNED_DEAL_REGION) AS ASSIGNED_,
-       COUNT(NULLIF(TRIM(DEAL_REGION), 'Not Specified')) AS REGION_REAL
-FROM   DGSTREAM.OPUS_BASE_TRANSACTION;
+-- R1 — the ECM overlap: of the deals actually in the view, how many find a
+--      region via the OBT join? This is the number _deploy-check should
+--      expect for ECM DEAL_REGION after the CURRENT deploy lands.
+SELECT COUNT(*) AS ECM_DEALS,
+       COUNT(OBT.DEAL_REGION) AS WITH_REGION,
+       ROUND(100 * COUNT(OBT.DEAL_REGION) / COUNT(*), 1) AS PCT
+FROM (SELECT DISTINCT DEAL_TRANSACTION_ID
+      FROM DGSTREAM.OPUS_ECM_TRANSACTION
+      WHERE DEAL_TRANSACTION_ID IS NOT NULL) E
+LEFT JOIN (SELECT TRANSACTION_ID, MAX(DEAL_REGION) AS DEAL_REGION
+           FROM DGSTREAM.OPUS_BASE_TRANSACTION
+           GROUP BY TRANSACTION_ID) OBT
+  ON OBT.TRANSACTION_ID = E.DEAL_TRANSACTION_ID;
 
-SELECT COUNT(*) AS ECM_TXNS, COUNT(EXEC_DEAL_REGION) AS EXEC_REGION_
-FROM   DGSTREAM.OPUS_ECM_TRANSACTION;
-
--- Q3 — DCM region + settlement candidates on OB_DEAL_TRANCHE, one pass.
-SELECT COUNT(*) AS ROWS_,
-       COUNT(REGION)            AS REGION_,
-       COUNT(TRANCHE_REGION)    AS TRANCHE_REGION_,
-       COUNT(TARGET_MARKET)     AS TARGET_MARKET_,
-       COUNT(SETTLEMENT_DATE)   AS SETTLEMENT_DATE_,
-       COUNT(ISSUE_DATE)        AS ISSUE_DATE_,
-       COUNT(ANNOUNCEMENT_DATE) AS ANNOUNCEMENT_DATE_,
-       COUNT(TRADE_DATE)        AS TRADE_DATE_
-FROM   DGSTREAM.OB_DEAL_TRANCHE;
-
--- Q4 — ECM settlement/announce candidates on OPUS_ECM_TRANSACTION, one pass
---     (SETTLEMENT_TS measured dead before; the siblings never were).
-SELECT COUNT(*) AS ROWS_,
-       COUNT(SETTLEMENT_TS) AS SETTLEMENT_TS_,
-       COUNT(ANNOUNCE_TS)   AS ANNOUNCE_TS_,
-       COUNT(LAUNCH_TS)     AS LAUNCH_TS_,
-       COUNT(CLOSING_TS)    AS CLOSING_TS_
-FROM   DGSTREAM.OPUS_ECM_TRANSACTION;
-
--- Q5 — value census for whichever region candidate Q2/Q3 shows populated
---     (swap the column in): are these real regions (NAM/EMEA/APAC) or junk?
-SELECT REGION AS VALUE_, COUNT(*) AS ROWS_
-FROM   DGSTREAM.OB_DEAL_TRANCHE
-WHERE  REGION IS NOT NULL
-GROUP  BY REGION
+-- R2 — ECM region VOCABULARY: the doctrine promises NAM/EMEA/APAC. If ECM
+--      stores 'North America' etc., cross-product region filters miss one
+--      side and the ontology prose must say so.
+SELECT DEAL_REGION AS VALUE_, COUNT(*) AS ROWS_
+FROM   DGSTREAM.OPUS_BASE_TRANSACTION
+WHERE  DEAL_REGION IS NOT NULL
+GROUP  BY DEAL_REGION
 ORDER  BY ROWS_ DESC
 FETCH FIRST 20 ROWS ONLY;
+
+-- R3 — DCM deal-grain coverage of the two batch-3 rollups: the numbers
+--      _deploy-check should expect after BATCH 3 lands.
+SELECT COUNT(DISTINCT DEAL_ID) AS DCM_DEALS,
+       COUNT(DISTINCT CASE WHEN REGION IS NOT NULL
+                           THEN DEAL_ID END) AS DEALS_WITH_REGION,
+       COUNT(DISTINCT CASE WHEN SETTLEMENT_DATE IS NOT NULL
+                           THEN DEAL_ID END) AS DEALS_WITH_SETTLEMENT
+FROM   DGSTREAM.OB_DEAL_TRANCHE;
