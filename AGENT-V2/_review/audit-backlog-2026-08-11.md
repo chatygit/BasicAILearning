@@ -443,3 +443,14 @@ agents.yaml routing line, gate pins (+_PRODUCT_PINS: tranche equity_type,
 order offering_type; capability pins; retired the obsolete disclosure pin).
 Bars: 1094/206/104. POST-DEPLOY: run _deploy-check.sql (rows 1b/1c/1d/1e);
 if the view deploy ROLLS BACK, these configs must be reverted with it.
+
+### Data-dictionary ticket #100 — remaining fields (2026-08-18)
+ISSUER_NAME fixed (deploying batch). DEAL_REGION / TRANCHE_REGION /
+SETTLEMENT_TS not yet: measure candidates via views/_region-settlement-check
+.sql — ECM region: OPUS_BASE_TRANSACTION.ASSIGNED_DEAL_REGION,
+OPUS_ECM_TRANSACTION.EXEC_DEAL_REGION; DCM region: OB_DEAL_TRANCHE.REGION /
+TRANCHE_REGION / TARGET_MARKET; settlement: OB_DEAL_TRANCHE.SETTLEMENT_DATE
+(DCM, never checked) + OPUS_ECM_TRANSACTION ANNOUNCE/LAUNCH/CLOSING_TS
+siblings. Winners join the NEXT view batch (NVL layering, issuer pattern).
+If a field has NO populated candidate anywhere, the honest close is a data-
+team ticket + the existing skill refusal doctrine (settlement already has it).
