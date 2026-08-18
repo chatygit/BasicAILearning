@@ -256,7 +256,8 @@ dimensions:
   currency: {column: currency, description: "Pricing/denomination currency (scalar at this grain). Required alongside any DCM money figure. Can be NULL on ECM."}
   tranche_region: {column: tranche_region, description: "Tranche target region (NAM/EMEA/APAC). This is the TRANCHE's market, not the investor's geography (that lives on capital_markets_order)."}
   # --- ECM-only ---
-  product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the deal-level instrument CLASS ('common stock', 'convertible') use capital_markets_deal.equity_type."}
+  product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the instrument CLASS ('common stock', 'convertible') use equity_type — now on THIS object too."}
+  equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…) — denormalized from the deal (round 2), so class asks ranked by tranche metrics are ONE request here. Same values and rules as the deal object's equity_type. NULL on DCM."}
   exchange: {column: exchange, products: ["ECM"], description: "ECM. Listing venue — holds FULL venue names AND sometimes the abbreviation itself ('NYSE'); match BOTH tokens with like (full name first, abbreviation on a 0-row retry), never equality. A dual-listed tranche may show only one venue."}
   # --- syndicate (aligned pipe lists) ---
   syndicate_member_name: {column: syndicate_member_name, description: "ECM: pipe-delimited syndicate banks, ordered the same way as syndicate_role/broker_code/bnd_broker (pair by position only when the element counts match). A member token may carry an inline '(true)'/'(false)' suffix duplicating the B&D flag — never filter on it, and STRIP it when displaying the name. DCM: a SINGLE bank string which IS the B&D bank, not the syndicate."}
@@ -471,6 +472,21 @@ filters:
       'N/A' and 'No Proceeds to Issuer' mean PURPOSE NOT STATED — exclude them
       from a purpose breakdown and say so. A purpose word NEVER implies a
       product; both products raise for all purposes.
+  equity_type:
+    column: equity_type
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM. Instrument CLASS — same known set and rules as
+      capital_markets_deal.equity_type (Common Stock, Convertible Preferred,
+      Convertible Bonds, Equity Units, Warrants, 'Exchangable Notes' sic,
+      American/Global Depository; env lists vary — treat as a superset). Match
+      the CLASS WORD with like, never equality on the user's phrasing. NEVER
+      OR with product_type — different axes; product_type is the PROJECTION
+      (sub-type breakdown), this is the FILTER. Denormalized in round 2: the
+      class-ranked-by-tranche-metric two-step is dead — one request here.
   product_type:
     column: product_type
     products: ["ECM"]
@@ -498,7 +514,7 @@ filters:
       exclusive vocabulary ADR/ADS/GDR/GDS, 144A, Class A, Rights, Conv. Bond,
       Conv. Pfd, Mandatory Convertible. FILTER HERE ONLY for that exclusive
       vocabulary or when the user literally says 'product type' — 99% of
-      class asks filter equity_type on capital_markets_deal (user ruling
+      class asks filter equity_type — now on THIS object too (user ruling
       2026-08-17): 'common stock', 'convertible', 'preferred', 'warrants' all
       belong there, and this column is then a PROJECTION (the sub-type
       breakdown column), not the filter. NEVER blend the two axes.

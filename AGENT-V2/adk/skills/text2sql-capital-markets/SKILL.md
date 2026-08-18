@@ -117,12 +117,11 @@ question with metric `deal_count`.
 A tranche ask that also scopes on sector, issuer, deal status, deal region or use
 of proceeds is **ONE request on the tranche object**.
 
-**"Investors in IPOs" is TWO requests today.** `offering_type` lives only on the
-deal object, so: request 1 on `capital_markets_deal` with
-`offering_type eq 'IPO'` projecting `deal_id`; request 2 on
-`capital_markets_order` with `deal_id in [...]` plus
-`investor_category_key eq 'LONG_ONLY'`. Say you scoped to IPO deals. Do NOT
-search `deal_name` for "IPO" — see §3c-bis.
+**"Investors in IPOs" is ONE request now.** `offering_type` is carried on the
+order object (round 2): filter `offering_type eq 'IPO'` beside the investor
+filters (`investor_category_key eq 'LONG_ONLY'`) in a single
+`capital_markets_order` request — no deal-id ferry, no sample, exact over any
+window. Do NOT search `deal_name` for "IPO" — see §3c-bis.
 **THE ID IN-LIST IS CAPPED AT 40 IDS.** Longer arrays corrupt YOUR OWN function
 call at the platform layer (observed: ~100 ids → MALFORMED_FUNCTION_CALL — the
 request never even reached the server), and request 1's response is itself
@@ -484,6 +483,16 @@ requests where one would do wastes a ~10 s round-trip.
   runs to thousands of rows against a capped response, so a reader-side split
   is not an answer. Non-B&D for a NON-Citi bank has no negation — say so and
   offer the billed-by-that-bank view (`bnd_bank like`) instead.
+- **"Billed by X" at ORDER grain is the order object's `billed_by`** (round 2):
+  the actual billing bank per order, BOTH products, full names — `like` a stem
+  (`'%CITIGROUP GLOBAL MARKETS%'` for Citi), never `eq`. **Billed-by league
+  tables are now possible on both products**: `GROUP BY billed_by` on the
+  order object (a scalar — the thing pipe lists never allowed). "Citi non-B&D
+  ORDERS" = the order object's `bill_and_deliver` computed filter with
+  `negate: true` (token-less, NULL-safe). The tranche `BND_BANK` remains the
+  DESIGNATION list — order-level `billed_by` legitimately disagrees with it
+  (measured: on half of tranches), and for "billed by" asks the order-level
+  truth wins.
 - **Do not use `bnd_broker`**: on ECM a raw `true | false` list; on DCM it
   literally means "the B&D bank is Citi", so a Goldman-billed DCM tranche reads
   `false`. `bnd_bank` answers everything it could.
@@ -544,7 +553,7 @@ wherever values are label variants. Traps are in §7c.
   Never filter it; route "execution status" to `deal_status`.
 - `offering_type` (deal) **ECM** — IPO · FO. Only these two: convertible is an
   equity_type, rights a product_type, "block" is not stored, DCM has none.
-- `equity_type` (deal) **ECM** † — Common Stock · Convertible Preferred ·
+- `equity_type` (deal, tranche) **ECM** † — Common Stock · Convertible Preferred ·
   Convertible Bonds · Equity Units · Warrants · `Exchangable Notes` (stored
   misspelled → `%EXCHANG%`) · American Depository · Global Depository.
 - `product_type` (tranche) **ECM** † — Common Stock · Common Shares · 144A Common
@@ -560,7 +569,7 @@ wherever values are label variants. Traps are in §7c.
 >
 > | The user says | Axis | Object |
 > |---|---|---|
-> | common stock · common shares · **convertible(s)** · **convertible bonds** · preferred · warrants · equity units · exchangeable notes · American/Global depositary (spelled out) | **`equity_type`** | **deal** |
+> | common stock · common shares · **convertible(s)** · **convertible bonds** · preferred · warrants · equity units · exchangeable notes · American/Global depositary (spelled out) | **`equity_type`** | **deal · tranche** |
 > | ADR · ADS · GDR · GDS (the ABBREVIATIONS) · 144A · Class A · Rights · `Conv. Bond` · `Conv. Pfd` · Mandatory Convertible · Closed End Fund | `product_type` | **tranche** |
 >
 > - **"convertible" / "convertible bonds" → `equity_type` like `%CONVERT%` on
@@ -583,16 +592,12 @@ wherever values are label variants. Traps are in §7c.
 >   Everything else — convertible(s), preferred, common stock, warrants, with
 >   or without the words "equity type" — filters `equity_type`.
 > - **A CLASS ask ranked by a TRANCHE metric** ("top 5 Convertible Preferred
->   deals by tranche size") therefore runs the TWO-STEP: request 1 on the
->   deal object, `equity_type eq 'Convertible Preferred'` projecting
->   `deal_id`; request 2 on tranche, `deal_id in [those ids]` ranked by the
->   size metric (`partition_by [deal_name, deal_id]` for one row per deal),
->   **projecting `product_type`** — the sub-type column is the breakdown, not
->   the filter. ONLY if request 1 exceeds the 40-id cap: fall back to the
->   `product_type` subtype in-list, and the disclosure is not optional — say
->   "ranked via the product-type subtypes; the exact equity-type set is too
->   large to carry across objects" or the approximation is being passed off
->   as the real answer. **"with product type" in an ask is a
+>   deals by tranche size") is ONE request now: `equity_type` is carried on
+>   the tranche object (round 2). Filter `equity_type` there directly
+>   (`partition_by [deal_name, deal_id]` for one row per deal), **projecting
+>   `product_type`** — the sub-type column is the breakdown, not the filter.
+>   The old deal-id two-step and the subtype-in-list approximation are DEAD
+>   for this shape. **"with product type" in an ask is a
 >   PROJECTION instruction — never a reason to change the filter axis.**
 > - **NEVER `or` the two axes.** Pick one by the user's wording.
 > - Zero rows on a class filter → retry ONCE on the other axis (switching

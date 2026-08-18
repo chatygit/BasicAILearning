@@ -432,3 +432,14 @@ participants, TRANCHE_CUSIP, SMC_* ratings (FITCH/MOODY/SP), IS_CONVERTIBLE,
 GOVERNING_LAW, PARENT_ISSUER_NAME. Combined with the OPUS-side riches, the
 fee/pricing/announced-date "not tracked" refusals are all potentially
 closable in future batches — measure population first, always.
+
+### ROUND-2 CONFIG APPLIED (2026-08-18, views deploying same day)
+round2-config-staged.md executed and deleted: order yaml (billed_by dim+
+filter both-products, offering_type ECM, bill_and_deliver computed filter,
+applicability lists seven->eight), tranche yaml (equity_type dim+filter ECM),
+SKILL (IPO ask = ONE request; class-ranked-by-tranche-metric = ONE request,
+subtype approximation DEAD; billed_by order-grain doctrine + league tables),
+agents.yaml routing line, gate pins (+_PRODUCT_PINS: tranche equity_type,
+order offering_type; capability pins; retired the obsolete disclosure pin).
+Bars: 1094/206/104. POST-DEPLOY: run _deploy-check.sql (rows 1b/1c/1d/1e);
+if the view deploy ROLLS BACK, these configs must be reverted with it.

@@ -127,7 +127,8 @@ agents:
                per-currency DCM money.
              • capital_markets_order   — investors/accounts, demand, allocation,
                order/IOI type, meeting type, "top investors", "how many deals
-               did X buy".
+               did X buy", billed by / billing bank, offering type (IPO/FO)
+               at order grain.
              • capital_markets_entity  — resolve a NAME → id (only when you need one
                entity, a spelling fix, or a user pick). A metric/list ask that
                merely NAMES an entity filters the name inline on the data

@@ -1153,9 +1153,9 @@ if MCPSERVER.exists():
     check(has(SKILL, "99% of class asks"),
           "[trap] SKILL.md: the 99%-ruling citation is gone — the default-"
           "axis rule loses its authority marker")
-    check(has(SKILL, "disclosure is not optional"),
-          "[trap] SKILL.md: the mandatory subtype-disclosure clause is gone — "
-          "product_type approximations get presented as equity_type answers")
+    # (retired 2026-08-18: the subtype-in-list approximation died when
+    # equity_type reached the tranche view — the disclosure clause went with
+    # it; the "ONE request now" pin below guards the replacement doctrine.)
     check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_tranche.yaml",
               "FILTER HERE ONLY"),
           "[trap] capital_markets_tranche.yaml: product_type lost the filter-"
@@ -1639,6 +1639,8 @@ _PRODUCT_PINS = [
     ("capital_markets_order.yaml", "order_type", "ECM"),
     ("capital_markets_order.yaml", "ioi_type", "ECM"),
     ("capital_markets_tranche.yaml", "product_type", "ECM"),
+    ("capital_markets_tranche.yaml", "equity_type", "ECM"),
+    ("capital_markets_order.yaml", "offering_type", "ECM"),
     ("capital_markets_tranche.yaml", "exchange", "ECM"),
     ("capital_markets_tranche.yaml", "syndicate_role", "ECM"),
     ("capital_markets_tranche.yaml", "broker_code", "ECM"),
@@ -1673,6 +1675,26 @@ for _fname, _field, _product in _PRODUCT_PINS:
           f"is silently disabled and a dual-entitled (production) caller gets "
           f"an empty result misread as 'no data'")
 
+# ROUND-2 COLUMNS LIVE (applied 2026-08-18, views deployed same day):
+# billed_by (order, BOTH products), offering_type (order, ECM), equity_type
+# (tranche, ECM). These entries must exist or the deployed views carry
+# columns the agent cannot reach.
+check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_order.yaml",
+          "billed_by:"),
+      "[round2] capital_markets_order.yaml: billed_by is gone — the deployed "
+      "order view carries a column the agent cannot reach")
+check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_order.yaml",
+          "bill_and_deliver:"),
+      "[round2] capital_markets_order.yaml: the order-level bill_and_deliver "
+      "computed filter is gone — 'Citi non-B&D orders' loses its NULL-safe "
+      "negation")
+check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_tranche.yaml",
+          "  equity_type:"),
+      "[round2] capital_markets_tranche.yaml: equity_type is gone — class "
+      "asks ranked by tranche metrics fall back to the dead two-step")
+check(has(SKILL, "ONE request now"),
+      "[round2] SKILL.md: the collapsed one-request recipes (IPO / class-"
+      "ranked) are gone — the agent re-learns the dead two-steps")
 # TOP-N-PER-GROUP (added 2026-08-11 — closed QA ask #17, the one true V1
 # architectural regression). The feature spans four layers; losing any one of
 # them strands the others.
