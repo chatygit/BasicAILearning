@@ -15,6 +15,27 @@ FROM (
   WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
   AND    column_name IN ('ISSUER_NAME','SECTOR','TRANCHE_SIZE')
   UNION ALL
+  -- 1b. ROUND 2: order view carries BILLED_BY + OFFERING_TYPE
+  SELECT '1b. order view has billed_by/offering_type (round 2)', '2',
+         TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
+  AND    column_name IN ('BILLED_BY','OFFERING_TYPE')
+  UNION ALL
+  -- 1c. ROUND 2: tranche view carries EQUITY_TYPE
+  SELECT '1c. tranche view has equity_type (round 2)', '1',
+         TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
+  AND    column_name = 'EQUITY_TYPE'
+  UNION ALL
+  -- 1d. INFO: BILLED_BY population per product (measured pre-deploy:
+  -- ECM 90.2%, DCM 74% — a big drop here means a broken join, not data).
+  SELECT '1d. orders with billed_by (INFO)', '(info)',
+         (SELECT TO_CHAR(COUNT(BILLED_BY)) || ' of ' || TO_CHAR(COUNT(*))
+          FROM DGSTREAM.VW_ORDER_DETAIL)
+  FROM   dual
+  UNION ALL
   -- 2. tranche size is a real NUMBER on BOTH views, not VARCHAR2
   SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
          'NUMBER,NUMBER',

@@ -29,12 +29,14 @@
 -- columns exist for a "latest row" tiebreak. Duplicate counts are small.
 --
 -- ROUND 2 (2026-08-18, deploy with the batch):
---   * BILLED_BY — OB_ORDER.BND, the per-order billing bank the source always
---     had and no view ever read (74% of DCM orders populated; VARIES within
---     53% of tranches, so the tranche designation was hiding real
---     attribution). ECM: CAST(NULL AS VARCHAR2(800)) — Q5 proved OB_ORDER
---     holds ZERO ECM rows; ECM billing exists only as the tranche
---     designation. VARCHAR2(800) pairs BND's declared type (ORA-01790 rule).
+--   * BILLED_BY — the per-order billing bank the source always had and no
+--     view ever read. DCM: OB_ORDER.BND (74% populated; VARIES within 53% of
+--     tranches, so the tranche designation was hiding real attribution).
+--     ECM: OB_ECM_ORDER.BILLEDBY_BROKER_CODE — the column NAME says code,
+--     the DATA is full bank names (measured 2026-08-18; ~90% populated),
+--     the same value-form as DCM's BND, so BILLED_BY is uniform across
+--     products. Test entities ('Citi (Test Syndicate CMG)') are excluded by
+--     the existing CITIGROUP GLOBAL MARKETS stem doctrine.
 --   * OFFERING_TYPE — denormalized from OPUS_ECM_TRANSACTION (existing
 --     deduped T join): makes "investors in IPOs" ONE request, killing the
 --     40-id ferry that corrupted a function call in QA. DCM: CAST(NULL).
@@ -72,7 +74,7 @@ SELECT
                           '^\s*[+-]?[0-9]+(\.[0-9]+)?([Ee][+-]?[0-9]+)?\s*$')
          THEN TO_NUMBER(TRIM(TO_CHAR(TT.TRANCHE_OFFER_SIZE)))
          ELSE NULL END AS TRANCHE_SIZE,
-    CAST(NULL AS VARCHAR2(800)) AS BILLED_BY,
+    O.BILLEDBY_BROKER_CODE AS BILLED_BY,
     T.PRODUCT_OFFERING_TYPE_VALUE AS OFFERING_TYPE
 FROM (
     SELECT E.*

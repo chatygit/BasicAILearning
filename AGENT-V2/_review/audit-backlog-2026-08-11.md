@@ -268,7 +268,10 @@ components). Handoff to the platform team, either fix suffices, both is best:
      them is not availability; never call them yourself. On 'Tool not found',
      do not retry the call — transfer to the agent that owns the domain."
 
-### Billed-by goes ORDER-LEVEL in round 2 (Q1 verdict 2026-08-18)
+### Billed-by goes ORDER-LEVEL in round 2 — DIFF WRITTEN, BOTH PRODUCTS
+(final 2026-08-18: ECM has it too — OB_ECM_ORDER.BILLEDBY_BROKER_CODE,
+misnamed: holds full bank NAMES, 90.2% populated [86,611/96,006]. One
+uniform column; staged config in _review/round2-config-staged.md.)
 OB_ORDER.BND holds a real bank NAME per order (Q1: Citigroup Global Markets
 Inc. 802k orders; 1.33M NULL; name variants incl. a truncated 'J.P. Morgan P';
 'DB Account 2' = QA junk). It is a SCALAR — so "orders billed by X" becomes a
