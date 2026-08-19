@@ -275,16 +275,17 @@ LEFT JOIN (
     ) C
     GROUP BY C.DEAL_ID
 ) CU
-    ON CU.DEAL_ID = D.DEAL_ID;
-
-GRANT SELECT ON "DGSTREAM"."VW_DEAL_SUMMARY" TO "DGLOBE_ORAAS_TABLEAU_ROLE";
-GRANT SELECT ON "DGSTREAM"."VW_DEAL_SUMMARY" TO "DGLOBE_ORAAS_RO_ROLE";
-GRANT SELECT ON "DGSTREAM"."VW_DEAL_SUMMARY" TO "DGLOBE_TABLEAU_RESTRICTED_ROLE"
+    ON CU.DEAL_ID = D.DEAL_ID
 LEFT JOIN (
     -- ISSUER IDENTITY MASTER for DCM too (2026-08-18): same PROD-intended
     -- source as the ECM branches (RELATED_PARTIES, Primary Client, latest
     -- version). V1's OB_DEAL_ISSUER concat join is KEPT underneath as the
     -- fallback via NVL — exactly V1 behavior when the master has no row.
+    -- 2026-08-19: this block previously sat AFTER the closing semicolon
+    -- and the GRANTs (a bottom-of-file paste) — the DEV migration failed
+    -- ORA-00904 "PCM"."PARTY_TICKER" because the parsed CREATE had no PCM
+    -- join. Moved inside the statement; the gate now polices statement
+    -- structure on every view file.
     SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PARTY_TICKER
     FROM (
         SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PARTY_TICKER,
@@ -296,4 +297,7 @@ LEFT JOIN (
 ) PCM
     ON PCM.TRANSACTION_ID = D.DEAL_ID
 ;
+GRANT SELECT ON "DGSTREAM"."VW_DEAL_SUMMARY" TO "DGLOBE_ORAAS_TABLEAU_ROLE";
+GRANT SELECT ON "DGSTREAM"."VW_DEAL_SUMMARY" TO "DGLOBE_ORAAS_RO_ROLE";
+GRANT SELECT ON "DGSTREAM"."VW_DEAL_SUMMARY" TO "DGLOBE_TABLEAU_RESTRICTED_ROLE";
 GRANT SELECT ON "DGSTREAM"."VW_DEAL_SUMMARY" TO "DGLOBE" WITH GRANT OPTION;

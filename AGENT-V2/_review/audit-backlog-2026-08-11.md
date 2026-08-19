@@ -505,3 +505,25 @@ log predates the scoped-probe hardening and the catalog rename, so
 current builds are already faster on first hit; the cache removes the
 retry's re-pay. Companion screenshot 100-rows.jpg shows PASSING top-N-
 per-group and healthcare top-5 asks — no action.
+
+### DEV deploy-check, first run (2026-08-19)
+ORA-00904 BILLED_BY: the DEV VW_ORDER_DETAIL predates round 2 — the
+deployed order view is an OLD revision (deal/tranche state unknown, the
+single-query script died whole). _deploy-check.sql RESTRUCTURED into four
+independent statements (A structural — always reports; B deal / C tranche
+/ D order — an old view kills only its own section). ACTION: user re-runs
+the new script in DEV; expected finding: A row 1b = 0/FAIL until the view
+team deploys the current vw_order_detail.sql.
+
+### DEV deploy root cause (2026-08-19)
+Migration log: V8_8_31_2333_50_..._vw_deal_summary.sql failed ORA-00904
+"PCM"."PARTY_TICKER". EXACT cause (their script, view-log-5 screenshot):
+the DCM branch's PCM LEFT JOIN block was pasted AFTER the statement's
+closing semicolon and three env-specific GRANT lines — so the CREATE that
+Oracle parses references PCM.* in its SELECT with NO PCM join in its
+FROM. (Repo file is correct; DEV schema has every column — desc
+verified.) Flyway aborted the chain, so the order-view script never ran
+(the missing BILLED_BY was collateral). FIX: replace their script body
+with views/vw_deal_summary.sql VERBATIM — the PCM join belongs INSIDE
+the statement, all GRANTs after the semicolon; re-run the chain; verify
+via _checks/_dev-deploy-diagnosis.sql D1 + deploy-check section A.

@@ -6,7 +6,11 @@ uninterpretable until the views are known-good.
 
 ## Layer 1 — SQL (run views/_deploy-check.sql in the target env)
 
-One script, one result table. Read it like this:
+Four independent statements — run as a script (F5). Section A is
+structural and ALWAYS reports (it can't hit a missing column); B/C/D read
+one view each, so an outdated view errors only its own section. (The
+2026-08-19 DEV run proved the need: the order view lacked BILLED_BY and
+the old single-query form returned nothing at all.) Read it like this:
 
 | Row | Expect | Meaning if wrong |
 |---|---|---|
