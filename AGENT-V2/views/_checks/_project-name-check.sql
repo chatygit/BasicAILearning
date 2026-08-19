@@ -4,10 +4,49 @@
 -- The column EXISTS at source: OPUS_BASE_TRANSACTION.PROJECT_NAME
 -- (VARCHAR2, col 5 — see _reference/base-table-columns.md). ECM-side only;
 -- no OB-world equivalent found, so DCM would be a NULL placeholder.
--- Measure-first: population + a sample decide whether it joins the next
--- view batch (MAX-over-versions rollup, same shape as DEAL_REGION).
+--
+-- P1/P2 RESULTS (2026-08-18): population LOOKS great (137,961/143,020
+-- rows; 60,651/61,231 transactions = 99%) — but the value census is
+-- QA LOAD-TEST JUNK: top values are 'PerfAuto_...', 'DO NOT PUBLISH TO
+-- DOWNSTREAM PerfAuto...', 'test'/'test1', bare 'Project'. The QA base
+-- table is polluted with perf-test transactions (which ALSO explains the
+-- deal-region mystery: 61k base transactions vs 29k real ECM deal
+-- transactions, and the region-rich rows that don't overlap our deals).
+-- VERDICT PENDING P3: wire PROJECT_NAME only if REAL deals (the ones in
+-- our view spine) carry names. If P3 shows ~0, the honest answer to Mike
+-- is: column exists, but in QA it is populated only on load-test
+-- transactions — needs a PROD check before the view consumes it.
 -- ===========================================================================
 
+-- P3a — the decisive overlap: of OUR deal transactions, how many carry a
+--       project name? (Same shape as region query R1.)
+SELECT COUNT(*) AS ECM_DEALS,
+       COUNT(OBT.PROJECT_NAME) AS WITH_PROJECT,
+       ROUND(100 * COUNT(OBT.PROJECT_NAME) / COUNT(*), 1) AS PCT
+FROM (SELECT DISTINCT DEAL_TRANSACTION_ID
+      FROM DGSTREAM.OPUS_ECM_TRANSACTION
+      WHERE DEAL_TRANSACTION_ID IS NOT NULL) E
+LEFT JOIN (SELECT TRANSACTION_ID, MAX(PROJECT_NAME) AS PROJECT_NAME
+           FROM DGSTREAM.OPUS_BASE_TRANSACTION
+           WHERE PROJECT_NAME IS NOT NULL
+           GROUP BY TRANSACTION_ID) OBT
+  ON OBT.TRANSACTION_ID = E.DEAL_TRANSACTION_ID;
+
+-- P3b — what do REAL deals' project names look like (junk or code names)?
+SELECT OBT.PROJECT_NAME, COUNT(*) AS DEALS_
+FROM (SELECT DISTINCT DEAL_TRANSACTION_ID
+      FROM DGSTREAM.OPUS_ECM_TRANSACTION
+      WHERE DEAL_TRANSACTION_ID IS NOT NULL) E
+JOIN (SELECT TRANSACTION_ID, MAX(PROJECT_NAME) AS PROJECT_NAME
+      FROM DGSTREAM.OPUS_BASE_TRANSACTION
+      WHERE PROJECT_NAME IS NOT NULL
+      GROUP BY TRANSACTION_ID) OBT
+  ON OBT.TRANSACTION_ID = E.DEAL_TRANSACTION_ID
+GROUP  BY OBT.PROJECT_NAME
+ORDER  BY DEALS_ DESC
+FETCH FIRST 15 ROWS ONLY;
+
+-- (P1/P2 below — ANSWERED, kept for the record)
 -- P1 — population, raw and per-transaction.
 SELECT COUNT(*) AS ROWS_,
        COUNT(PROJECT_NAME) AS WITH_PROJECT_,

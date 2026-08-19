@@ -163,10 +163,15 @@ valuation, institutional ownership, fees/wallet, news, documents.
   deploying batch (ECM names were 100% absent at source; now three-layer
   resolved). Mike's "that really needs to be in DG" is right and done.
 - ProjectName: the source column EXISTS
-  (OPUS_BASE_TRANSACTION.PROJECT_NAME, ECM side; no DCM equivalent).
-  Not in our views yet — two measurement queries are ready
-  (views/_checks/_project-name-check.sql); if population is real it joins the
-  next view batch as an ECM deal field.
+  (OPUS_BASE_TRANSACTION.PROJECT_NAME, ECM side; no DCM equivalent) and
+  is 96% populated — BUT the QA values are load-test junk ("PerfAuto…",
+  "DO NOT PUBLISH TO DOWNSTREAM…", "test1"): the QA base table is
+  polluted with perf-test transactions. One overlap query
+  (views/_checks/_project-name-check.sql P3) decides whether REAL deals
+  carry names; if yes it joins the next view batch, if no the honest
+  answer is "exists at source, unpopulated on real deals in QA — needs a
+  PROD check". Either way, a PO question for Mike first: should
+  AskBanking surface confidential project code names at all?
 - IPO Range stages: NOT captured. Our views carry no price-range fields
   at all yet (base/reoffer price columns exist at source, unmeasured —
   queued as a future batch), and there is no stage history (Initial vs
