@@ -28,10 +28,9 @@ need your/PO input.
   useful.
 - **IssuerName** — fixed; the fix is in the view batch deploying this
   week. Please re-test after it lands.
-- **ProjectName** — the source column exists and we're verifying whether
-  real deals carry it (in QA it's mostly perf-test junk). One question
-  back: project names are confidential code names — should AskBanking
-  surface them at all?
+- **ProjectName** — not consumed, and we're leaving it out: we measured
+  the source and in QA only ~6% of real deals carry a name (almost all
+  test artifacts). Testers shouldn't use it in test cases.
 - **IPO Range stages** — not captured today; our sources hold no
   price-range or stage history (Initial vs Revised). How important is
   this to the bankers? That decides whether we raise it with the data
@@ -74,11 +73,10 @@ alphabetically, so same-day rows read cleanly.
 
 **What we need from you / POs:**
 1. Re-test IssuerName and the Fidelity case after this week's deploy.
-2. ProjectName: should confidential code names be exposed in AskBanking?
-3. IPO range/stage history: how important, banker-wise?
-4. Order modification history: needed, or is latest-state fine?
-5. Weighted averages: which ones, with what weights?
-6. Any synonym / "present together" lists the POs have — we'll wire them
+2. IPO range/stage history: how important, banker-wise?
+3. Order modification history: needed, or is latest-state fine?
+4. Weighted averages: which ones, with what weights?
+5. Any synonym / "present together" lists the POs have — we'll wire them
    in.
 
 Happy to walk through any of this live.

@@ -162,16 +162,16 @@ valuation, institutional ownership, fees/wallet, news, documents.
 - IssuerName: exactly the gap we closed this week — the fix is in the
   deploying batch (ECM names were 100% absent at source; now three-layer
   resolved). Mike's "that really needs to be in DG" is right and done.
-- ProjectName: the source column EXISTS
-  (OPUS_BASE_TRANSACTION.PROJECT_NAME, ECM side; no DCM equivalent) and
-  is 96% populated — BUT the QA values are load-test junk ("PerfAuto…",
-  "DO NOT PUBLISH TO DOWNSTREAM…", "test1"): the QA base table is
-  polluted with perf-test transactions. One overlap query
-  (views/_checks/_project-name-check.sql P3) decides whether REAL deals
-  carry names; if yes it joins the next view batch, if no the honest
-  answer is "exists at source, unpopulated on real deals in QA — needs a
-  PROD check". Either way, a PO question for Mike first: should
-  AskBanking surface confidential project code names at all?
+- ProjectName: MEASURED AND CLOSED (2026-08-18). The source column exists
+  (OPUS_BASE_TRANSACTION.PROJECT_NAME, ECM side; no DCM equivalent), but
+  only 5.9% of real deals carry a name in QA (1,737 of 29,384) and those
+  values are test artifacts (PerfAuto*, UAT_*) — the base table's 96%
+  population is perf-test pollution outside the deal spine. One value,
+  "Copy of Project Soda", confirms the PROD shape is real code names.
+  NOT wired this batch. Two things decide it, both outside engineering:
+  (1) the PO confidentiality call — should AskBanking surface project
+  code names at all? (2) a PROD population check. If both pass, wiring
+  is a one-line view rollup.
 - IPO Range stages: NOT captured. Our views carry no price-range fields
   at all yet (base/reoffer price columns exist at source, unmeasured —
   queued as a future batch), and there is no stage history (Initial vs

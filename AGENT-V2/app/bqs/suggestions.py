@@ -19,7 +19,10 @@ Design notes (governed + safe):
 from __future__ import annotations
 
 import logging
+import os
 import re
+import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -43,6 +46,50 @@ _SUGGESTABLE_OPS = {"eq", "ne", "like", "in", "not_in"}
 # Disambiguation guardrails (over-match on entity-name fields).
 _DISAMBIG_OPS = {"like", "eq", "in"}   # value-bearing name predicates
 _DISAMBIG_MAX = 25                     # cap the listed distinct names
+
+# ---------------------------------------------------------------------------
+# Probe cache. A 0-row result triggers one DISTINCT probe per guessed filter,
+# and the agent's IMMEDIATE retry (the normal did_you_mean flow) re-triggers
+# the identical probes — measured in the 2026-08-11 warrants log as
+# enrich=49.00s then enrich=42.99s for the SAME two probes a minute apart.
+# The key is (sql, params): the SQL embeds view+column+scope+limit, so a
+# different date window / product / stem is a different entry by construction.
+# TTL via ECM_DCM_SUGGESTION_CACHE_TTL_SECONDS (default 300; <=0 disables).
+# ---------------------------------------------------------------------------
+_PROBE_CACHE: dict = {}
+_PROBE_CACHE_MAX = 128
+_PROBE_CACHE_LOCK = threading.Lock()
+
+
+def _probe_ttl() -> float:
+    try:
+        return float(os.environ.get("ECM_DCM_SUGGESTION_CACHE_TTL_SECONDS", "300"))
+    except ValueError:
+        return 300.0
+
+
+def _cached_probe(spec, sql: str, params: dict, dialect) -> list:
+    """execute() the probe, memoised by (sql, params) for the TTL window."""
+    ttl = _probe_ttl()
+    if ttl <= 0:
+        _cols, rows = execute(spec, BuiltQuery(sql=sql, params=params), dialect)
+        return rows
+    key = (sql, tuple(sorted((k, str(v)) for k, v in params.items())))
+    now = time.monotonic()
+    with _PROBE_CACHE_LOCK:
+        hit = _PROBE_CACHE.get(key)
+        if hit is not None and hit[0] > now:
+            return hit[1]
+    _cols, rows = execute(spec, BuiltQuery(sql=sql, params=params), dialect)
+    with _PROBE_CACHE_LOCK:
+        if len(_PROBE_CACHE) >= _PROBE_CACHE_MAX:
+            expired = [k for k, v in _PROBE_CACHE.items() if v[0] <= now]
+            for k in expired:
+                del _PROBE_CACHE[k]
+            if len(_PROBE_CACHE) >= _PROBE_CACHE_MAX:
+                _PROBE_CACHE.pop(min(_PROBE_CACHE, key=lambda k: _PROBE_CACHE[k][0]))
+        _PROBE_CACHE[key] = (now + ttl, rows)
+    return rows
 
 
 @dataclass
@@ -194,7 +241,7 @@ def build_suggestions(
                     spec, c.column, stem, dialect,
                     plan=plan, exclude_fields=guessed_fields,
                 )
-                _cols, rows = execute(spec, BuiltQuery(sql=sql, params=params), dialect)
+                rows = _cached_probe(spec, sql, params, dialect)
                 choices = [str(r[0]) for r in rows if r and r[0] is not None]
             if not choices:
                 continue
@@ -392,7 +439,7 @@ def build_disambiguation(
                 # 2) One bounded DISTINCT probe scoped by the same predicate,
                 #    returning (name, id) when the ontology pairs an id column.
                 sql, params = _build_entity_distinct_probe(spec, ef, dialect, plan)
-                _cols, rows = execute(spec, BuiltQuery(sql=sql, params=params), dialect)
+                rows = _cached_probe(spec, sql, params, dialect)
                 for r in rows:
                     if not r or r[0] is None:
                         continue

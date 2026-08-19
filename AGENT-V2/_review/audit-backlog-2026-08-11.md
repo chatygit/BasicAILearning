@@ -494,3 +494,14 @@ view changes" — batch 3 + configs ship together):
   SETTLEMENT_TS populated on only 26% of OPUS_ECM_TRANSACTION rows;
   ANNOUNCE_TS/LAUNCH_TS/CLOSING_TS are 100% NULL. Please advise whether
   upstream loads can backfill these."
+
+### Probe cache (2026-08-18, from the warrants MCP log)
+0-row enrich probes measured 49.00s + 42.99s for the SAME two probes a
+minute apart (the did_you_mean retry double-pays). Shipped: _cached_probe
+TTL memo in bqs/suggestions.py ((sql, params) key, ECM_DCM_SUGGESTION_
+CACHE_TTL_SECONDS default 300, bounded 128, also covers disambiguation
+probes) + tests/test_suggestion_cache.py + [latency] gate pin. Note: the
+log predates the scoped-probe hardening and the catalog rename, so
+current builds are already faster on first hit; the cache removes the
+retry's re-pay. Companion screenshot 100-rows.jpg shows PASSING top-N-
+per-group and healthcare top-5 asks — no action.

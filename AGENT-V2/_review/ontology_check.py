@@ -1736,6 +1736,13 @@ check(has(SKILL, "Never report 0 rows as a timeout"),
 check(has(SKILL, "READABLE middle key"),
       "[sort] SKILL.md: the readable secondary-sort rule is gone (MRM ask "
       "2026-08-18) — same-day rows land in random order again")
+# PROBE CACHE (warrants log 2026-08-11: enrich=49.00s then 42.99s for the
+# SAME two 0-row probes a minute apart — the did_you_mean retry double-pays
+# the warehouse). _cached_probe memoises by (sql, params) with a TTL.
+check(has(ROOT / "app" / "bqs" / "suggestions.py",
+          "ECM_DCM_SUGGESTION_CACHE_TTL_SECONDS"),
+      "[latency] suggestions.py: the probe TTL cache is gone — every "
+      "did_you_mean retry re-pays the DISTINCT probes at the warehouse")
 # TOP-N-PER-GROUP (added 2026-08-11 — closed QA ask #17, the one true V1
 # architectural regression). The feature spans four layers; losing any one of
 # them strands the others.

@@ -12,10 +12,17 @@
 -- table is polluted with perf-test transactions (which ALSO explains the
 -- deal-region mystery: 61k base transactions vs 29k real ECM deal
 -- transactions, and the region-rich rows that don't overlap our deals).
--- VERDICT PENDING P3: wire PROJECT_NAME only if REAL deals (the ones in
--- our view spine) carry names. If P3 shows ~0, the honest answer to Mike
--- is: column exists, but in QA it is populated only on load-test
--- transactions — needs a PROD check before the view consumes it.
+-- VERDICT (P3a/P3b, 2026-08-18) — CLOSED, NOT WIRED THIS BATCH:
+--  * P3a: 1,737 of 29,384 real ECM deal transactions carry a project name
+--    (5.9%) — same shape as the region story; the 137,961 populated base
+--    rows are overwhelmingly perf-junk outside the deal spine.
+--  * P3b: even the real-spine names are QA-synthetic (PerfAuto*,
+--    UAT_EMEA_VAT_Client Invoicing _CGML). One telling exception —
+--    'Copy of Project Soda' (18 deals) — confirms the PROD shape is real
+--    confidential code names.
+--  * DROPPED by user decision 2026-08-18: ProjectName is IGNORED — not
+--    wired, not raised with POs, not in the Mike reply as an open item.
+--    Measurements kept for the record only; do not re-open.
 -- ===========================================================================
 
 -- P3a — the decisive overlap: of OUR deal transactions, how many carry a
