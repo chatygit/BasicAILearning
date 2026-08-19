@@ -2,7 +2,7 @@
 # COLUMN NAMES VERIFIED against the deployed view, not assumed. All 20 physical
 # columns of DGSTREAM.VW_ORDER_DETAIL are modelled below; there is nothing on
 # the view this file does not name, and nothing here the view does not carry.
-# Evidence: views/vw_order_detail.sql + views/_diagnostics-results.md (2026-08-10).
+# Evidence: views/vw_order_detail.sql + views/_docs/_diagnostics-results.md (2026-08-10).
 # ---------------------------------------------------------------------------
 # Governed ontology — ECM/DCM ORDER object (Oracle via Starburst/Trino).
 #

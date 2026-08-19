@@ -1723,6 +1723,19 @@ check(has(DEAL, "JAPAN"),
 check(has(SKILL, "settlement_ts"),
       "[round3] SKILL.md: the settlement_ts answer-it row is gone — the "
       "agent re-learns the dead '100% empty — refuse' doctrine")
+# TIMEOUT LADDER (MRM trace, Fidelity 2026-08-18): broad listing timed out,
+# the narrowed retry returned 0 rows, and the agent reported the 0-row
+# result as ANOTHER timeout while offering the aggregate as a question
+# instead of running it. Two doctrine anchors:
+check(has(SKILL, "shape-down"),
+      "[timeout] SKILL.md: the timeout shape-down ladder is gone — broad "
+      "listings that time out get retried as listings until the turn dies")
+check(has(SKILL, "Never report 0 rows as a timeout"),
+      "[timeout] SKILL.md: the 0-rows-is-a-result rule is gone — the agent "
+      "again misreports empty results as infrastructure failures")
+check(has(SKILL, "READABLE middle key"),
+      "[sort] SKILL.md: the readable secondary-sort rule is gone (MRM ask "
+      "2026-08-18) — same-day rows land in random order again")
 # TOP-N-PER-GROUP (added 2026-08-11 — closed QA ask #17, the one true V1
 # architectural regression). The feature spans four layers; losing any one of
 # them strands the others.

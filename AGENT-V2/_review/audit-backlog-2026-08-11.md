@@ -5,7 +5,7 @@ The 6-dimension / 20-verifier audit confirmed 19 findings; all 19 are FIXED
 Verify each against the code before acting — some may rot as the repo moves.
 
 ## Refuted (do NOT re-report)
-- **Order ontology models 3 columns (issuer_name, sector, tranche_size) that the DEPLOYED VW_ORDER_DETAIL does not have — every sector/issuer-scoped investor ask will error at runtime** — The evidence holds verbatim but the finding conflates the repo's STAGED state with the DEPLOYED state, and the exact failure it predicts is already gated by two files the auditor missed. (1) /Users/babachaitanyakothapalli/Documents/ADK-KIT/AGENT-V2/views/_DEPLOY-ORDER.md (created 2026-08-11 10:15, commit 64d861b) states the doctrine that covers this class explicitly: 'The four view files and the f
+- **Order ontology models 3 columns (issuer_name, sector, tranche_size) that the DEPLOYED VW_ORDER_DETAIL does not have — every sector/issuer-scoped investor ask will error at runtime** — The evidence holds verbatim but the finding conflates the repo's STAGED state with the DEPLOYED state, and the exact failure it predicts is already gated by two files the auditor missed. (1) /Users/babachaitanyakothapalli/Documents/ADK-KIT/AGENT-V2/views/_docs/_DEPLOY-ORDER.md (created 2026-08-11 10:15, commit 64d861b) states the doctrine that covers this class explicitly: 'The four view files and the f
 
 ## User-side (outside this repo)
 - **[low/S] CyberArk credential cache: VERIFIED implemented and live on the Trino hot path, but the executor's Oracle path imports a different, absent, untested module**
@@ -342,7 +342,7 @@ OPUS_BASE_TRANSACTION_RELATED_PARTIES where PARTY_ROLE='Primary Client' — not
 OPUS_ECM_TRANSACTION.ISSUER_NAME_FROM_SOURCE. Matches the QA symptom (Issuer
 Name "—" across ECM answers). Touches the ECM branch of ALL THREE data views
 (deal, tranche, order — each carries ISSUER_NAME). Measure first via
-views/_issuer-name-check.sql (Q1 shape/keys, Q2 role vocabulary, Q3 grain/
+views/_checks/_issuer-name-check.sql (Q1 shape/keys, Q2 role vocabulary, Q3 grain/
 dedupe, Q4 gained/lost/disagree vs current, Q5 eyeball). Swap ships in the
 round-2 batch if Q4 shows net gain without losses; a MAX()/ROWID dedupe
 guards grain per Q3.
@@ -420,7 +420,7 @@ Eyeball of I-format 'DCM' view rows: bond tranches ('5 YR FXD USD', '15Y45F',
 '10 yr', USD notionals, announced/draft) = IPREO-sourced DCM (OB_DEAL_TRANCHE
 carries IPREO_DEAL_ID/IPREO_TRANCHE_ID; two source systems, one product). NO
 contamination; DCM counts are sound; no product filter needed. Issuer
-investigation fully closed — see views/_issuer-name-check.sql archive header.
+investigation fully closed — see views/_checks/_issuer-name-check.sql archive header.
 
 ### OB_DEAL_TRANCHE riches (214 cols, recorded in base-table-columns.md)
 DCM-side treasure (population unmeasured): COUPON, YIELD, PRICE +
@@ -445,7 +445,7 @@ Bars: 1094/206/104. POST-DEPLOY: run _deploy-check.sql (rows 1b/1c/1d/1e);
 if the view deploy ROLLS BACK, these configs must be reverted with it.
 
 ### Data-dictionary ticket #100 — remaining fields (2026-08-18)
-MEASURED (Q1-Q5 results archived in views/_region-settlement-check.sql).
+MEASURED (Q1-Q5 results archived in views/_checks/_region-settlement-check.sql).
 Per-field status:
 * ISSUER_NAME — fixed, in the deploying batch (batch 2).
 * DEAL_REGION ECM — the MAX-over-versions OBT join is ALREADY IN BATCH 2

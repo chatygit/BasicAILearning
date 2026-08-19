@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # Column names are VERIFIED against the deployed view (diagnostics Q1 — 22
 # columns) and against views/vw_deal_summary.sql. Every factual claim in this
-# file traces to views/_diagnostics-results.md; the query id is quoted inline.
+# file traces to views/_docs/_diagnostics-results.md; the query id is quoted inline.
 # Counts quoted are QA existence proofs, never PROD sizing.
 # ---------------------------------------------------------------------------
 # Governed ontology — ECM/DCM DEAL object (Oracle via Starburst/Trino).

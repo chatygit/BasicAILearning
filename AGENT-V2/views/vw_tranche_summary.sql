@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- VW_TRANCHE_SUMMARY — grain: one row per PRODUCT + DEAL_ID + TRANCHE_ID
 --
--- FIXES IN THIS REVISION (evidence: views/_diagnostics-results.md)
+-- FIXES IN THIS REVISION (evidence: views/_docs/_diagnostics-results.md)
 --   1. TRANCHE_SIZE deployed as VARCHAR2(480) (Q1), so "top N by tranche
 --      size" sorted lexically — '900' beat '1000000'.
 --      BOTH branches were character, not just ECM. V8 proved it: comparing
@@ -230,7 +230,7 @@ LEFT JOIN (
     -- ISSUER NAME FIX (2026-08-18): the old ECM source column is 100% dead
     -- in QA (0 of 21,195 deals named). OB_DEAL_ISSUER maps GFCID -> NAME
     -- (99.8% of its 74k rows named; 96% of GFCID-carrying ECM deals resolve
-    -- — A1-A3, views/_issuer-name-check.sql). Grouped per GFCID so the join
+    -- — A1-A3, views/_checks/_issuer-name-check.sql). Grouped per GFCID so the join
     -- cannot fan out the grain. Old column kept as PROD fallback via NVL.
     SELECT GFCID, MAX(NAME) AS ISSUER_NAME_BY_GFCID
     FROM DGSTREAM.OB_DEAL_ISSUER

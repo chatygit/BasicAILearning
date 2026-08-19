@@ -71,6 +71,10 @@ never drop a filter (measured: three attempts on one question, two wasted).
 - **`having`** thresholds a metric after aggregation: `eq ne gt gte lt lte` only.
 - **`order`** takes multiple keys, sorted on the OUTPUT ALIAS — every sort field
   must be the metric or a projected dimension. Always end with a unique key.
+  **Bankers read sorted-within-sorted**: between the ask's primary sort and the
+  id tiebreak, add a READABLE middle key — name A→Z (issuer/investor/deal) —
+  so same-day or same-size rows land alphabetically, not randomly (MRM ask
+  2026-08-18). Primary desc, name asc, id last.
 - **`limit` — ALWAYS set one on a listing.** Omitting it applies a **50-row**
   server default, not `max_limit` and not "unlimited" — and the reply then comes
   back flagged `truncated` (§8), i.e. a page, not the answer. Ceilings clamp on
@@ -785,8 +789,19 @@ status-sensitive answer spans both.
   Bonds" was sent as a product-type field on the DEAL object, rejected, and the
   turn ended with the raw dimension array printed to the user. Both halves were
   wrong — the ask was answerable as `equity_type` like '%CONVERT%'.
-- **Error `code`**: request-fixable (timeout → narrow, retry once) vs infra
-  (connectivity/permission → do NOT retry; relay plainly).
+- **Error `code`**: request-fixable vs infra (connectivity/permission → do NOT
+  retry; relay plainly). For a TIMEOUT the ladder is **shape-down, not
+  retry-same**: a broad listing that timed out does not get re-sent as another
+  listing — degrade to the cheap AGGREGATE of the same ask (the metric grouped
+  by product or by deal), PRESENT that, and offer the paged drill-down as the
+  follow-up. Narrowing by date is a MEANING change, not a free retry — a
+  pricing-date bound silently drops NULL-pricing ECM orders (§9) and older
+  deals; if you narrow, say so. **Never report 0 rows as a timeout.** Measured
+  failure (Fidelity, 2026-08-18): the investor-wide listing timed out, the
+  date-narrowed retry ran FINE and returned 0 rows, and the reply called that
+  a timeout too — wrong twice. A query that returns is a RESULT to explain
+  (here: the added window excluded everything), and the one attempt left
+  belongs to the aggregate, run — not offered as a question.
 - **`entitlement_denied`/`product_not_entitled`**: relay the `message` as given and
   offer the product the user *is* entitled to. Do NOT retry with a different
   product, and never name the unentitled one beyond echoing the server.
@@ -826,7 +841,13 @@ status-sensitive answer spans both.
   pricings; an upper bound of *today* drops everything priced today. Both shipped.
 - **"Latest / most recent / newest N"** sorts the pricing date desc AND adds the
   `lt` tomorrow-midnight filter — a bare recency sort with no upper bound leads
-  with the future-dated rows. State the bound.
+  with the future-dated rows. State the bound. When the ask is NOT a "latest"
+  ask (e.g. "across ALL deals") and you merely SORT by recency for paging,
+  keep the future-dated rows — they belong to the ask — but if they lead the
+  table, say in one line that those are upcoming/scheduled pricings, so the
+  reader doesn't puzzle over a deal dated after today (MRM trace 2026-08-18:
+  a listing captioned "most recent" led with a pricing two days in the
+  future, unflagged).
 - **"New deals"**: creation dates are not tracked, and unpriced pipeline deals
   have no pricing date, so a pricing-date sort cannot show them — disclose this
   and offer the current pipeline via a `deal_status` filter (draft/announced/

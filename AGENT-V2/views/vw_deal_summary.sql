@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- VW_DEAL_SUMMARY — grain: one row per PRODUCT + DEAL_ID
 --
--- FIXES IN THIS REVISION (evidence: views/_diagnostics-results.md)
+-- FIXES IN THIS REVISION (evidence: views/_docs/_diagnostics-results.md)
 --   1. Q9/Q9b: 43,415 rows for 39,467 deals, and the gap is ENTIRELY ECM
 --      (22,347 rows / 18,399 deals; DCM was already exactly 1:1).
 --      Q10 found the cause: OPUS_ECM_TRANSACTION holds 44,829 rows /
@@ -167,7 +167,7 @@ LEFT JOIN (
     -- ISSUER NAME FIX (2026-08-18): the old ECM source column is 100% dead
     -- in QA (0 of 21,195 deals named). OB_DEAL_ISSUER maps GFCID -> NAME
     -- (99.8% of its 74k rows named; 96% of GFCID-carrying ECM deals resolve
-    -- — A1-A3, views/_issuer-name-check.sql). Grouped per GFCID so the join
+    -- — A1-A3, views/_checks/_issuer-name-check.sql). Grouped per GFCID so the join
     -- cannot fan out the grain. Old column kept as PROD fallback via NVL.
     SELECT GFCID, MAX(NAME) AS ISSUER_NAME_BY_GFCID
     FROM DGSTREAM.OB_DEAL_ISSUER

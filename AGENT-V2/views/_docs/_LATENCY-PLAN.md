@@ -195,7 +195,7 @@ prompt cap (agents.yaml:169-171)            50 rows → 17.7s
 
 ### #4 — The multi-currency pushdown idiom · 6.2s + DB · very low risk · **ontology YAML only**
 
-**No input map ranked this, and it is the actual explanation for observation (d).** `views/_IMPROVEMENTS.md:138-147`:
+**No input map ranked this, and it is the actual explanation for observation (d).** `views/_docs/_IMPROVEMENTS.md:138-147`:
 
 > *"**`SPLIT` and `CARDINALITY` cannot push down to Oracle through the federation link, so the whole matched set crosses the wire before the threshold is applied** (TRACE — this is the shape of the 136s 'List all the multi-currency deals in the year 2024' run)."*
 

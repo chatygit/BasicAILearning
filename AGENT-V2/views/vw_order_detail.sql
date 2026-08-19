@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- VW_ORDER_DETAIL — grain: one row per PRODUCT + ORDER_ID
 --
--- FIXES IN THIS REVISION (evidence: views/_diagnostics-results.md)
+-- FIXES IN THIS REVISION (evidence: views/_docs/_diagnostics-results.md)
 --   1. DCM ORDER_ALLOCATION was sourced from OB_ORDER_MATCH_GROUP joined on
 --      (ROOT_ID, PARENT_ID) — deal+tranche, never the order. Q37: only 0.47%
 --      of orders are reachable that way; Q8: the table has NO rows for the
@@ -146,7 +146,7 @@ LEFT JOIN (
     -- ISSUER NAME FIX (2026-08-18): the old ECM source column is 100% dead
     -- in QA (0 of 21,195 deals named). OB_DEAL_ISSUER maps GFCID -> NAME
     -- (99.8% of its 74k rows named; 96% of GFCID-carrying ECM deals resolve
-    -- — A1-A3, views/_issuer-name-check.sql). Grouped per GFCID so the join
+    -- — A1-A3, views/_checks/_issuer-name-check.sql). Grouped per GFCID so the join
     -- cannot fan out the grain. Old column kept as PROD fallback via NVL.
     SELECT GFCID, MAX(NAME) AS ISSUER_NAME_BY_GFCID
     FROM DGSTREAM.OB_DEAL_ISSUER

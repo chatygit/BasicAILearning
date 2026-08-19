@@ -20,7 +20,7 @@ request.
 | `V1/docs/QA-FINDINGS-FOR-DATA-TEAM.md` | Join keys and index recommendations per base table (see the table near the end) | Written during the split. |
 | `V1/docs/VIEW-SPLIT-PROPOSAL.md` §2 | The proposed DDL for all four views | **Proposal, not deployed.** The deployed DDL lives in `AGENT-V2/views/*.sql`. |
 | `AGENT-V2/app/bqs/ontology/*.yaml` | Business-name → physical-column mapping per object | Can drift from the views; the views win. |
-| `AGENT-V2/views/_diagnostics-results.md` | Answers to the pre-fix diagnostic queries, plus the scope rules governing view changes | Live document. |
+| `AGENT-V2/views/_docs/_diagnostics-results.md` | Answers to the pre-fix diagnostic queries, plus the scope rules governing view changes | Live document. |
 
 ## Scope rule that governs all of this
 
