@@ -1,13 +1,13 @@
 -- ===========================================================================
 -- POST-DEPLOY CHECK — FOUR independent statements. Run as a script (F5).
--- Restructured 2026-08-19: the old single-UNION form died whole on the first
--- missing column (DEV order view lacked BILLED_BY -> ORA-00904 -> zero rows
--- of report). Now: statement A is structural (all_tab_columns only — it can
--- NEVER hit ORA-00904 and always tells you WHICH views are current);
--- B/C/D read one view each, so an old view kills only its own section.
--- Every non-INFO row must read PASS. INFO rows report data-state for
--- tracking (UAT-measured expectations; in another env judge them as
--- zero-vs-healthy, not exact).
+-- 2026-08-19 (2nd revision): B/C/D each read their view EXACTLY ONCE — the
+-- first revision ran one scalar subquery per row (7 full evaluations of the
+-- deal view alone) and took forever; all population facts now come from a
+-- single conditional-aggregation pass (/*+ MATERIALIZE */ pins one scan).
+-- Statement A is structural (all_tab_columns only — can never ORA-00904,
+-- always reports WHICH views are current); an old view kills only its own
+-- section. Every non-INFO row must read PASS. INFO expectations are
+-- UAT-measured; in another env judge zero-vs-healthy, not exact.
 -- ===========================================================================
 
 -- A. STRUCTURAL — always runs. FAIL here = that view is not this revision.
@@ -21,8 +21,6 @@ FROM (
   WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
   AND    column_name IN ('ISSUER_NAME','SECTOR','TRANCHE_SIZE')
   UNION ALL
-  -- ROUND 2: order view carries BILLED_BY + OFFERING_TYPE. 2026-08-19 DEV
-  -- run: this was the ORA-00904 — the deployed order view predates round 2.
   SELECT '1b. order view has billed_by/offering_type (round 2)', '2',
          TO_CHAR(COUNT(*))
   FROM   all_tab_columns
@@ -42,9 +40,7 @@ FROM (
   WHERE  owner = 'DGSTREAM' AND column_name = 'TRANCHE_SIZE'
   AND    table_name IN ('VW_ORDER_DETAIL','VW_TRANCHE_SUMMARY')
   UNION ALL
-  -- maturity stays VARCHAR2 — the DATE conversion was REVERTED on ORA-01790
-  -- (source is character data); DATE here means someone re-attempted it
-  -- without re-blessing the ontology/skill.
+  -- maturity stays VARCHAR2 — the DATE conversion was REVERTED (ORA-01790).
   SELECT '3. SECURITIES_MATURITY is VARCHAR2 (DATE was reverted)', 'VARCHAR2',
          MAX(data_type)
   FROM   all_tab_columns
@@ -53,107 +49,97 @@ FROM (
 )
 ORDER BY check_;
 
--- B. DEAL VIEW — population + logic. Dies alone if VW_DEAL_SUMMARY is old.
-SELECT check_, expected_, actual_,
-       CASE WHEN expected_ = '(info)' THEN 'INFO'
-            WHEN actual_ = expected_ THEN 'PASS' ELSE 'FAIL' END AS verdict_
-FROM (
-  -- ECM issuer names: pre-fix ZERO; the GFCID join resolves ~6,892 in UAT.
-  -- Zero post-deploy means the OB_DEAL_ISSUER join regressed.
-  SELECT '1e. ECM deals with issuer name (INFO, expect ~6,892 UAT)' AS check_,
-         '(info)' AS expected_,
-         (SELECT TO_CHAR(COUNT(ISSUER_NAME)) || ' of ' || TO_CHAR(COUNT(*))
-          FROM DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'ECM') AS actual_
-  FROM   dual
-  UNION ALL
-  -- BATCH 3 rollups (ticket #100). UAT source measures: 8,260 / 30,749.
-  SELECT '1f. DCM deals with region (INFO, expect ~8,260 UAT)', '(info)',
-         (SELECT TO_CHAR(COUNT(DEAL_REGION)) || ' of ' || TO_CHAR(COUNT(*))
-          FROM DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'DCM')
-  FROM   dual
-  UNION ALL
-  SELECT '1g. DCM deals with settlement_ts (INFO, expect ~30,749 UAT)', '(info)',
-         (SELECT TO_CHAR(COUNT(SETTLEMENT_TS)) || ' of ' || TO_CHAR(COUNT(*))
-          FROM DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'DCM')
-  FROM   dual
-  UNION ALL
-  -- Currency logic: a broken CURRENCY_NAME join produces ZERO rows with an
-  -- alphabetic code; a healthy one produces thousands. Unmapped volume = 4b.
-  SELECT '4. ECM currency names resolve (view logic)', 'Y',
-         (SELECT CASE WHEN COUNT(CASE WHEN REGEXP_LIKE(CURRENCIES, '[A-Za-z]')
-                                      THEN 1 END) > 0 THEN 'Y' ELSE 'N' END
-          FROM DGSTREAM.VW_DEAL_SUMMARY
-          WHERE PRODUCT = 'ECM' AND CURRENCIES IS NOT NULL)
-  FROM   dual
-  UNION ALL
-  SELECT '4b. deals with unmapped currency tokens (INFO, ~377 UAT)', '(info)',
-         (SELECT TO_CHAR(COUNT(DISTINCT DEAL_ID))
-          FROM DGSTREAM.VW_DEAL_SUMMARY
-          WHERE PRODUCT = 'ECM' AND CURRENCIES IS NOT NULL
-          AND REGEXP_LIKE(CURRENCIES, '(^|\| )[0-9]+( \||$)'))
-  FROM   dual
-  UNION ALL
-  SELECT '5. DCM currencies deduped', 'Y',
-         (SELECT CASE WHEN COUNT(*) = 0 THEN 'Y' ELSE 'N' END
-          FROM DGSTREAM.VW_DEAL_SUMMARY
-          WHERE PRODUCT = 'DCM'
-          AND REGEXP_LIKE(CURRENCIES, '(^|\| )([A-Za-z]+)( \|.*\| | \| )\2( \||$)'))
-  FROM   dual
-  UNION ALL
-  SELECT '7. deal grain (rows = PRODUCT+DEAL_ID)', 'Y',
-         (SELECT CASE WHEN COUNT(*) = COUNT(DISTINCT PRODUCT||'~'||DEAL_ID)
-                      THEN 'Y' ELSE 'N' END
-          FROM DGSTREAM.VW_DEAL_SUMMARY)
-  FROM   dual
+-- B. DEAL VIEW — ONE scan. Dies alone if VW_DEAL_SUMMARY is old.
+WITH agg AS (
+  SELECT /*+ MATERIALIZE */
+         COUNT(*) AS rows_,
+         COUNT(DISTINCT PRODUCT||'~'||DEAL_ID) AS keys_,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_rows,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN ISSUER_NAME END) AS ecm_issuer,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN 1 END) AS dcm_rows,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN DEAL_REGION END) AS dcm_region,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN SETTLEMENT_TS END) AS dcm_settle,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND CURRENCIES IS NOT NULL
+                     AND REGEXP_LIKE(CURRENCIES, '[A-Za-z]')
+                    THEN 1 END) AS ecm_alpha,
+         COUNT(DISTINCT CASE WHEN PRODUCT = 'ECM' AND CURRENCIES IS NOT NULL
+                              AND REGEXP_LIKE(CURRENCIES, '(^|\| )[0-9]+( \||$)')
+                             THEN DEAL_ID END) AS ecm_unmapped,
+         COUNT(CASE WHEN PRODUCT = 'DCM' AND REGEXP_LIKE(CURRENCIES,
+                     '(^|\| )([A-Za-z]+)( \|.*\| | \| )\2( \||$)')
+                    THEN 1 END) AS dcm_dupcur
+  FROM DGSTREAM.VW_DEAL_SUMMARY
 )
-ORDER BY check_;
+SELECT '1e. ECM deals with issuer name (INFO, expect ~6,892 UAT)' AS check_,
+       '(info)' AS expected_,
+       TO_CHAR(ecm_issuer) || ' of ' || TO_CHAR(ecm_rows) AS actual_,
+       'INFO' AS verdict_
+FROM agg
+UNION ALL
+SELECT '1f. DCM deals with region (INFO, expect ~8,260 UAT)', '(info)',
+       TO_CHAR(dcm_region) || ' of ' || TO_CHAR(dcm_rows), 'INFO' FROM agg
+UNION ALL
+SELECT '1g. DCM deals with settlement_ts (INFO, expect ~30,749 UAT)', '(info)',
+       TO_CHAR(dcm_settle) || ' of ' || TO_CHAR(dcm_rows), 'INFO' FROM agg
+UNION ALL
+-- broken CURRENCY_NAME join = ZERO alphabetic codes; healthy = thousands.
+SELECT '4. ECM currency names resolve (view logic)', 'Y',
+       CASE WHEN ecm_alpha > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN ecm_alpha > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '4b. deals with unmapped currency tokens (INFO, ~377 UAT)', '(info)',
+       TO_CHAR(ecm_unmapped), 'INFO' FROM agg
+UNION ALL
+SELECT '5. DCM currencies deduped', 'Y',
+       CASE WHEN dcm_dupcur = 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_dupcur = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '7. deal grain (rows = PRODUCT+DEAL_ID)', 'Y',
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+ORDER BY 1;
 
--- C. TRANCHE VIEW — dies alone if VW_TRANCHE_SUMMARY is old.
-SELECT check_, expected_, actual_,
-       CASE WHEN expected_ = '(info)' THEN 'INFO'
-            WHEN actual_ = expected_ THEN 'PASS' ELSE 'FAIL' END AS verdict_
-FROM (
-  -- BATCH 3: ECM tranche region inherits the deal region (own column was
-  -- 3/36,352). Staying at 0-3 means the NVL fallback did not deploy.
-  SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
-         '(info)' AS expected_,
-         (SELECT TO_CHAR(COUNT(TRANCHE_REGION)) || ' of ' || TO_CHAR(COUNT(*))
-          FROM DGSTREAM.VW_TRANCHE_SUMMARY WHERE PRODUCT = 'ECM') AS actual_
-  FROM   dual
-  UNION ALL
-  SELECT '8. tranche grain (rows = PRODUCT+DEAL+TRANCHE)', 'Y',
-         (SELECT CASE WHEN COUNT(*) =
-                           COUNT(DISTINCT PRODUCT||'~'||DEAL_ID||'~'||TRANCHE_ID)
-                      THEN 'Y' ELSE 'N' END
-          FROM DGSTREAM.VW_TRANCHE_SUMMARY)
-  FROM   dual
+-- C. TRANCHE VIEW — ONE scan. Dies alone if VW_TRANCHE_SUMMARY is old.
+WITH agg AS (
+  SELECT /*+ MATERIALIZE */
+         COUNT(*) AS rows_,
+         COUNT(DISTINCT PRODUCT||'~'||DEAL_ID||'~'||TRANCHE_ID) AS keys_,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_rows,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN TRANCHE_REGION END) AS ecm_region
+  FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
-ORDER BY check_;
+SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
+       '(info)' AS expected_,
+       TO_CHAR(ecm_region) || ' of ' || TO_CHAR(ecm_rows) AS actual_,
+       'INFO' AS verdict_
+FROM agg
+UNION ALL
+SELECT '8. tranche grain (rows = PRODUCT+DEAL+TRANCHE)', 'Y',
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+ORDER BY 1;
 
--- D. ORDER VIEW — dies alone if VW_ORDER_DETAIL is old (as in DEV
--- 2026-08-19: no BILLED_BY -> only this section errors, A/B/C still report).
-SELECT check_, expected_, actual_,
-       CASE WHEN expected_ = '(info)' THEN 'INFO'
-            WHEN actual_ = expected_ THEN 'PASS' ELSE 'FAIL' END AS verdict_
-FROM (
-  -- BILLED_BY population, UAT-measured: ECM 90.2%, DCM 74%. A big drop
-  -- means a broken join, not data.
-  SELECT '1d. orders with billed_by (INFO, ~90/74% UAT)' AS check_,
-         '(info)' AS expected_,
-         (SELECT TO_CHAR(COUNT(BILLED_BY)) || ' of ' || TO_CHAR(COUNT(*))
-          FROM DGSTREAM.VW_ORDER_DETAIL) AS actual_
-  FROM   dual
-  UNION ALL
-  SELECT '6. DCM allocation non-zero', 'Y',
-         (SELECT CASE WHEN SUM(ORDER_ALLOCATION) > 0 THEN 'Y' ELSE 'N' END
-          FROM DGSTREAM.VW_ORDER_DETAIL
-          WHERE PRODUCT = 'DCM' AND ROWNUM <= 200000)
-  FROM   dual
-  UNION ALL
-  SELECT '9. order grain (rows = PRODUCT+ORDER_ID)', 'Y',
-         (SELECT CASE WHEN COUNT(*) = COUNT(DISTINCT PRODUCT||'~'||ORDER_ID)
-                      THEN 'Y' ELSE 'N' END
-          FROM DGSTREAM.VW_ORDER_DETAIL)
-  FROM   dual
+-- D. ORDER VIEW — ONE scan. Dies alone if VW_ORDER_DETAIL is old (DEV
+-- 2026-08-19: no BILLED_BY -> only this section errors; A/B/C still report).
+WITH agg AS (
+  SELECT /*+ MATERIALIZE */
+         COUNT(*) AS rows_,
+         COUNT(DISTINCT PRODUCT||'~'||ORDER_ID) AS keys_,
+         COUNT(BILLED_BY) AS billed_,
+         SUM(CASE WHEN PRODUCT = 'DCM' THEN ORDER_ALLOCATION END) AS dcm_alloc
+  FROM DGSTREAM.VW_ORDER_DETAIL
 )
-ORDER BY check_;
+SELECT '1d. orders with billed_by (INFO, ~90/74% UAT)' AS check_,
+       '(info)' AS expected_,
+       TO_CHAR(billed_) || ' of ' || TO_CHAR(rows_) AS actual_,
+       'INFO' AS verdict_
+FROM agg
+UNION ALL
+SELECT '6. DCM allocation non-zero', 'Y',
+       CASE WHEN dcm_alloc > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_alloc > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '9. order grain (rows = PRODUCT+ORDER_ID)', 'Y',
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+ORDER BY 1;

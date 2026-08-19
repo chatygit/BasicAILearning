@@ -1743,6 +1743,34 @@ check(has(ROOT / "app" / "bqs" / "suggestions.py",
           "ECM_DCM_SUGGESTION_CACHE_TTL_SECONDS"),
       "[latency] suggestions.py: the probe TTL cache is gone — every "
       "did_you_mean retry re-pays the DISTINCT probes at the warehouse")
+# VIEW FILE STATEMENT STRUCTURE (2026-08-19 DEV migration failure): the DCM
+# PCM join block sat AFTER the closing semicolon and the GRANT lines in ALL
+# THREE view files — our own bottom-of-file paste. Oracle parses a CREATE
+# that references PCM.* with no PCM join (ORA-00904 "PCM"."PARTY_TICKER"),
+# the migration chain aborts, and every LATER view script silently never
+# runs. Structure rule: no SQL may follow the first GRANT line, and every
+# GRANT must carry its terminating semicolon.
+for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
+    _vlines = text(_vf).splitlines()
+    _g = next((i for i, l in enumerate(_vlines)
+               if l.strip().upper().startswith("GRANT ")), None)
+    if _g is None:
+        continue
+    _bad = [l.strip() for l in _vlines[_g:]
+            if not l.strip().startswith("--") and re.match(
+                r"(?i)\s*((LEFT|INNER|RIGHT|CROSS)\s+JOIN\b|SELECT\s|"
+                r"UNION\b|FROM\s|ON\s)", l)]
+    check(not _bad,
+          f"[views] {_vf.name}: SQL text appears AFTER the first GRANT — a "
+          f"join/select block is OUTSIDE the CREATE statement (the "
+          f"ORA-00904 PCM class); first offender: "
+          f"{_bad[0][:50] if _bad else ''}")
+    _ungr = [l.strip() for l in _vlines[_g:]
+             if l.strip().upper().startswith("GRANT ")
+             and not l.strip().endswith(";")]
+    check(not _ungr,
+          f"[views] {_vf.name}: a GRANT line lacks its semicolon — the "
+          f"next statement glues onto it and the migration fails")
 # TOP-N-PER-GROUP (added 2026-08-11 — closed QA ask #17, the one true V1
 # architectural regression). The feature spans four layers; losing any one of
 # them strands the others.
