@@ -1736,6 +1736,9 @@ check(has(SKILL, "Never report 0 rows as a timeout"),
 check(has(SKILL, "READABLE middle key"),
       "[sort] SKILL.md: the readable secondary-sort rule is gone (MRM ask "
       "2026-08-18) — same-day rows land in random order again")
+check(has(SKILL, "unit parenthetical"),
+      "[present] SKILL.md: the no-'(Shares)'-in-headers rule is gone (user "
+      "ruling 2026-08-19) — table headers grow unit parentheticals again")
 # PROBE CACHE (warrants log 2026-08-11: enrich=49.00s then 42.99s for the
 # SAME two 0-row probes a minute apart — the did_you_mean retry double-pays
 # the warehouse). _cached_probe memoises by (sql, params) with a TTL.

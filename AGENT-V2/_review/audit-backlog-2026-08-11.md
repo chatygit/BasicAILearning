@@ -527,3 +527,11 @@ verified.) Flyway aborted the chain, so the order-view script never ran
 with views/vw_deal_summary.sql VERBATIM — the PCM join belongs INSIDE
 the statement, all GRANTs after the semicolon; re-run the chain; verify
 via _checks/_dev-deploy-diagnosis.sql D1 + deploy-check section A.
+
+### DEV re-deploy verified + header ruling (2026-08-19)
+Deploy-check section A: ALL PASS in DEV (1/1b/1c/2 — corrected views
+compiled and deployed; the PCM fix worked). Section D green earlier
+(billed_by 5.07M/5.88M = 86%). B/C population shots still pending.
+NEW PRESENTATION RULING: no unit parentheticals in table headers
+("Allocation (shares)" trace) — SKILL §6b + [present] gate pin; the
+mrm-observations praise of "(Shares)" headers corrected.

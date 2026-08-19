@@ -262,7 +262,8 @@ products. Three real findings instead:
 together:** the ambiguous "Fidelity" was resolved by COMBINING all four
 matched entities while offering numbered narrowing ("reply with a number
 from the list"); indications and allocations came back in one table per
-product with unit-labelled headers ("Indication (Shares)"); and the
+product (note: that trace's "(Shares)" header parentheticals were later
+RULED OUT — 2026-08-19, headers stay bare); and the
 caption was the honest form — "Showing 1-50 of the most recent orders.
 More exist." — not an invented total. One nit fed back into doctrine:
 the list led with a pricing date two days in the FUTURE (a scheduled QA

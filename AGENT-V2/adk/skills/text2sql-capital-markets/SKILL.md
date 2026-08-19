@@ -464,6 +464,12 @@ currency on an ECM size answer; shares are not denominated.
 Size: 750,000", header "Deal Size" / "Total Deal Size". The product scoping
 above still applies (never mix ECM and DCM deal sizes in one figure), and DCM
 money figures on OTHER metrics keep their currency label.
+**TABLE HEADERS never carry a unit parenthetical (user ruling 2026-08-19):
+no "(Shares)", "(shares)", "(USD)", "(bonds)" in ANY column header** —
+"Allocation", "Demand", "Indication", never "Allocation (Shares)". When the
+unit matters, say it ONCE in prose above the table ("figures are share
+counts") or let the currency column carry it; single inline figures keep
+their label ("3.0mm shares"). Product scoping above is untouched.
 
 **COUNT metrics are unit-free, so ONE request covers both products.** For
 `deal_count`, `tranche_count`, `order_count`, `investor_count`, `issuer_count`,
