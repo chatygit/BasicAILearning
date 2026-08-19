@@ -389,6 +389,7 @@ and `investor_count` undercounts — say so on a headcount.
 | allocation, got/received | order · `total_allocation` |
 | DCM order amount / order size | order · `total_order_amount` — **on DCM this is the SAME stored figure as demand**; report one number, never two facts |
 | ECM order size | order · `total_allocation` / `total_demand` — **never SUM `order_amount` on ECM** |
+| "largest / biggest order" in a deal | order · LISTING ranked `order_demand_qty` desc (+ `order_id` asc tiebreak), limit 3 for the tie check — **the size of an order is its DEMAND; `order_amount` is an IOI limit on ECM and ranks the wrong order**. "Largest allocation" ranks by `order_allocation` |
 | deal size / value / "biggest deal" | deal · `total_deal_size` / `largest_deal_size` |
 | tranche / issue size | tranche · `total_tranche_size` / `largest_tranche_size` |
 | how many deals / tranches / orders / investors / issuers | the count metric on the matching object |

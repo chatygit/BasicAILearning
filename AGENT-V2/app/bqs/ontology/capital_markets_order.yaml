@@ -122,6 +122,14 @@ how_to_use:
      total_demand. Showing it row-by-row beside allocation is fine if you label
      it 'highest IOI limit'. On DCM it is a plain order amount and totals
      normally."
+  - "'LARGEST/BIGGEST ORDER' RANKS BY order_demand_qty, NEVER order_amount
+     (user ruling 2026-08-19). An order's size is what was DEMANDED; on ECM
+     order_amount is an IOI limit reading, so ranking by it returns the wrong
+     order. Shape: listing ordered order_demand_qty desc + order_id asc,
+     project order_id/investor_name/order_demand_qty, limit 3 (superlative
+     tie check — say if several tie). 'Largest ALLOCATION' is the only ask
+     that ranks by order_allocation instead. On DCM demand equals
+     order_amount, so this rule costs nothing there."
   - "ON DCM, total_demand AND total_order_amount ARE THE SAME NUMBER (both read
      the order's amount), and max_demand equals max_order_amount. Report ONE of
      them. Presenting demand and order amount as two DCM facts is a fabricated
@@ -302,7 +310,7 @@ dimensions:
   order_type: {column: order_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Order HANDLING type (OTT/Regular). LIMIT/MARKET/SCALED are ioi_type values, not these."}
   ioi_type: {column: ioi_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Indication-of-interest type (LIMIT/MARKET/SCALED — the confirmed subset, not an exhaustive list). 'Scaled back' in a sentence about allocation is NOT this field — that is demand minus allocation."}
   order_allocation: {column: order_allocation, description: "Allocation on this order (ECM shares / DCM money) — project it in order listings. 0 means 'allocated nothing' OR 'nothing recorded'; the two are indistinguishable."}
-  order_demand_qty: {column: order_demand_qty, description: "Demand on this order (ECM shares / DCM money) — project it in order listings. On DCM it is the same stored number as order_amount."}
+  order_demand_qty: {column: order_demand_qty, description: "Demand on this order (ECM shares / DCM money) — project it in order listings. THE ranking key for 'largest/biggest order' asks (never order_amount). On DCM it is the same stored number as order_amount."}
   billed_by: {column: billed_by, description: "The bank that billed/settled THIS order (B&D), on BOTH products — full bank names on both (the ECM source column is misleadingly named BILLEDBY_BROKER_CODE but holds names). Order-level truth: it VARIES within a tranche (measured on half of DCM tranches), so it can legitimately disagree with the tranche object's BND_BANK designation list — for 'billed by' asks, THIS column wins. NULL = no billing bank recorded (~10% ECM, ~26% DCM)."}
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Deal-level offering type denormalized to order grain — only 'IPO' and 'FO' stored. Makes 'investors in IPOs' ONE request on this object (no deal-id ferry). NULL on DCM."}
   order_amount: {column: order_amount, description: "Order/indication amount. DCM: the order amount (money). ECM: the HIGHEST limit point on that order's IOI curve — label it 'highest IOI limit', never 'order size'."}

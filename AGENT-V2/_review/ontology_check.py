@@ -1739,6 +1739,11 @@ check(has(SKILL, "READABLE middle key"),
 check(has(SKILL, "unit parenthetical"),
       "[present] SKILL.md: the no-'(Shares)'-in-headers rule is gone (user "
       "ruling 2026-08-19) — table headers grow unit parentheticals again")
+check(has(ORDER, "RANKS BY order_demand_qty")
+      and has(SKILL, "largest / biggest order"),
+      "[metric] largest-order ranking rule is gone (user ruling 2026-08-19) "
+      "— 'largest order' falls back to order_amount, which on ECM is an IOI "
+      "limit reading and returns the WRONG order")
 # PROBE CACHE (warrants log 2026-08-11: enrich=49.00s then 42.99s for the
 # SAME two 0-row probes a minute apart — the did_you_mean retry double-pays
 # the warehouse). _cached_probe memoises by (sql, params) with a TTL.
