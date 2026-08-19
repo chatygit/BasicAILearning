@@ -1,50 +1,3 @@
--- ===========================================================================
--- VW_ORDER_DETAIL — grain: one row per PRODUCT + ORDER_ID
---
--- FIXES IN THIS REVISION (evidence: views/_docs/_diagnostics-results.md)
---   1. DCM ORDER_ALLOCATION was sourced from OB_ORDER_MATCH_GROUP joined on
---      (ROOT_ID, PARENT_ID) — deal+tranche, never the order. Q37: only 0.47%
---      of orders are reachable that way; Q8: the table has NO rows for the
---      busiest tranches, so NVL(...,0) reported allocation as ZERO for them,
---      while Q8 showed SUM(OB_ORDER.FINAL_ALLOC) reconciles to TRANCHE_SIZE.
---      -> join deleted, allocation read from OB_ORDER.FINAL_ALLOC.
---   2. Q9: 11,881,246 rows for 5,874,386 distinct orders (~2x duplication).
---      Every unguarded join below is now pre-aggregated or deduped:
---        OB_ECM_ORDER_IOI      20,739 dup ORDER_IDs  -> MAX(LIMIT_VALUE)
---        OB_ECM_ORDER             101 dup ORDER_IDs  -> ROWID dedupe
---        OB_ORDER                   6 dup ORDER_IDs  -> ROWID dedupe
---        OB_ORDER_SIZE            314 dup ORDER_IDs  -> MAX(AMT)
---        OPUS_ECM_TRANSACTION   dup ECM_TRANSACTION_ID (Q10) -> ROWID dedupe
---        OPUS_ECM_TRANSACTION_STATUS 1,356 multi-row (Q11) -> pre-aggregated
---        TRANCHE_DEMAND_CURRENCY 4,547 dups          -> MAX(CURRENCY_NAME)
---        OB_DEAL_TRANCHE        dup (DEAL_ID,TRANCHE_ID) -> ROWID dedupe
--- DELIBERATELY UNCHANGED: row-exclusion policy. Every predicate that was in
--- the deployed view is preserved verbatim, and no new exclusion is added.
--- Q19 shows DCM applies no order-status filter while ECM drops
--- CANCELLED/DELETED/PASS, and Q17 shows DCM carries a `confidential` status
--- nothing filters — both are real, both are cheap, both are a LATER batch.
--- This revision changes only grain and value correctness.
---
--- Dedupes order by ROWID: deterministic, and no assumption about which
--- columns exist for a "latest row" tiebreak. Duplicate counts are small.
---
--- ROUND 2 (2026-08-18, deploy with the batch):
---   * BILLED_BY — the per-order billing bank the source always had and no
---     view ever read. DCM: OB_ORDER.BND (74% populated; VARIES within 53% of
---     tranches, so the tranche designation was hiding real attribution).
---     ECM: OB_ECM_ORDER.BILLEDBY_BROKER_CODE — the column NAME says code,
---     the DATA is full bank names (measured 2026-08-18; ~90% populated),
---     the same value-form as DCM's BND, so BILLED_BY is uniform across
---     products. Test entities ('Citi (Test Syndicate CMG)') are excluded by
---     the existing CITIGROUP GLOBAL MARKETS stem doctrine.
---   * OFFERING_TYPE — denormalized from OPUS_ECM_TRANSACTION (existing
---     deduped T join): makes "investors in IPOs" ONE request, killing the
---     40-id ferry that corrupted a function call in QA. DCM: CAST(NULL).
---   * deal_sharing_type DEFERRED: it would need the syndicate join chain
---     added to a 5.8M-row view; "sole deals' orders" 2-hops via tranche ids.
--- Ontology/skill flips are STAGED in _review/round2-config-staged.md —
--- apply ONLY after this view deploys.
--- ===========================================================================
 CREATE OR REPLACE VIEW "DGSTREAM"."VW_ORDER_DETAIL" AS
 SELECT
     'ECM' AS PRODUCT,
@@ -143,11 +96,6 @@ LEFT JOIN (
     AND TT.TRANCHE_CURRENCY_ID = TDC.CURRENCY_ID
 
 LEFT JOIN (
-    -- ISSUER NAME FIX (2026-08-18): the old ECM source column is 100% dead
-    -- in QA (0 of 21,195 deals named). OB_DEAL_ISSUER maps GFCID -> NAME
-    -- (99.8% of its 74k rows named; 96% of GFCID-carrying ECM deals resolve
-    -- — A1-A3, views/_checks/_issuer-name-check.sql). Grouped per GFCID so the join
-    -- cannot fan out the grain. Old column kept as PROD fallback via NVL.
     SELECT GFCID, MAX(NAME) AS ISSUER_NAME_BY_GFCID
     FROM DGSTREAM.OB_DEAL_ISSUER
     WHERE GFCID IS NOT NULL AND NAME IS NOT NULL
@@ -156,14 +104,6 @@ LEFT JOIN (
     ON OIN.GFCID = T.ISSUER_GFCID
 
 LEFT JOIN (
-    -- ISSUER IDENTITY MASTER (tech end-state, Dumitru + Samir 2026-08-18):
-    -- PARTY_NAME/PARTY_GFCID/PARTY_TICKER at PARTY_ROLE='Primary Client'.
-    -- Joins DIRECTLY on TRANSACTION_ID = our deal id family (proven by
-    -- sample G); QA's copy is largely unloaded (~1,390 named transactions),
-    -- so in QA this layer joins almost nothing and the NVL fallbacks carry —
-    -- in PROD it becomes the primary source. Latest VERSION wins (the table
-    -- appends versions, up to 1,232 rows per transaction measured);
-    -- PUBLISHED_TS is NOT NULL. One row per transaction — no fan-out.
     SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PARTY_TICKER
     FROM (
         SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PARTY_TICKER,
@@ -248,13 +188,6 @@ LEFT JOIN (
 ) ODI
     ON ODI.DEAL_TRANCHE_ID = ODT.DEAL_ID || '-' || ODT.TRANCHE_ID
 LEFT JOIN (
-    -- ISSUER IDENTITY MASTER for DCM too (2026-08-18): same PROD-intended
-    -- source as the ECM branches (RELATED_PARTIES, Primary Client, latest
-    -- version). V1's OB_DEAL_ISSUER concat join is KEPT underneath as the
-    -- fallback via NVL — exactly V1 behavior when the master has no row.
-    -- 2026-08-19: this block previously sat AFTER the closing semicolon
-    -- and the GRANTs (bottom-of-file paste, same bug in all three views;
-    -- caught by the DEV migration failure). Moved inside the statement.
     SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PARTY_TICKER
     FROM (
         SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PARTY_TICKER,
@@ -269,5 +202,4 @@ LEFT JOIN (
 GRANT SELECT ON "DGSTREAM"."VW_ORDER_DETAIL" TO "DGLOBE_ORAAS_TABLEAU_ROLE";
 GRANT SELECT ON "DGSTREAM"."VW_ORDER_DETAIL" TO "DGLOBE_ORAAS_RO_ROLE";
 GRANT SELECT ON "DGSTREAM"."VW_ORDER_DETAIL" TO "DGLOBE_TABLEAU_RESTRICTED_ROLE";
-GRANT SELECT ON "DGSTREAM"."VW_ORDER_DETAIL" TO "DGLOBE" WITH GRANT OPTION;
 GRANT SELECT ON "DGSTREAM"."VW_ORDER_DETAIL" TO "DGLOBE" WITH GRANT OPTION;

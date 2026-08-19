@@ -1771,6 +1771,21 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
     check(not _ungr,
           f"[views] {_vf.name}: a GRANT line lacks its semicolon — the "
           f"next statement glues onto it and the migration fails")
+    _grants = [l.strip() for l in _vlines[_g:]
+               if l.strip().upper().startswith("GRANT ")]
+    check(len(_grants) == len(set(_grants)),
+          f"[views] {_vf.name}: duplicate GRANT lines (2026-08-19: a "
+          f"tail-edit left the old trailing grant below the new set)")
+# COMMENT-FREE VIEW FILES (user doctrine 2026-08-19): the view team
+# transcribes these files into migration scripts — comment blocks bloat the
+# merge surface and obscured the statement boundary the PCM paste hid
+# behind. All view documentation lives in views/_docs/view-notes.md.
+for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
+    _ncom = sum(1 for l in text(_vf).splitlines() if l.strip().startswith("--"))
+    check(_ncom == 0,
+          f"[views] {_vf.name}: {_ncom} comment line(s) — view files ship "
+          f"comment-free (user doctrine 2026-08-19); document in "
+          f"views/_docs/view-notes.md instead")
 # TOP-N-PER-GROUP (added 2026-08-11 — closed QA ask #17, the one true V1
 # architectural regression). The feature spans four layers; losing any one of
 # them strands the others.
