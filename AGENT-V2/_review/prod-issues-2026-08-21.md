@@ -119,3 +119,13 @@ apply ONLY post-deploy. Sizing queries: _checks/_order-ownership-check
 .sql (run in PROD before deploy). Deploy-check rows 1i/1j added. Gate
 gained the UNION branch-alignment check (parsed alias sequences; would
 have caught any column-order slip in this batch).
+
+### #6 update — sizing measured (O1-O3, 2026-08-21)
+Away inclusion adds 21,836 ECM rows to today's 48,102 (~+45% — every ECM
+total moves; release review has the number). O2=0: no multi-dominant
+fan-out, dedupe safe. KEY FINDING: 58 matched orders whose dominant row
+is AWAY are completely invisible under release 1 — the old filter didn't
+just narrow scope, it LOST orders; release 2 restores them. O3: DCM
+OB_ORDER has OWNER/ALL_OWNERS (semantics unknown, likely member lists) —
+DCM stays NULL; census before mapping. 38 NULL-IS_MATCHED rows fall
+through the guard both ways (pre-existing, tiny).
