@@ -1753,6 +1753,16 @@ check(has(SKILL, "KNOWN GRAIN"),
       "(PROD issue #2, 2026-08-21) — NULL tranche currency reads as 'no "
       "currency' while the deal lists values; view unification is a "
       "release-train item, this doctrine is the only live guard")
+check(has(SKILL, "ALPHABETICAL, not"),
+      "[present] SKILL.md: the currencies-are-alphabetical rule is gone "
+      "(PROD issue #5, 2026-08-21) — the agent reads lead currency from "
+      "list position again, which the view's LISTAGG cannot support")
+check(has(SKILL, "BY THE TIE COUNT")
+      and has(SKILL, "labelled as examples"),
+      "[present] SKILL.md: the mass-tie branch is gone (user scenario "
+      "2026-08-21: 100 orders share one allocation) — the agent names an "
+      "arbitrary 'top' from a uniform field instead of reporting the "
+      "uniformity")
 check(has(SKILL, "two-step is MANDATORY")
       and has(SKILL, "ids two-step IS the supported answer")
       and has(SKILL, "SMALLER side")
@@ -1801,6 +1811,41 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
     check(len(_grants) == len(set(_grants)),
           f"[views] {_vf.name}: duplicate GRANT lines (2026-08-19: a "
           f"tail-edit left the old trailing grant below the new set)")
+# UNION BRANCH ALIGNMENT (release 2, 2026-08-21): a UNION ALL pairs columns
+# BY POSITION, so ECM/DCM branches whose outer SELECT lists differ in count
+# or order ship silently-corrupt data (or ORA-01789). Parse each view's
+# top-level branches (paren-depth 0) and require identical alias sequences.
+for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
+    _src = text(_vf)
+    _m = re.search(r"CREATE OR REPLACE VIEW[^;]*?AS\s*SELECT", _src)
+    if _m is None:
+        continue
+    _depth, _branches, _aliases, _infrom = 0, [], [], False
+    for _tok in re.finditer(r"\(|\)|\bUNION\s+ALL\b|\bFROM\b|\bSELECT\b|"
+                            r"AS\s+\"?([A-Z_][A-Z0-9_]*)\"?", _src[_m.end():]):
+        _t = _tok.group(0)
+        if _t == "(":
+            _depth += 1
+        elif _t == ")":
+            _depth -= 1
+            if _depth < 0:
+                break
+        elif _depth == 0:
+            if _t.startswith("UNION"):
+                _branches.append(tuple(_aliases)); _aliases, _infrom = [], False
+            elif _t == "FROM":
+                _infrom = True
+            elif _t == "SELECT":
+                pass
+            elif _tok.group(1) and not _infrom:
+                _aliases.append(_tok.group(1))
+    _branches.append(tuple(_aliases))
+    if len(_branches) > 1:
+        check(len(set(_branches)) == 1,
+              f"[views] {_vf.name}: UNION branches project DIFFERENT column "
+              f"lists ({[len(b) for b in _branches]} aliases) — positional "
+              f"pairing ships corrupt data; align the branch SELECT lists")
+
 # COMMENT-FREE VIEW FILES (user doctrine 2026-08-19): the view team
 # transcribes these files into migration scripts — comment blocks bloat the
 # merge surface and obscured the statement boundary the PCM paste hid

@@ -537,6 +537,11 @@ NEW PRESENTATION RULING: no unit parentheticals in table headers
 mrm-observations praise of "(Shares)" headers corrected.
 
 ## PROD FREEZE (2026-08-21) — release-train register
+RELEASE 2 BATCH STAGED 2026-08-21 (user opened the train for IS_OWNED):
+away orders + ORDER_OWNERSHIP + order-view EQUITY_TYPE + currency global
+fallback (tranche/order) + CURRENCIES pricing order + away-inclusive deal
+counts — all in the view files now; configs in release2-config-staged.md
+(post-deploy only). Items below remain OUTSIDE the batch:
 MCP + views live in PROD; only agents.yaml + SKILL.md deploy freely now.
 Items below REQUIRE a release train (do not attempt as quick fixes):
 * Ontology YAML changes of any kind. (User confirmed 2026-08-21:
@@ -566,3 +571,10 @@ round-2 OFFERING_TYPE exactly: add ET.PRODUCT_EQUITY_TYPE_VALUE to the
 order view's deduped T join, CAST(NULL) on DCM; then the ontology gains
 equity_type on the order object and the SKILL recipe collapses to ONE
 request (same collapse as "investors in IPOs").
+
+### Release-train item (2026-08-21, PROD issue #5): currencies in pricing order
+Deal-view CURRENCIES LISTAGG orders alphabetically; bankers read the list
+lead-currency-first. Fix: carry MIN(PRICING_TS) per currency into the C
+subquery and LISTAGG WITHIN GROUP (ORDER BY that timestamp), both
+branches. SKILL meanwhile forbids ordering claims and recovers true order
+per-deal via one tranche query.

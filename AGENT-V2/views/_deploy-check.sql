@@ -33,6 +33,14 @@ FROM (
   WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
   AND    column_name = 'EQUITY_TYPE'
   UNION ALL
+  -- RELEASE 2: order view gained EQUITY_TYPE + ORDER_OWNERSHIP (away
+  -- orders included; HOME/AWAY exposed).
+  SELECT '1i. order view has equity_type/order_ownership (release 2)', '2',
+         TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
+  AND    column_name IN ('EQUITY_TYPE','ORDER_OWNERSHIP')
+  UNION ALL
   SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
          'NUMBER,NUMBER',
          LISTAGG(data_type, ',') WITHIN GROUP (ORDER BY table_name)
@@ -126,13 +134,20 @@ WITH agg AS (
          COUNT(*) AS rows_,
          COUNT(DISTINCT PRODUCT||'~'||ORDER_ID) AS keys_,
          COUNT(BILLED_BY) AS billed_,
-         SUM(CASE WHEN PRODUCT = 'DCM' THEN ORDER_ALLOCATION END) AS dcm_alloc
+         SUM(CASE WHEN PRODUCT = 'DCM' THEN ORDER_ALLOCATION END) AS dcm_alloc,
+         COUNT(CASE WHEN ORDER_OWNERSHIP = 'AWAY' THEN 1 END) AS away_,
+         COUNT(CASE WHEN ORDER_OWNERSHIP = 'HOME' THEN 1 END) AS home_
   FROM DGSTREAM.VW_ORDER_DETAIL
 )
 SELECT '1d. orders with billed_by (INFO, ~90/74% UAT)' AS check_,
        '(info)' AS expected_,
        TO_CHAR(billed_) || ' of ' || TO_CHAR(rows_) AS actual_,
        'INFO' AS verdict_
+FROM agg
+UNION ALL
+SELECT '1j. ECM orders home vs away (INFO, release 2 — away was excluded)',
+       '(info)',
+       TO_CHAR(home_) || ' home / ' || TO_CHAR(away_) || ' away', 'INFO'
 FROM agg
 UNION ALL
 SELECT '6. DCM allocation non-zero', 'Y',

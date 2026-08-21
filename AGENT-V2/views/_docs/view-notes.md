@@ -255,3 +255,47 @@ fallback via NVL — exactly V1 behavior when the master has no row.
 2026-08-19: this block previously sat AFTER the closing semicolon
 and the GRANTs (bottom-of-file paste, same bug in all three views;
 caught by the DEV migration failure). Moved inside the statement.
+
+# RELEASE 2 (staged 2026-08-21, NOT yet deployed — PROD holds release 1)
+
+Four changes, one batch. Comment-free files; this is their documentation.
+
+## vw_order_detail.sql
+1. **Away orders included (user directive):** the ECM branch's
+   `IS_OWNED = 'true'` predicate is REMOVED. Safe by design: the
+   `(IS_MATCHED and IS_DOMINANT) or not IS_MATCHED` guard is what dedupes
+   home/away representations of the SAME order, so inclusion adds only
+   genuinely-away rows, no double count. New column ORDER_OWNERSHIP
+   (HOME/AWAY from IS_OWNED; NULL when the flag is neither; DCM NULL —
+   no such flag on OB_ORDER).
+   NOTE FOR RELEASE REVIEW: this changes every ECM total/count on the
+   order object (away rows join the population).
+2. **EQUITY_TYPE denormalized** (PROD issue #3): ET.PRODUCT_EQUITY_TYPE_
+   VALUE via the existing deduped T join; DCM CAST(NULL). Collapses the
+   "investor X in convertible deals" two-step to ONE request, mirroring
+   round-2 OFFERING_TYPE.
+3. **CURRENCY global fallback** (PROD issue #2): NVL(TDC.CURRENCY_NAME,
+   GC.CURRENCY_NAME) + the GC global lookup join — heals rows where the
+   per-tranche demand-currency row is missing. Raw id deliberately NOT a
+   fallback at scalar grain (NULL renders "not recorded").
+
+## vw_tranche_summary.sql
+4. **CURRENCY global fallback** — same GC join + NVL as the order view
+   (the deal/tranche asymmetry of PROD issue #2, healed).
+
+## vw_deal_summary.sql
+5. **CURRENCIES in pricing order** (PROD issue #5): both branches' LISTAGG
+   now orders WITHIN GROUP BY each currency's MIN(PRICING_TS) (NULLS
+   LAST, currency tiebreak) — lead currency first ("USD | CAD"), replacing
+   alphabetical. ECM C subquery: SELECT DISTINCT → GROUP BY + MIN(ts);
+   DCM CU likewise.
+6. **OD counts include away orders** — same predicate change as the order
+   view so deal-card ORDER_COUNT/INVESTOR_COUNT count the same population
+   as the order object. NOTE FOR RELEASE REVIEW: ECM deal-card counts
+   will rise.
+
+Verification: deploy-check rows 1i (structural) + 1j (home/away split);
+UNION alias alignment is now gate-enforced ([views] check, branch alias
+sequences parsed per file: deal 22/22, tranche 40/40, order 27/27).
+Post-deploy config flips are staged in _review/release2-config-staged.md
+— apply ONLY after these views deploy.

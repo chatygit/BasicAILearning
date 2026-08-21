@@ -77,3 +77,45 @@ two iron rules, both gate-pinned:
     the closest supported aggregate + state the precision limit, never a
     loop.
 Re-test the same prompt after the next skill deploy.
+
+## #4 — Superlative mass-tie (anticipated by user, not a trace)
+- **Scenario:** "max allocated investor" on a deal where ALL 100 orders
+  carry the same allocation. limit-3 shows 3 tied rows; the agent cannot
+  distinguish "3 tie" from "100 tie", and the old escalation ended in
+  "name them all" — absurd at 100.
+- **Fix (SKILL superlative block, gate-pinned):** all-3-tie triggers ONE
+  having-eq follow-up, then the answer follows the TIE COUNT: ≤5 named as
+  co-winners; more → the finding flips to uniformity ("38 investors share
+  the maximum allocation — no single top investor"), 2-3 names labelled
+  as examples, "at least 50" if truncated, pattern stated without invented
+  cause.
+- **Status:** doctrine in SKILL 2026-08-21, ships with the next deploy.
+
+## #5 — Deal currencies list is alphabetical, not pricing order
+- **Symptom:** deal shows "CAD | USD" though the USD tranche priced first;
+  the banker reading is lead-currency-first ("USD | CAD").
+- **Root cause:** the deal view's LISTAGG orders WITHIN GROUP BY currency
+  (alphabetical) — pricing chronology never enters the join. Frozen.
+- **Fix now (SKILL, gate-pinned):** (a) never infer lead/first currency
+  from list position, never caption the list "in pricing order"; (b) for a
+  SINGLE-deal currency ask, one tranche-object query (currency +
+  pricing_ts, asc) recovers the true order — present "USD, CAD (in
+  pricing order)"; (c) multi-deal listings keep the stored list with no
+  ordering claim.
+- **Release train:** re-order the LISTAGG by each currency's first
+  pricing date (WITHIN GROUP ORDER BY MIN(PRICING_TS) per currency, both
+  products) so the stored string reads lead-first.
+- **Status:** doctrine in SKILL 2026-08-21; view fix queued.
+
+## #6 — Away orders excluded (IS_OWNED) → RELEASE 2 OPENED
+User directive: include IS_OWNED='false' (away orders) and expose the
+distinction. This opened the release-2 view batch, which ALSO carries the
+queued items: equity_type on the order view (#3), currency global
+fallback on tranche/order (#2), CURRENCIES in pricing order (#5), and
+away-inclusive deal-card counts. Staged in the four view files
+(comment-free; documented in views/_docs/view-notes.md RELEASE 2
+section). Config flips staged in _review/release2-config-staged.md —
+apply ONLY post-deploy. Sizing queries: _checks/_order-ownership-check
+.sql (run in PROD before deploy). Deploy-check rows 1i/1j added. Gate
+gained the UNION branch-alignment check (parsed alias sequences; would
+have caught any column-order slip in this batch).

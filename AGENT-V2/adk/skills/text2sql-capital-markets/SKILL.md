@@ -253,9 +253,18 @@ ranking does not separate beyond rank N.
 NEVER uses `limit 1`** — one row cannot reveal a tie, and "THE investor with
 max allocation" is wrong the moment two share the value. Fetch `limit 3` with
 the metric desc: row 2 ties row 1 → CO-WINNERS, name them both ("two investors
-tie at 33,361"); all three tie → fetch the full tie set with a second request
-(`having` the metric `eq` the tied value) and name them all. Present only the
-winner(s) — the extra fetched rows are tie detection, not the answer.
+tie at 33,361"); all three tie → ONE follow-up request (`having` the metric
+`eq` the tied value, default limit) and answer BY THE TIE COUNT:
+- **≤5 tie** → name them all as co-winners.
+- **more tie** → the finding is no longer "a top investor" — it is that the
+  value is UNIFORM at the top: "38 investors share the maximum allocation
+  of 33,361 — there is no single top investor on this deal", plus 2-3 names
+  explicitly labelled as examples, never as winners. If the tie set comes
+  back `truncated`, say "at least 50". State the pattern only ("every one
+  of this deal's orders carries the same allocation"), never a cause
+  (pro-rata policy, syndicate decision…) — causes are not in the data.
+Present only the winner(s) or the tie finding — the extra fetched rows are
+tie detection, not the answer.
 
 **Never substitute a lookalike field.** If the object you routed to has no
 field for the ask's CONCEPT (syndicates, meetings, ratings…), the routing was
@@ -715,7 +724,15 @@ wherever values are label variants. Traps are in §7c.
   say the per-tranche value isn't recorded. A currency FILTER at
   tranche/order grain silently misses those NULL rows: disclose via is_null
   when currency scoping matters. View-side unification is queued for the
-  next release.** `currencies` (deal — pipe
+  next release.** **The `currencies` list is ALPHABETICAL, not
+  chronological** (PROD issue #5): "CAD, USD" says nothing about which
+  tranche priced first — never read lead/first currency from list position
+  and never present the list as "in pricing order". For a SINGLE-deal ask
+  where the order matters ("what currencies did deal X price in"), resolve
+  the truth with one tranche-object query — `deal_id` filter, dimensions
+  `[currency, pricing_ts]`, order `pricing_ts asc` — and present "USD, CAD
+  (in pricing order)". In multi-deal LISTINGS keep the stored list and
+  claim no ordering. `currencies` (deal — pipe
   list) resolves names on ECM too, but FALLS BACK to the internal id when the
   source has no name — so a NUMERIC token ("1", "4") is an UNMAPPED currency,
   never a currency: display "not recorded" for it (count them: "plus 2
