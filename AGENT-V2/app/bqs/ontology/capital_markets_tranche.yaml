@@ -253,7 +253,8 @@ dimensions:
   tranche_name: {column: tranche_name, description: "Tranche name — often a TARGET-MARKET label (UNITED STATES, GERMANY, EMEA, GLOBAL, UK Institutional, DOMESTIC, UNSPECIFIED). 'US tranches' is a tranche_name ask, not an investor-region ask. Group by it to answer 'by target market'."}
   tranche_size: {column: tranche_size, description: "Tranche size as a NUMBER (ECM shares / DCM notional money). 0 means NO size recorded at source; NULL means a size was recorded but could not be parsed. The currency-comparable money figure for DCM."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field)."}
-  currency: {column: currency, description: "Pricing/denomination currency (scalar at this grain). Required alongside any DCM money figure. Can be NULL on ECM."}
+  currency: {column: currency, description: "Pricing/denomination currency (scalar at this grain). Required alongside any DCM money figure. Since release 2 the ECM value carries a global name fallback, matching the deal list; a residual NULL means genuinely not recorded."}
+  settlement_ts: {column: settlement_ts, products: ["DCM"], description: "DCM. The tranche's OWN settlement timestamp (release 2) — 'tranches settling in <period>' filters here. NULL on ECM at this grain: ECM settlement asks go to the deal object's settlement_ts."}
   tranche_region: {column: tranche_region, description: "Tranche target region (NAM/EMEA/APAC). This is the TRANCHE's market, not the investor's geography (that lives on capital_markets_order). ~1 in 5 DCM tranches carry one; ECM effectively empty."}
   # --- ECM-only ---
   product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the instrument CLASS ('common stock', 'convertible') use equity_type — now on THIS object too."}
@@ -343,10 +344,24 @@ filters:
     case_insensitive: true
     description: >-
       Pricing/denomination currency (ISO codes — USD, EUR, GBP, JPY, CNY, CNH).
-      Required for comparable DCM money totals; there is no FX column. Can be
-      NULL on ECM, so a ne/not_in predicate silently drops those rows — count
-      them with is_null and disclose the number. 'RMB' means CNY and CNH: say
-      which you used.
+      Required for comparable DCM money totals; there is no FX column. Since
+      release 2 ECM values carry the same global name fallback as the deal
+      list (the deal-vs-tranche NULL asymmetry is healed); a residual NULL is
+      genuinely unrecorded, and a ne/not_in predicate silently drops those
+      rows — count them with is_null and disclose the number. 'RMB' means CNY
+      and CNH: say which you used.
+  settlement_ts:
+    column: settlement_ts
+    products: ["DCM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      DCM. The tranche's OWN settlement timestamp (release 2) — the natural
+      grain for "tranches settling in <period>" / "when does this tranche
+      settle". Partial coverage (~two thirds of DCM tranches in UAT) —
+      disclose blanks; never substitute a pricing date. NULL on every ECM
+      row at this grain: an ECM settlement ask routes to the DEAL object's
+      settlement_ts (deal grain = LAST tranche settlement). Trailing windows
+      need BOTH bounds (gte start, lt tomorrow-midnight).
   settlement_currency:
     column: settlement_currency
     operators: [eq, ne, in, not_in, is_null, is_not_null]

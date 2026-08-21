@@ -269,7 +269,10 @@ Four changes, one batch. Comment-free files; this is their documentation.
    (HOME/AWAY from IS_OWNED; NULL when the flag is neither; DCM NULL —
    no such flag on OB_ORDER).
    NOTE FOR RELEASE REVIEW: this changes every ECM total/count on the
-   order object (away rows join the population).
+   order object (away rows join the population; measured +21,836 rows,
+   ~+45%). ORDER_OWNERSHIP IS exposed in the ontology (user confirmed
+   2026-08-21 after a brief reversal) — "our orders" = HOME filter; the
+   staged config carries the entry.
 2. **EQUITY_TYPE denormalized** (PROD issue #3): ET.PRODUCT_EQUITY_TYPE_
    VALUE via the existing deduped T join; DCM CAST(NULL). Collapses the
    "investor X in convertible deals" two-step to ONE request, mirroring

@@ -75,11 +75,11 @@ how_to_use:
   - "ALWAYS set 'product'. ECM allocations/demand are SHARE COUNTS; DCM order
      amounts are notional MONEY — scope one 'currency' or group by 'currency' for
      DCM money totals. State the unit in the answer."
-  - "PRODUCT APPLICABILITY IS A LOOKUP, NOT A JUDGEMENT. Eight fields are
+  - "PRODUCT APPLICABILITY IS A LOOKUP, NOT A JUDGEMENT. Ten fields are
      ECM-ONLY — the view hard-casts them to NULL on every DCM row, so the list is
      complete and closed: investor_region, investor_category,
      investor_category_key, meeting_type, meeting_type_key, order_type, ioi_type,
-     offering_type.
+     offering_type, equity_type, order_ownership.
      Everything else works on BOTH products: deal_id, deal_name, tranche_id,
      tranche_name, order_id, investor_name, investor_id, order_allocation,
      order_demand_qty, order_amount, currency, pricing_date, billed_by (the
@@ -313,6 +313,8 @@ dimensions:
   order_demand_qty: {column: order_demand_qty, description: "Demand on this order (ECM shares / DCM money) — project it in order listings. THE ranking key for 'largest/biggest order' asks (never order_amount). On DCM it is the same stored number as order_amount."}
   billed_by: {column: billed_by, description: "The bank that billed/settled THIS order (B&D), on BOTH products — full bank names on both (the ECM source column is misleadingly named BILLEDBY_BROKER_CODE but holds names). Order-level truth: it VARIES within a tranche (measured on half of DCM tranches), so it can legitimately disagree with the tranche object's BND_BANK designation list — for 'billed by' asks, THIS column wins. NULL = no billing bank recorded (~10% ECM, ~26% DCM)."}
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Deal-level offering type denormalized to order grain — only 'IPO' and 'FO' stored. Makes 'investors in IPOs' ONE request on this object (no deal-id ferry). NULL on DCM."}
+  equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS denormalized to order grain (release 2) — 'investor X in convertibles' is ONE request here now. Same values/rules as the deal object's equity_type; match class words with like. NULL on DCM."}
+  order_ownership: {column: order_ownership, products: ["ECM"], description: "ECM. HOME = our (owned) book, AWAY = orders seen away. BOTH are in every total since release 2 (before it, every figure was HOME-only — ECM population grew ~45% at the flip). 'Our orders'/'Citi's book' = HOME. NULL = flag not stored. NULL on DCM (no such flag)."}
   order_amount: {column: order_amount, description: "Order/indication amount. DCM: the order amount (money). ECM: the HIGHEST limit point on that order's IOI curve — label it 'highest IOI limit', never 'order size'."}
   currency: {column: currency, description: "Pricing currency (scalar). Required alongside any DCM money figure. Can be NULL on ECM when the order's tranche id matches no tranche."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field). NULL on ECM orders whose tranche id matches no tranche — those rows drop out of every date-bounded query."}
@@ -555,6 +557,37 @@ filters:
       ECM. 'IPO' and 'FO' only (same vocabulary as the deal object).
       "Investors in IPOs" is now ONE request HERE — filter offering_type eq
       'IPO' with the investor filters; the deal-id two-step is dead.
+  equity_type:
+    column: equity_type
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM. Instrument CLASS — same known set and rules as
+      capital_markets_deal.equity_type (Common Stock, Convertible Preferred,
+      Convertible Bonds, Equity Units, Warrants, 'Exchangable Notes' sic,
+      American/Global Depository; env lists vary — treat as a superset).
+      Match the CLASS WORD with like, never equality on the user's phrasing.
+      NEVER OR with the tranche object's product_type. Denormalized in
+      release 2: "how much did <investor> put into <class> deals" is ONE
+      request HERE — the deal-id two-step for equity_type is dead.
+  order_ownership:
+    column: order_ownership
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    values: ["HOME", "AWAY"]
+    description: >-
+      ECM. HOME = our (owned) book; AWAY = orders seen away. BOTH are
+      included in every total since release 2 — before it, every figure was
+      HOME-only, and the ECM order population grew ~45% at the flip (a
+      pre/post-release comparison is NOT order growth). 'Our orders' /
+      'Citi's own book' = eq HOME; 'away orders' = eq AWAY. NULL = the flag
+      is not stored on that row — count with is_null when a home/away split
+      must reconcile to the total. NULL on every DCM row (no such flag):
+      a DCM ownership ask gets "not tracked for DCM".
 
 computed_filters:
   bill_and_deliver:
@@ -630,10 +663,17 @@ usage_notes:
     max_demand, total_order_amount, max_order_amount. Every OTHER metric here —
     order_count, investor_count, deal_count, tranche_count, row_count — is
     unit-free; drop the filter on those only if you put 'product' in dimensions."
-  - "Eight fields are ECM-only and NULL on every DCM row: investor_region,
+  - "Ten fields are ECM-only and NULL on every DCM row: investor_region,
      investor_category, investor_category_key, meeting_type, meeting_type_key,
-     order_type, ioi_type, offering_type. Do not run a knowably-empty query —
-     refuse the combination and offer the ECM version or a both-product field."
+     order_type, ioi_type, offering_type, equity_type, order_ownership. Do not
+     run a knowably-empty query — refuse the combination and offer the ECM
+     version or a both-product field."
+  - "ALL ECM figures cover the FULL order book (home + away) since release 2 —
+     before it, everything was HOME-only and the population grew ~45% at the
+     flip; never read a pre/post-release comparison as order growth. 'Our
+     orders'/'Citi's own book' = order_ownership eq HOME; when the ask is
+     about OUR book and you present an unfiltered total, disclose that it
+     includes away orders."
   - "Investor asks scope by investor_id (picked) or investor_name like '%NAME%'."
   - "DCM money totals need a single currency scope or group by currency."
   - "For 'how many deals did <investor> buy', filter the investor and use metric deal_count."

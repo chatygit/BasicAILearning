@@ -1312,7 +1312,11 @@ if ONTOLOGY.exists():
 
 # Only enums we know completely may declare `values:`. Anything else degrades
 # suggestions by replacing real DISTINCTs with our guess.
-KNOWN_COMPLETE_ENUMS = {"product", "entity_type", "deal_sharing_type"}
+# order_ownership qualifies BY CONSTRUCTION (release 2): the view's CASE
+# can only emit HOME/AWAY/NULL — closed like deal_sharing_type, not a
+# QA-measured list.
+KNOWN_COMPLETE_ENUMS = {"product", "entity_type", "deal_sharing_type",
+                        "order_ownership"}
 for path in OBJECTS:
     for name, body in blocks(path, "filters"):
         if "values:" in body:
@@ -1644,6 +1648,9 @@ _PRODUCT_PINS = [
     ("capital_markets_tranche.yaml", "product_type", "ECM"),
     ("capital_markets_tranche.yaml", "equity_type", "ECM"),
     ("capital_markets_order.yaml", "offering_type", "ECM"),
+    ("capital_markets_order.yaml", "equity_type", "ECM"),
+    ("capital_markets_order.yaml", "order_ownership", "ECM"),
+    ("capital_markets_tranche.yaml", "settlement_ts", "DCM"),
     ("capital_markets_tranche.yaml", "exchange", "ECM"),
     ("capital_markets_tranche.yaml", "syndicate_role", "ECM"),
     ("capital_markets_tranche.yaml", "broker_code", "ECM"),
@@ -1748,11 +1755,15 @@ check(has(SKILL, "MARKDOWN TABLE CELL splits the row"),
       "[present] SKILL.md: the pipe-in-markdown-cell rule is gone (PROD "
       "issue #1, 2026-08-21) — 'AUD | CAD' splits table rows again and "
       "ejects the neighbouring column's value")
-check(has(SKILL, "KNOWN GRAIN"),
-      "[present] SKILL.md: the currency grain-asymmetry disclosure is gone "
-      "(PROD issue #2, 2026-08-21) — NULL tranche currency reads as 'no "
-      "currency' while the deal lists values; view unification is a "
-      "release-train item, this doctrine is the only live guard")
+# ("KNOWN GRAIN" pin RETIRED 2026-08-21: release 2 healed the asymmetry —
+# all grains share the global name fallback; successor pin below.)
+check(has(SKILL, "SAME global fallback"),
+      "[present] SKILL.md: the release-2 currency-fallback statement is "
+      "gone — the agent re-learns the dead grain-asymmetry workarounds")
+check(has(SKILL, "FULL book"),
+      "[present] SKILL.md: the full-book (home+away) doctrine is gone "
+      "(release 2) — the ~45% population jump gets read as order growth "
+      "and 'our orders' asks stop filtering HOME")
 check(has(SKILL, "ZERO IS A CLAIM, NOT A DEFAULT"),
       "[present] SKILL.md: the negative-claim evidence rule is gone (PROD "
       "issue #8, 2026-08-21) — failed attempts get reported as 'none "
@@ -1766,10 +1777,13 @@ check(has(SKILL, "USER'S access profile"),
       "(PROD issue #7, 2026-08-21) — the agent says 'I don't have "
       "entitlements' again, reading as a malfunction instead of an access "
       "request path")
-check(has(SKILL, "ALPHABETICAL, not"),
-      "[present] SKILL.md: the currencies-are-alphabetical rule is gone "
-      "(PROD issue #5, 2026-08-21) — the agent reads lead currency from "
-      "list position again, which the view's LISTAGG cannot support")
+# ("ALPHABETICAL, not" pin RETIRED 2026-08-21: release 2 re-ordered the
+# LISTAGG by first pricing — position is now MEANINGFUL and the successor
+# pin below guards the new truth.)
+check(has(SKILL, "PRICING ORDER, lead"),
+      "[present] SKILL.md: the currencies-in-pricing-order rule is gone "
+      "(release 2) — the agent stops trusting list position, or worse, "
+      "re-learns the dead alphabetical doctrine")
 check(has(SKILL, "BY THE TIE COUNT")
       and has(SKILL, "labelled as examples"),
       "[present] SKILL.md: the mass-tie branch is gone (user scenario "

@@ -148,19 +148,23 @@ real constraint and give the user the two doors.
 request** — those three are carried on the order object, so
 "top 10 investors in Healthcare over the last 5 years" is a single
 `capital_markets_order` request with a `sector` filter. Do NOT fetch the deal
-catalog for it. Only **deal status, deal size, equity type and use of
-proceeds** still need the two-step, and the two-step is MANDATORY, never a
-refusal and never a menu back to the user (§3d — the question already
-authorised the work). **TWO IRON RULES govern it (both measured on "How
-much did BlackRock invest in convertible bonds in 2025" — first REFUSED,
-then, ferried the wrong way, it ran 40 queries and had to be aborted):**
+catalog for it. **`equity_type` is carried on the order object too since
+release 2** — "how much did BlackRock invest in convertible bonds in 2025"
+is ONE `capital_markets_order` request (investor + equity_type + dates +
+total_allocation); the old two-step for it is dead. Only **deal status,
+deal size and use of proceeds** still need it, and the
+two-step is MANDATORY, never a refusal and never a menu back to the user
+(§3d — the question already authorised the work). **TWO IRON RULES govern it (both
+measured on the BlackRock ask under the pre-release-2 config — first
+REFUSED, then, ferried the wrong way, it ran 40 queries and was aborted):**
 **(1) Ferry ids from the SMALLER side.** A named investor touches dozens of
-deals; a class/status/year population is hundreds. So: R1 order object —
+deals; a status/purpose/year population is hundreds. Example — "how much
+did BlackRock put into refinancing deals in 2025": R1 order object —
 `investor_name like '%BLACKROCK%'` + the year's `pricing_ts` bounds,
-metric `total_allocation`, dimensions `[deal_id]` (BlackRock's per-deal
+metric `total_allocation`, dimensions `[deal_id]` (the investor's per-deal
 allocations — ONE page, usually well under 50 rows; disclose that
 date-bounding drops NULL-pricing orders). R2 deal object — `deal_id in
-[R1's ids, ≤40 per request]` + `equity_type like '%CONVERT%'`, project
+[R1's ids, ≤40 per request]` + `use_of_proceeds` filter, project
 `deal_id`. The answer = SUM of R1's allocations over the ids R2 confirmed —
 YOUR arithmetic on rows you already hold, no third query. Report with the
 deal count. **(2) HARD BUDGET: a single ask never spends more than 4
@@ -213,7 +217,7 @@ captured", never "no region".
 ### 3b. Three refusals the model gets wrong
 | Ask | Do |
 |---|---|
-| Settlement DATE ("when did it settle", "deals settling this week") | **Answer it on the DEAL object** — `settlement_ts` (range ops; deal grain = the LAST tranche settlement). The old "100% empty — refuse" rule is DEAD (re-measured: ~66% of DCM deals, ~26% of ECM carry one). Coverage is partial: disclose the blanks, never substitute a pricing date. Bare "Settled deals" with no window stays a STATUS ask |
+| Settlement DATE ("when did it settle", "deals settling this week") | **Answer it** — DEAL object `settlement_ts` for deal asks (deal grain = the LAST tranche settlement); since release 2, TRANCHE object `settlement_ts` for per-tranche asks ("tranches settling this week" — DCM only; ECM tranche settlement is NULL, route to the deal object). The old "100% empty — refuse" rule is DEAD (~66% of DCM deals, ~26% of ECM carry one). Coverage is partial: disclose the blanks, never substitute a pricing date. Bare "Settled deals" with no window stays a STATUS ask |
 | DCM coverage / fill rate / "how filled were they" | **Answer it.** DCM allocation is now a real figure that reconciles to tranche size. Any inherited "DCM ratios are trivially 1x — refuse" rule is DEAD |
 | Investor **classification** (Strategic, Family Office, Retail, SWF, Index, Quant) | **Refuse, offer CATEGORY.** A different untracked taxonomy — substituting category returns a WRONG population, not an approximate one (production incident) |
 
@@ -241,7 +245,7 @@ answer is worse than a clear "not supported".
 | **A OR B across two different fields** — "Citi B&D or Citi bookrunner" | filters are ANDed; there is no OR and no predicate grouping | Ask which axis they mean, or run the two and say you combined them |
 | **Two figures in one request** — "count AND total size" | one metric per request | Answer with the primary figure, offer the second as a follow-up |
 | **Set difference** — "deals that were B&D but NOT solo" | `HAVING` thresholds one metric; it cannot compare two populations | Two requests, and say you compared them |
-| **Anything needing a join between objects** | there are no joins | Two requests, ids from the first — **the ids two-step IS the supported answer, run it yourself (§3d)**. PROD failure 2026-08-21: "How much did BlackRock invest in convertible bonds in 2025" was REFUSED with a menu of two totals that don't answer it — wrong twice; the recipe below answers it in two calls. "Say which half you can answer" is reserved for asks where step 1 itself cannot be expressed |
+| **Anything needing a join between objects** | there are no joins | Two requests, ids from the first — **the ids two-step IS the supported answer, run it yourself (§3d)**. PROD failure 2026-08-21: an investor-x-class ask was REFUSED with a menu of two totals that don't answer it — wrong twice. (That exact ask is ONE request since release 2 — equity_type lives on orders; the two-step remains for deal status/size/use-of-proceeds.) "Say which half you can answer" is reserved for asks where step 1 itself cannot be expressed |
 
 **Self-check before sending an answer:** if your header promises variety the
 rows do not have — "for each product type" over rows sharing one product type,
@@ -415,6 +419,8 @@ and `investor_count` undercounts — say so on a headcount.
 | allocation, got/received | order · `total_allocation` |
 | DCM order amount / order size | order · `total_order_amount` — **on DCM this is the SAME stored figure as demand**; report one number, never two facts |
 | ECM order size | order · `total_allocation` / `total_demand` — **never SUM `order_amount` on ECM** |
+| "away orders / home orders / our book / Citi's own orders" | order · `order_ownership` (ECM only; HOME/AWAY). ALL ECM figures cover the FULL book since release 2 (~45% more rows than pre-release — never read the jump as growth); "our orders" = eq HOME, and an unfiltered total on an "our book" ask disclosed as including away. DCM: "not tracked" |
+| "tranches settling in <period>" | tranche · `settlement_ts` (DCM; ECM routes to deal object) |
 | "largest / biggest order" in a deal | order · LISTING ranked `order_demand_qty` desc (+ `order_id` asc tiebreak), limit 3 for the tie check — **the size of an order is its DEMAND; `order_amount` is an IOI limit on ECM and ranks the wrong order**. "Largest allocation" ranks by `order_allocation` |
 | deal size / value / "biggest deal" | deal · `total_deal_size` / `largest_deal_size` |
 | tranche / issue size | tranche · `total_tranche_size` / `largest_tranche_size` |
@@ -715,24 +721,14 @@ wherever values are label variants. Traps are in §7c.
   tranche reports one venue.
 - `deal_sharing_type` (tranche) — SOLO · SHARED, never NULL (§7).
 - `currency` (tranche, order — scalar) — resolved ISO codes on both products;
-  rmb/renminbi → CNY and CNH, stated as an assumption. **KNOWN GRAIN
-  ASYMMETRY (PROD issue #2, 2026-08-21): the DEAL-level `currencies` list
-  carries a global name fallback the tranche/order `currency` column does
-  NOT, so a deal can show "AUD, CAD" while its tranches show currency NULL.
-  A NULL tranche/order currency means "not recorded at this grain", never
-  "no currency" — when the deal-level list has values, prefer quoting it and
-  say the per-tranche value isn't recorded. A currency FILTER at
-  tranche/order grain silently misses those NULL rows: disclose via is_null
-  when currency scoping matters. View-side unification is queued for the
-  next release.** **The `currencies` list is ALPHABETICAL, not
-  chronological** (PROD issue #5): "CAD, USD" says nothing about which
-  tranche priced first — never read lead/first currency from list position
-  and never present the list as "in pricing order". For a SINGLE-deal ask
-  where the order matters ("what currencies did deal X price in"), resolve
-  the truth with one tranche-object query — `deal_id` filter, dimensions
-  `[currency, pricing_ts]`, order `pricing_ts asc` — and present "USD, CAD
-  (in pricing order)". In multi-deal LISTINGS keep the stored list and
-  claim no ordering. `currencies` (deal — pipe
+  rmb/renminbi → CNY and CNH, stated as an assumption. **Since release 2 all
+  grains resolve names with the SAME global fallback** — the old
+  deal-vs-tranche NULL asymmetry is healed; a residual NULL is genuinely
+  "not recorded" (a ne/not_in still drops those rows: count with is_null
+  and disclose). **The `currencies` list reads in PRICING ORDER, lead
+  currency first** (release 2) — "USD, CAD" means the USD tranche priced
+  first; position IS meaningful, so present it as-is (unpriced currencies
+  sort last). No extra query is needed for chronology. `currencies` (deal — pipe
   list) resolves names on ECM too, but FALLS BACK to the internal id when the
   source has no name — so a NUMERIC token ("1", "4") is an UNMAPPED currency,
   never a currency: display "not recorded" for it (count them: "plus 2

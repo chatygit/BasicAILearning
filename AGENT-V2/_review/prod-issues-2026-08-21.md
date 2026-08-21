@@ -177,3 +177,25 @@ threshold coarse first, then list — never both grains in one request).
 RELEASE-TRAIN candidate registered: planner-side rejection of
 having-on-COUNT when the counted entity's column is in dimensions
 (bad_having_grain) — the server can make this shape impossible.
+
+### #6 update — user decision: NO ontology exposure of home/away
+order_ownership stays OUT of capital_markets_order.yaml. The view keeps
+the column (deploy-check 1j reads it in SQL; future exposure possible),
+but the agent cannot filter it — so staged doctrine now says: totals
+cover the FULL book, the split is not queryable, and "our orders only"
+asks get an honest refusal instead of a mixed total dressed as "ours".
+
+### #6 update — REVERSED: exposure confirmed
+order_ownership IS exposed (dimension + filter, ECM, HOME/AWAY curated).
+"Our orders" = eq HOME; full-book default with split disclosure; DCM
+"not tracked". Staged config restored to the exposure plan.
+
+### RELEASE 2 — configs applied (2026-08-21)
+User ordered immediate apply; release2-config-staged.md executed in full
+and deleted. Ontology: order equity_type + order_ownership (HOME/AWAY
+curated), tranche settlement_ts (DCM), currency prose healed, currencies
+pricing-order. SKILL: BlackRock-class = ONE request, two-step re-exampled
+(use_of_proceeds), full-book/HOME doctrine, settlement at tranche grain,
+2 routing rows. Gate: retired 2 stale pins with successors, +3 product
+pins, order_ownership whitelisted as construction-closed enum. Bars
+1165/206/109. DEPLOY ORDER: views FIRST, then MCP + skill.
