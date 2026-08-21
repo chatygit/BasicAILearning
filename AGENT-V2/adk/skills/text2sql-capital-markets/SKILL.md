@@ -151,16 +151,23 @@ request** — those three are carried on the order object, so
 catalog for it. Only **deal status, deal size, equity type and use of
 proceeds** still need the two-step, and the two-step is MANDATORY, never a
 refusal and never a menu back to the user (§3d — the question already
-authorised the work). Recipe, with the measured PROD failure it fixes
-("How much did BlackRock invest in convertible bonds in 2025" → refused):
-R1 deal object — `equity_type like '%CONVERT%'`, the year's date bounds,
-project `deal_id` (paged if needed); R2 order object —
-`investor_name like '%BLACKROCK%'` + `deal_id in [...]` + `total_allocation`
-("invested" = allocation). **Batch the ids ≤40 per request** (platform cap),
-SUM the batches, and report with the deal count ("across 57 convertible
-deals"). Do NOT re-apply the date bound in R2 — the ids already carry the
-scope, and a pricing-date bound would drop NULL-pricing orders. There are
-NO joins; only when R1 itself cannot be expressed do you say which half you
+authorised the work). **TWO IRON RULES govern it (both measured on "How
+much did BlackRock invest in convertible bonds in 2025" — first REFUSED,
+then, ferried the wrong way, it ran 40 queries and had to be aborted):**
+**(1) Ferry ids from the SMALLER side.** A named investor touches dozens of
+deals; a class/status/year population is hundreds. So: R1 order object —
+`investor_name like '%BLACKROCK%'` + the year's `pricing_ts` bounds,
+metric `total_allocation`, dimensions `[deal_id]` (BlackRock's per-deal
+allocations — ONE page, usually well under 50 rows; disclose that
+date-bounding drops NULL-pricing orders). R2 deal object — `deal_id in
+[R1's ids, ≤40 per request]` + `equity_type like '%CONVERT%'`, project
+`deal_id`. The answer = SUM of R1's allocations over the ids R2 confirmed —
+YOUR arithmetic on rows you already hold, no third query. Report with the
+deal count. **(2) HARD BUDGET: a single ask never spends more than 4
+`run_bqs_query` calls.** If even the smaller side exceeds 2 batches (80
+ids), STOP: give the closest supported aggregate and state the precision
+limit in one line — a query loop is never the answer. There are NO joins;
+only when neither side's step 1 can be expressed do you say which half you
 can answer.
 
 **Three names mean two different measures — check which object you are on.**

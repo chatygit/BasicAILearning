@@ -63,3 +63,17 @@ audit-backlog-2026-08-11.md instead.
   same deduped T join.
 - **Status:** doctrine FIXED in SKILL 2026-08-21, ships next agent/skill
   deploy.
+
+### #3 update — retry ran 40 queries, aborted
+The first fix's recipe ferried ids from the WRONG side: "all convertible
+2025 deals" is the huge population (paged R1, then ≤40-id R2 batches = an
+open-ended loop; 40 calls before the user aborted). Recipe REWRITTEN with
+two iron rules, both gate-pinned:
+(1) ferry from the SMALLER side — R1 = BlackRock's own per-deal
+    allocations (order object, one page), R2 = deal object confirms which
+    of THOSE ids are convertible; the total is model arithmetic over rows
+    already held, no third query;
+(2) HARD BUDGET — max 4 run_bqs_query calls per ask; over budget = give
+    the closest supported aggregate + state the precision limit, never a
+    loop.
+Re-test the same prompt after the next skill deploy.

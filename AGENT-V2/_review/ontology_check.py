@@ -1754,10 +1754,13 @@ check(has(SKILL, "KNOWN GRAIN"),
       "currency' while the deal lists values; view unification is a "
       "release-train item, this doctrine is the only live guard")
 check(has(SKILL, "two-step is MANDATORY")
-      and has(SKILL, "ids two-step IS the supported answer"),
-      "[routing] SKILL.md: the mandatory cross-object two-step is gone "
-      "(PROD issue #3, 2026-08-21) — investor-x-class asks like 'BlackRock "
-      "in convertible bonds' get refused with a menu again")
+      and has(SKILL, "ids two-step IS the supported answer")
+      and has(SKILL, "SMALLER side")
+      and has(SKILL, "HARD BUDGET"),
+      "[routing] SKILL.md: the mandatory cross-object two-step (with the "
+      "smaller-side ferry direction + 4-query hard budget) is gone (PROD "
+      "issue #3, 2026-08-21) — 'BlackRock in convertible bonds' either "
+      "gets refused with a menu or loops 40 queries again")
 # PROBE CACHE (warrants log 2026-08-11: enrich=49.00s then 42.99s for the
 # SAME two 0-row probes a minute apart — the did_you_mean retry double-pays
 # the warehouse). _cached_probe memoises by (sql, params) with a TTL.
