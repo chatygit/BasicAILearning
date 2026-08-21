@@ -54,3 +54,12 @@ the following, run the three gates, delete this file.
 13. Add _PRODUCT_PINS: (order, order_ownership, ECM), (order,
     equity_type, ECM).
 14. Update the [routing] two-step pin if its pinned strings change.
+
+## capital_markets_tranche.yaml (added 2026-08-21)
+15. NEW dimension + filter `settlement_ts` (column settlement_ts,
+    products ["DCM"], range ops like the deal object's entry, mirroring
+    its description — tranche grain = the tranche's OWN settlement, not
+    the deal MAX; ECM is NULL at this grain, route ECM settlement asks to
+    the deal object). Add _PRODUCT_PINS entry (tranche, settlement_ts,
+    DCM). SKILL routing row: "tranches settling in <period>" → tranche ·
+    settlement_ts (DCM); ECM settlement stays a deal-object ask.

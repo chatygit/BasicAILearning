@@ -41,6 +41,12 @@ FROM (
   WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
   AND    column_name IN ('EQUITY_TYPE','ORDER_OWNERSHIP')
   UNION ALL
+  SELECT '1l. tranche view has settlement_ts (release 2)', '1',
+         TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
+  AND    column_name = 'SETTLEMENT_TS'
+  UNION ALL
   SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
          'NUMBER,NUMBER',
          LISTAGG(data_type, ',') WITHIN GROUP (ORDER BY table_name)
@@ -113,13 +119,18 @@ WITH agg AS (
          COUNT(*) AS rows_,
          COUNT(DISTINCT PRODUCT||'~'||DEAL_ID||'~'||TRANCHE_ID) AS keys_,
          COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_rows,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN TRANCHE_REGION END) AS ecm_region
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN TRANCHE_REGION END) AS ecm_region,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN SETTLEMENT_TS END) AS dcm_settle
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
        '(info)' AS expected_,
        TO_CHAR(ecm_region) || ' of ' || TO_CHAR(ecm_rows) AS actual_,
        'INFO' AS verdict_
+FROM agg
+UNION ALL
+SELECT '1k. DCM tranches with settlement_ts (INFO, expect ~50,198 UAT)',
+       '(info)', TO_CHAR(dcm_settle), 'INFO'
 FROM agg
 UNION ALL
 SELECT '8. tranche grain (rows = PRODUCT+DEAL+TRANCHE)', 'Y',

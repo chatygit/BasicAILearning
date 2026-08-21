@@ -578,3 +578,11 @@ lead-currency-first. Fix: carry MIN(PRICING_TS) per currency into the C
 subquery and LISTAGG WITHIN GROUP (ORDER BY that timestamp), both
 branches. SKILL meanwhile forbids ordering claims and recovers true order
 per-deal via one tranche query.
+
+### Release-train item (2026-08-21, PROD issue #8): bad_having_grain guard
+Planner-side: reject a `having` on a COUNT-DISTINCT metric when the
+counted column is also in `dimensions` — the shape returns 0 rows by
+construction (measured: "investors in >1 deal" asserted "none exist").
+Steer text: "drop <column> from dimensions or drop the having; threshold
+at the coarse grain first, then list the items." Doctrine guard lives in
+SKILL meanwhile.

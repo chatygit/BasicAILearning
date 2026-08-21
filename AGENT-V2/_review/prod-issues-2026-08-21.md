@@ -129,3 +129,51 @@ just narrow scope, it LOST orders; release 2 restores them. O3: DCM
 OB_ORDER has OWNER/ALL_OWNERS (semantics unknown, likely member lists) —
 DCM stays NULL; census before mapping. 38 NULL-IS_MATCHED rows fall
 through the guard both ways (pre-existing, tiny).
+
+## #7 — Entitlement denial phrased as agent's own limitation
+- **Symptom:** unentitled user gets "I do not have entitlements" — reads
+  as an agent malfunction; no path to request access.
+- **Root cause:** the server message is neutral ("Unable to verify your
+  ECM/DCM entitlements"); the first-person framing is the AGENT's own
+  phrasing — SKILL-fixable.
+- **Fix (SKILL §8, gate-pinned):** denial = about the USER's access
+  profile: "Your profile isn't entitled to <product> data. To request
+  access, contact <support>." + offer what they CAN see + relay the
+  server message. **OPEN: the support email placeholder
+  <ENTITLEMENT-SUPPORT-CONTACT> must be filled before the skill deploys
+  — waiting on the exact address from the user.**
+- **Status:** rule in SKILL 2026-08-21; needs the support address.
+
+### #7 update — CLOSED: support contact received and wired
+The denial message now ends: "To request access, contact *ICG GLOBAL BCMA
+ECM Onebook Support (dl.icg.global.bcma.ecm.onebook.support@imcnam.ssmb.com)."
+Placeholder gone; ships with the batch.
+
+## #8 — "No investors in >1 deal" asserted from broken attempts
+- **Trace:** ask for multi-deal investors in 2026 → four queries → "No
+  investors participated in more than one deal in 2026." User: "i believe
+  gabelli was in more than 1 deal" → re-query → full page of multi-deal
+  investors, GAMCO/Gabelli in 7 deals. The negative was false; only the
+  user's domain knowledge caught it.
+- **Root cause:** failed/misshapen attempts converted into a DOMAIN FACT.
+  A universal negative demands its own evidence: the one-query truth test
+  (rank investors by deal_count desc; row 1 answers it) existed all along.
+- **Fix (SKILL §8, gate-pinned):** "ZERO IS A CLAIM, NOT A DEFAULT" — a
+  negative requires one successful query whose top-ranked row tests it;
+  errored attempts = "could not determine", never "none"; a user's named
+  counter-example gets verified FIRST with one filtered query.
+- **Status:** doctrine in SKILL 2026-08-21, ships with the batch.
+
+### #8 update — ROOT CAUSE from the first debug shot
+The first query was well-formed and executed cleanly — but it projected
+deal_name/deal_id as dimensions while thresholding deal_count. Grouping
+by the deal makes COUNT(DISTINCT deal_id)=1 in every group, so
+HAVING > 1 returns 0 rows BY CONSTRUCTION, on any data. The agent read a
+structurally self-inflicted zero as a fact about 2026. Second attempt
+dropped the deal columns (investor grain) → full page. TWO rules now in
+SKILL: the zero-claim evidence rule (truth test AT THE CLAIM'S GRAIN) +
+"NEVER GROUP BY WHAT YOU ARE COUNTING" (want qualifiers AND their items:
+threshold coarse first, then list — never both grains in one request).
+RELEASE-TRAIN candidate registered: planner-side rejection of
+having-on-COUNT when the counted entity's column is in dimensions
+(bad_having_grain) — the server can make this shape impossible.

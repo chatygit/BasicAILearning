@@ -821,6 +821,28 @@ status-sensitive answer spans both.
 - **0 rows + `suggestions`/`did_you_mean`**: retry with a real value (§7b/§7c
   first). Never delete the question's defining filter to force a result. For a
   valid question with no matches: "no matching records" plus ONE widening idea.
+- **ZERO IS A CLAIM, NOT A DEFAULT.** "No investors did X" / "none exist" is
+  the strongest answer you can give — it requires ONE successful, well-formed
+  query AT THE CLAIM'S GRAIN whose TOP-RANKED row directly tests it (rank
+  by the metric desc: row 1 below the threshold PROVES the negative; row 1
+  above it disproves it instantly). A failed, rejected or misshapen attempt
+  is NEVER evidence of absence — if your requests errored, say you could
+  not determine it, not that there are none. PROD failure 2026-08-21: "no
+  investors participated in more than one deal in 2026" was asserted after
+  broken attempts; the user named a counter-example and a page of
+  multi-deal investors existed. And when a user contradicts your negative
+  with a NAME, verify that name directly FIRST — one filtered query —
+  before defending or re-running the original.
+- **NEVER GROUP BY WHAT YOU ARE COUNTING** — the exact shape behind that
+  failure: projecting `deal_id`/`deal_name` as dimensions while
+  thresholding `deal_count` groups by the deal, so COUNT(DISTINCT deal_id)
+  is 1 in EVERY group and `having > 1` returns 0 rows BY CONSTRUCTION — on
+  any data, forever. Before sending a `having` on a COUNT metric, check
+  that the counted entity's columns are NOT in `dimensions`. Want the
+  qualifying entities AND their items listed? Two steps: threshold at the
+  coarse grain first (investor + deal_count, having > 1), THEN list the
+  items for the qualifiers (deal_id in / investor filter) — never both
+  grains in one request.
 - **`disambiguation`**: a name matched several entities — re-run with one exact.
 - **A raw "|" inside a MARKDOWN TABLE CELL splits the row** (PROD trace
   2026-08-21: "AUD | CAD" in the Currencies column became TWO cells and
@@ -861,9 +883,16 @@ status-sensitive answer spans both.
   a timeout too — wrong twice. A query that returns is a RESULT to explain
   (here: the added window excluded everything), and the one attempt left
   belongs to the aggregate, run — not offered as a question.
-- **`entitlement_denied`/`product_not_entitled`**: relay the `message` as given and
-  offer the product the user *is* entitled to. Do NOT retry with a different
-  product, and never name the unentitled one beyond echoing the server.
+- **`entitlement_denied`/`product_not_entitled`/`no_entitled_products`**:
+  an entitlement denial is about the USER'S access profile — NEVER phrase it
+  first-person ("I don't have entitlements" reads as an agent malfunction;
+  PROD issue #7). Say it plainly and helpfully: "Your profile isn't
+  entitled to <product> data. To request access, contact *ICG GLOBAL BCMA
+  ECM Onebook Support (dl.icg.global.bcma.ecm.onebook.support@imcnam.ssmb.com)."
+  Then offer what
+  their profile CAN see, if anything. Relay the server `message` faithfully
+  underneath, do NOT retry with a different product, and never name the
+  unentitled product beyond echoing the server.
 - Max ~2 attempts per turn; stop at the first non-empty result.
 
 ## 9. Time

@@ -1753,6 +1753,19 @@ check(has(SKILL, "KNOWN GRAIN"),
       "(PROD issue #2, 2026-08-21) — NULL tranche currency reads as 'no "
       "currency' while the deal lists values; view unification is a "
       "release-train item, this doctrine is the only live guard")
+check(has(SKILL, "ZERO IS A CLAIM, NOT A DEFAULT"),
+      "[present] SKILL.md: the negative-claim evidence rule is gone (PROD "
+      "issue #8, 2026-08-21) — failed attempts get reported as 'none "
+      "exist' again until a user happens to know a counter-example")
+check(has(SKILL, "NEVER GROUP BY WHAT YOU ARE COUNTING"),
+      "[routing] SKILL.md: the grain-collision rule is gone (PROD issue "
+      "#8 root cause) — counting deal_id while grouping by deal_id "
+      "returns 0 rows by construction and reads as 'no data'")
+check(has(SKILL, "USER'S access profile"),
+      "[present] SKILL.md: the entitlement-denial phrasing rule is gone "
+      "(PROD issue #7, 2026-08-21) — the agent says 'I don't have "
+      "entitlements' again, reading as a malfunction instead of an access "
+      "request path")
 check(has(SKILL, "ALPHABETICAL, not"),
       "[present] SKILL.md: the currencies-are-alphabetical rule is gone "
       "(PROD issue #5, 2026-08-21) — the agent reads lead currency from "

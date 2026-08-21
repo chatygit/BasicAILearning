@@ -299,3 +299,11 @@ UNION alias alignment is now gate-enforced ([views] check, branch alias
 sequences parsed per file: deal 22/22, tranche 40/40, order 27/27).
 Post-deploy config flips are staged in _review/release2-config-staged.md
 — apply ONLY after these views deploy.
+
+7. **Tranche-grain SETTLEMENT_TS (added 2026-08-21 when the release was
+   confirmed):** DCM = CAST(ODT.SETTLEMENT_DATE AS TIMESTAMP(6)) — UAT
+   measured 50,198/74,281 tranches (67.6%); ECM = CAST(NULL AS
+   TIMESTAMP(6)) (no measured tranche-level settlement at the ECM source;
+   deal-grain settlement_ts already covers ECM at 26%). Enables
+   "tranches settling this week" at the natural grain. Ontology exposure
+   (products ["DCM"]) is in release2-config-staged.md.
