@@ -558,3 +558,11 @@ currencies, tranches read NULL. Fix: NVL(TDC.CURRENCY_NAME,
 GC.CURRENCY_NAME) at both grains (raw id stays excluded at scalar grain).
 Measure first in PROD: _checks/_currency-grain-audit.sql G1/G2. SKILL
 disclosure doctrine shipped meanwhile.
+
+### Release-train item (2026-08-21, PROD issue #3): equity_type on the order view
+"Investor X in convertible/preferred/warrant deals" still pays the 40-id
+two-step ferry because vw_order_detail lacks EQUITY_TYPE. Fix mirrors
+round-2 OFFERING_TYPE exactly: add ET.PRODUCT_EQUITY_TYPE_VALUE to the
+order view's deduped T join, CAST(NULL) on DCM; then the ontology gains
+equity_type on the order object and the SKILL recipe collapses to ONE
+request (same collapse as "investors in IPOs").

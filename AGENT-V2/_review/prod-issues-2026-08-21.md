@@ -40,3 +40,26 @@ audit-backlog-2026-08-11.md instead.
   G1/G2 size the symptom in PROD first.
 - **Status:** doctrine FIXED in SKILL 2026-08-21; view fix QUEUED for next
   planned release.
+
+## #3 — BlackRock × convertible bonds: answerable ask refused with a menu
+- **Trace:** "How much did Blackrock invest in Convertible bonds in year
+  2025" → "I cannot answer... not currently supported in a single step",
+  then offered (a) BlackRock's 2025 total or (b) convertibles 2025 total —
+  neither is the ask (the INTERSECTION is).
+- **Root cause:** the ask is investor (order object) × equity_type (deal
+  object) — cross-object. The two-step doctrine existed (deal ids → order
+  filter) but was an aside, and the §3c no-joins row carried an escape
+  hatch ("or say which half you can answer") the model preferred. §3d
+  (never ask permission for a mechanic) was ignored.
+- **Fix (SKILL, gate-pinned):** the ids two-step is MANDATORY for
+  investor × class/status/size/UoP asks — worked recipe added (R1 deal ids
+  by equity_type + year, R2 order total_allocation by investor + ids,
+  ≤40-id batches summed, deal count disclosed, no date re-filter in R2);
+  escape hatch narrowed to "R1 itself inexpressible". Also corrected the
+  stale "equity/offering type" pair — offering_type is one-request since
+  round 2.
+- **Release train:** denormalize EQUITY_TYPE onto vw_order_detail (mirror
+  of round-2 offering_type) — kills this ferry class entirely; one column,
+  same deduped T join.
+- **Status:** doctrine FIXED in SKILL 2026-08-21, ships next agent/skill
+  deploy.

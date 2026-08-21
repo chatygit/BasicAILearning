@@ -148,10 +148,20 @@ real constraint and give the user the two doors.
 request** — those three are carried on the order object, so
 "top 10 investors in Healthcare over the last 5 years" is a single
 `capital_markets_order` request with a `sector` filter. Do NOT fetch the deal
-catalog for it. Only **deal status, deal size, equity/offering type and use of
-proceeds** still need the two-step: request 1 on the deal object returns
-`deal_id`s, request 2 filters `deal_id in [...]`. There are NO joins; if
-neither route works, say what you can answer.
+catalog for it. Only **deal status, deal size, equity type and use of
+proceeds** still need the two-step, and the two-step is MANDATORY, never a
+refusal and never a menu back to the user (§3d — the question already
+authorised the work). Recipe, with the measured PROD failure it fixes
+("How much did BlackRock invest in convertible bonds in 2025" → refused):
+R1 deal object — `equity_type like '%CONVERT%'`, the year's date bounds,
+project `deal_id` (paged if needed); R2 order object —
+`investor_name like '%BLACKROCK%'` + `deal_id in [...]` + `total_allocation`
+("invested" = allocation). **Batch the ids ≤40 per request** (platform cap),
+SUM the batches, and report with the deal count ("across 57 convertible
+deals"). Do NOT re-apply the date bound in R2 — the ids already carry the
+scope, and a pricing-date bound would drop NULL-pricing orders. There are
+NO joins; only when R1 itself cannot be expressed do you say which half you
+can answer.
 
 **Three names mean two different measures — check which object you are on.**
 `tranche_count`, `order_count` and `investor_count` are **pre-computed columns**
@@ -224,7 +234,7 @@ answer is worse than a clear "not supported".
 | **A OR B across two different fields** — "Citi B&D or Citi bookrunner" | filters are ANDed; there is no OR and no predicate grouping | Ask which axis they mean, or run the two and say you combined them |
 | **Two figures in one request** — "count AND total size" | one metric per request | Answer with the primary figure, offer the second as a follow-up |
 | **Set difference** — "deals that were B&D but NOT solo" | `HAVING` thresholds one metric; it cannot compare two populations | Two requests, and say you compared them |
-| **Anything needing a join between objects** | there are no joins | Two requests, ids from the first — or say which half you can answer |
+| **Anything needing a join between objects** | there are no joins | Two requests, ids from the first — **the ids two-step IS the supported answer, run it yourself (§3d)**. PROD failure 2026-08-21: "How much did BlackRock invest in convertible bonds in 2025" was REFUSED with a menu of two totals that don't answer it — wrong twice; the recipe below answers it in two calls. "Say which half you can answer" is reserved for asks where step 1 itself cannot be expressed |
 
 **Self-check before sending an answer:** if your header promises variety the
 rows do not have — "for each product type" over rows sharing one product type,
