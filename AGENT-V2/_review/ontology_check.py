@@ -1744,6 +1744,15 @@ check(has(ORDER, "RANKS BY order_demand_qty")
       "[metric] largest-order ranking rule is gone (user ruling 2026-08-19) "
       "— 'largest order' falls back to order_amount, which on ECM is an IOI "
       "limit reading and returns the WRONG order")
+check(has(SKILL, "MARKDOWN TABLE CELL splits the row"),
+      "[present] SKILL.md: the pipe-in-markdown-cell rule is gone (PROD "
+      "issue #1, 2026-08-21) — 'AUD | CAD' splits table rows again and "
+      "ejects the neighbouring column's value")
+check(has(SKILL, "KNOWN GRAIN"),
+      "[present] SKILL.md: the currency grain-asymmetry disclosure is gone "
+      "(PROD issue #2, 2026-08-21) — NULL tranche currency reads as 'no "
+      "currency' while the deal lists values; view unification is a "
+      "release-train item, this doctrine is the only live guard")
 # PROBE CACHE (warrants log 2026-08-11: enrich=49.00s then 42.99s for the
 # SAME two 0-row probes a minute apart — the did_you_mean retry double-pays
 # the warehouse). _cached_probe memoises by (sql, params) with a TTL.

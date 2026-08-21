@@ -535,3 +535,26 @@ compiled and deployed; the PCM fix worked). Section D green earlier
 NEW PRESENTATION RULING: no unit parentheticals in table headers
 ("Allocation (shares)" trace) — SKILL §6b + [present] gate pin; the
 mrm-observations praise of "(Shares)" headers corrected.
+
+## PROD FREEZE (2026-08-21) — release-train register
+MCP + views live in PROD; only agents.yaml + SKILL.md deploy freely now.
+Items below REQUIRE a release train (do not attempt as quick fixes):
+* Ontology YAML changes of any kind. (User confirmed 2026-08-21:
+  EVERYTHING current is shipped — largest-order note, settlement_ts/
+  deal_region entries, probe cache all LIVE in PROD.)
+* Server: any executor/planner work, weighted-average computed metrics
+  (7c — PO definitions pending).
+* Views: tranche-grain settlement, fees/prices/announce riches, ProjectName
+  (dropped), DCM tranche-region upstream gap (data-team ticket).
+PROD MEASUREMENT PASS (SKILL-only updates, allowed): run _deploy-check.sql
+in PROD (expect 1e >> 6,892 — party master is loaded there; real 1f/1g/1h),
+plus _checks/_currency-check Q1 (unmapped tokens) — then replace the
+QA-labelled coverage numbers in SKILL §3a/§6b prose with PROD facts.
+
+### Release-train item (2026-08-21, PROD issue #2): currency grain asymmetry
+vw_tranche_summary.CURRENCY + vw_order_detail.CURRENCY lack the GC global
+id->name fallback the deal view's CURRENCIES got in round 2 — deal lists
+currencies, tranches read NULL. Fix: NVL(TDC.CURRENCY_NAME,
+GC.CURRENCY_NAME) at both grains (raw id stays excluded at scalar grain).
+Measure first in PROD: _checks/_currency-grain-audit.sql G1/G2. SKILL
+disclosure doctrine shipped meanwhile.

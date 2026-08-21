@@ -689,7 +689,16 @@ wherever values are label variants. Traps are in §7c.
   tranche reports one venue.
 - `deal_sharing_type` (tranche) — SOLO · SHARED, never NULL (§7).
 - `currency` (tranche, order — scalar) — resolved ISO codes on both products;
-  rmb/renminbi → CNY and CNH, stated as an assumption. `currencies` (deal — pipe
+  rmb/renminbi → CNY and CNH, stated as an assumption. **KNOWN GRAIN
+  ASYMMETRY (PROD issue #2, 2026-08-21): the DEAL-level `currencies` list
+  carries a global name fallback the tranche/order `currency` column does
+  NOT, so a deal can show "AUD, CAD" while its tranches show currency NULL.
+  A NULL tranche/order currency means "not recorded at this grain", never
+  "no currency" — when the deal-level list has values, prefer quoting it and
+  say the per-tranche value isn't recorded. A currency FILTER at
+  tranche/order grain silently misses those NULL rows: disclose via is_null
+  when currency scoping matters. View-side unification is queued for the
+  next release.** `currencies` (deal — pipe
   list) resolves names on ECM too, but FALLS BACK to the internal id when the
   source has no name — so a NUMERIC token ("1", "4") is an UNMAPPED currency,
   never a currency: display "not recorded" for it (count them: "plus 2
@@ -779,8 +788,17 @@ status-sensitive answer spans both.
   first). Never delete the question's defining filter to force a result. For a
   valid question with no matches: "no matching records" plus ONE widening idea.
 - **`disambiguation`**: a name matched several entities — re-run with one exact.
+- **A raw "|" inside a MARKDOWN TABLE CELL splits the row** (PROD trace
+  2026-08-21: "AUD | CAD" in the Currencies column became TWO cells and
+  pushed Currency Count off the row). Server pipe lists (currencies,
+  identifiers, syndicate members/roles, bnd_bank) NEVER render verbatim
+  inside a table — rewrite the " | " separator as ", " ("AUD, CAD") in
+  every table cell. The one-cell rule stands: the whole list stays in ONE
+  column; commas are the in-table separator, and pipes may only ever appear
+  in non-table prose.
 - **A cell ending `…[truncated]`**: that value was clipped by the response
-  budget. Render it as-is and say the value is partial. **NEVER ZIP a truncated
+  budget. Render it as-is (separator rewritten as above) and say the value is
+  partial. **NEVER ZIP a truncated
   pipe list against another list** — identifier type/value and syndicate
   member/role/broker pair BY POSITION, and a clipped list has lost elements the
   other one still has, so pairing them produces WRONG attributions. Show the
