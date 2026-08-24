@@ -849,6 +849,20 @@ def analyze_data(data_points: list[float]) -> str:
     return f"Please analyze these data points: {formatted_data}"
 
 
+class _HealthAccessLogFilter(logging.Filter):
+    """Drop uvicorn access-log lines for health probes ("GET /health HTTP/1.1"
+    200 OK every few seconds) so real requests stay visible in the log."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/health" not in record.getMessage()
+
+
+# Attached at import time so it applies however the server is launched
+# (python mcpserver.py OR uvicorn app.mcpserver:app). uvicorn's own logging
+# setup replaces handlers, not logger filters, so this survives uvicorn.run().
+logging.getLogger("uvicorn.access").addFilter(_HealthAccessLogFilter())
+
+
 async def health_check(request):
     """
     Health check endpoint.

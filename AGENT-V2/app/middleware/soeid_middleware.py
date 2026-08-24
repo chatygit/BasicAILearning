@@ -77,11 +77,17 @@ def _resolve_user_id(request: Request) -> tuple[str, str]:
     return "", ""
 
 
+# Probe endpoints are hit every few seconds by the platform and never carry
+# identity — logging them drowns real traffic. Identity is still resolved and
+# set for these requests; only the log line is suppressed.
+QUIET_PATH_PREFIXES = ("/health", "/actuator/health")
+
+
 class SoeidHeaderMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         soeid, src = _resolve_user_id(request)
         token = _current_soeid.set(soeid)
-        if request.url.path != "/health/ready":
+        if not request.url.path.startswith(QUIET_PATH_PREFIXES):
             # Debug aid: when identity can't be resolved, dumping the inbound
             # header names reveals which header the agent runtime actually sends
             # so it can be added to MCP_USER_ID_HEADERS. Enable with
