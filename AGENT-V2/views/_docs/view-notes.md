@@ -310,3 +310,19 @@ Post-deploy config flips are staged in _review/release2-config-staged.md
    deal-grain settlement_ts already covers ECM at 26%). Enables
    "tranches settling this week" at the natural grain. Ontology exposure
    (products ["DCM"]) is in release2-config-staged.md.
+
+## RELEASE 2 addendum — D1: uniform TRANSACTION_ID (2026-08-27)
+All three views gained a TRANSACTION_ID column as the LAST projection:
+ECM = DEAL_TRANSACTION_ID (same value as DEAL_ID — the concept made
+uniform), DCM = OB_DEAL_TRANCHE.ORIGINATION_TRANSACTION_ID (MAX per deal
+in the deal view; direct at tranche/order grain via the ODT join).
+PROD-measured 2026-08-27: one otid per deal (T1=0 multis), OPUS 75xxxxxx
+family (T2), 88% resolve in OPUS_BASE_TRANSACTION + RELATED_PARTIES (T3);
+FORWARD-POPULATED (~890 ids, 2026 Ipreo vintage onward) — historical DCM
+deals carry NULL, which the NVL layering absorbs.
+THE RE-KEY: all three DCM PCM (party master) joins now key on
+ORIGINATION_TRANSACTION_ID instead of DEAL_ID/ROOT_ID — the old key
+compared different id families and NEVER matched (proven by format);
+OB_DEAL_ISSUER fallbacks unchanged underneath. Bankers address deals as
+"Transaction ID 75041397" (test prompt sheet) — this column resolves
+those asks on both products.

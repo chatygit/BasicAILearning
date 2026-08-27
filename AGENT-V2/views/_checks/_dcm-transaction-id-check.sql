@@ -7,6 +7,22 @@
 -- join (currently guessed as TRANSACTION_ID = DEAL_ID — never proven), and
 -- (c) may unlock DCM deal regions via OPUS_BASE_TRANSACTION.
 -- Run in PROD. Winners are release-train view changes.
+--
+-- RESULTS (PROD, 2026-08-27): THE KEY IS REAL.
+--  * T1: DEALS_WITH_MULTIPLE_OTIDS = 0 — one txn per deal, rollup-safe.
+--  * T2: otid values ARE the OPUS transaction family (75xxxxxx); every
+--    sample row is a 2026-vintage I-format (Ipreo) deal -> the column is
+--    FORWARD-POPULATED: sparse history (~890 ids vs ~47k deals), likely
+--    complete going forward.
+--  * T3: 890 distinct otids; 785 (88%) exist in BOTH OPUS_BASE_TRANSACTION
+--    and RELATED_PARTIES.
+--  * T4: strong payoff on the joined subset (776/944 pending exact column
+--    reading from the user).
+--  * CONSEQUENCE: the DCM party-master join keyed TRANSACTION_ID=DEAL_ID
+--    is PROVEN WRONG (id families don't even share a format — it has
+--    never matched a row). Release-train: roll otid to deal grain, expose
+--    as the DCM transaction id, re-key the DCM PCM joins in all three
+--    views (existing OB_DEAL_ISSUER fallbacks stay underneath).
 -- ===========================================================================
 
 -- T1 — population + per-deal consistency (a deal must map to ONE txn).

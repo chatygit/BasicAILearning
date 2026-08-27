@@ -47,6 +47,12 @@ FROM (
   WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
   AND    column_name = 'SETTLEMENT_TS'
   UNION ALL
+  SELECT '1m. all three views expose TRANSACTION_ID (release 2/D1)', '3',
+         TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM' AND column_name = 'TRANSACTION_ID'
+  AND    table_name IN ('VW_DEAL_SUMMARY','VW_TRANCHE_SUMMARY','VW_ORDER_DETAIL')
+  UNION ALL
   SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
          'NUMBER,NUMBER',
          LISTAGG(data_type, ',') WITHIN GROUP (ORDER BY table_name)
@@ -73,6 +79,7 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN 1 END) AS dcm_rows,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN DEAL_REGION END) AS dcm_region,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN SETTLEMENT_TS END) AS dcm_settle,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN TRANSACTION_ID END) AS dcm_txn,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND CURRENCIES IS NOT NULL
                      AND REGEXP_LIKE(CURRENCIES, '[A-Za-z]')
                     THEN 1 END) AS ecm_alpha,
@@ -88,6 +95,11 @@ SELECT '1e. ECM deals with issuer name (INFO, expect ~6,892 UAT)' AS check_,
        '(info)' AS expected_,
        TO_CHAR(ecm_issuer) || ' of ' || TO_CHAR(ecm_rows) AS actual_,
        'INFO' AS verdict_
+FROM agg
+UNION ALL
+SELECT '1n. DCM deals with TRANSACTION_ID (INFO, ~890 PROD, forward-filled)',
+       '(info)',
+       TO_CHAR(dcm_txn) || ' of ' || TO_CHAR(dcm_rows), 'INFO'
 FROM agg
 UNION ALL
 SELECT '1f. DCM deals with region (INFO, expect ~8,260 UAT)', '(info)',

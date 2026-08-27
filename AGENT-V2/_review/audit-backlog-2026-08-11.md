@@ -586,3 +586,14 @@ construction (measured: "investors in >1 deal" asserted "none exist").
 Steer text: "drop <column> from dimensions or drop the having; threshold
 at the coarse grain first, then list the items." Doctrine guard lives in
 SKILL meanwhile.
+
+### Release-train item (2026-08-27, DCM round D1): DCM transaction id
+ORIGINATION_TRANSACTION_ID (OB_DEAL_TRANCHE col 212) IS the OPUS
+transaction id for DCM — PROD-measured: one per deal, 88% of its 890 ids
+join both OPUS_BASE_TRANSACTION and the party master; forward-populated
+(2026 Ipreo vintage onward). Changes: (1) roll to deal grain + expose as
+the DCM transaction id column; (2) RE-KEY the DCM PCM (party master)
+joins in all three views to it — the TRANSACTION_ID=DEAL_ID guess never
+matched and never will (format mismatch proven); keep OB_DEAL_ISSUER
+fallbacks underneath; (3) consider MAX(OBT.DEAL_REGION) via otid as a
+DCM region layer. Ontology/skill exposure follows the deploy.
