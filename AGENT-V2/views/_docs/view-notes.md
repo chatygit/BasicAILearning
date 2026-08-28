@@ -326,3 +326,58 @@ compared different id families and NEVER matched (proven by format);
 OB_DEAL_ISSUER fallbacks unchanged underneath. Bankers address deals as
 "Transaction ID 75041397" (test prompt sheet) — this column resolves
 those asks on both products.
+
+## RELEASE 3 (staged 2026-08-28 — D1 + the measured DCM wave; deploy
+## after release 2 verifies)
+1. TRANSACTION_ID on all three views (D1): ECM = the deal id itself;
+   DCM = ORIGINATION_TRANSACTION_ID (deal view: MAX rollup — one per
+   deal proven, T1). Forward-populated (~945 PROD deals, 2026 Ipreo
+   vintage onward). DCM PCM (party master) joins RE-KEYED to it — the
+   old TRANSACTION_ID = DEAL_ID guess never matched a row (format
+   mismatch proven); OB_DEAL_ISSUER fallbacks unchanged underneath.
+2. ISSUER_LEI (deal + tranche): ECM = OPUS_ECM_TRANSACTION.ISSUER_LEID
+   (~83% PROD); DCM = CAST(NULL) (no source column found — data-team
+   ask stands).
+3. Order view DCM branch: INVESTOR_REGION = OB_ORDER.COUNTRY_NAME (~95%
+   source), INVESTOR_CATEGORY = OB_ORDER.TYPE (~67%; Asset managers/
+   Banks/... vocabulary, case variants) — two of the "ten ECM-only NULL"
+   placeholders now carry real DCM data. INVESTOR_CATEGORY_KEY stays
+   NULL on DCM.
+4. Order view both branches: SALES_PERSON — DCM = TRIM(FIRST_NAME || ' '
+   || LAST_NAME) from OB_ORDER (~30% via SALES_ID census; both-null
+   trims to NULL, the tenors lesson); ECM = CAST(NULL) (OB_ECM_ORDER
+   sales columns unmeasured — measure before wiring).
+5. Tranche view DCM: SYNDICATE_MEMBER_NAME = NVL(full member pipe list
+   from OB_TRANCHE_SYNDICATE_MEMBER [DISTINCT per tranche, 376,991 rows
+   100% DCM-keyed], BD_BANK fallback). SEMANTIC CHANGE: the DCM value
+   was the single B&D bank; it is now the syndicate list when members
+   exist. BND_BANK/BND_BROKER unchanged — B&D asks unaffected.
+CONFIG COUPLING (post-deploy round): investor_region + investor_category
+lose their ECM-only scoping (retire 2 _PRODUCT_PINS, ten-list -> eight);
+transaction_id/issuer_lei/sales_person exposure; syndicate_member_name
+DCM prose rewrite. Do NOT apply before this batch deploys.
+
+## RELEASE 3b (drafted 2026-08-28 from CLEAN descs — the OCR-guess ban held)
+NEW VIEW vw_hedge_order (OB_HEDGE_ORDER, 300,741 rows): grain = one row
+per HEDGE_ORDER_ID (latest PUBLISHED_TS wins, ROWID tiebreak). PRODUCT =
+'DCM'. Keys DEAL_ID/TRANCHE_ID/ORDER_ID = ROOT/PARENT/SIBLING_ID — joins
+the existing views directly. HEDGE_MANAGER = BND ("hedges managed by
+Wells Fargo" = filter it). HEDGE_STATUS includes 'cancelled' — kept
+queryable, not filtered. Naming mirrors the order view (INVESTOR_REGION =
+country name, INVESTOR_CATEGORY = type, SALES_PERSON trimmed-name).
+NEW VIEW vw_trade_detail (OB_ORDER_TRADE, 489,400 rows): grain = one row
+per ORDER_TRADE_ID (latest PUBLISHED_TS). TRADE_ID + TRADE_REFERENCE
+(external ref), counterparty block, TRADE_SIZE/TRADE_ALLOCATION, price
+basis, BILLED_BY = BND (consistent with the order view).
+ENTITLEMENT: PROVISIONAL (2026-08-28, team confirmation pending) — the
+working conclusion: the existing product-level
+DCM entitlement covers both new views; no new machinery. CLASSIFICATION
+is the DataGlobe FEED-SENSITIVITY label (metadata block), NOT the deal
+lifecycle status the ECM branches filter — it reads 'Confidential' on
+~every hedge row AND on OB_ORDER, which the existing views have always
+served unfiltered. Filtering it would empty the view; it stays
+unfiltered, consistent with precedent. Exposure hold LIFTED — hedge/
+trade ontology objects join the post-deploy config round.
+Deferred: ECONOMIC_* money columns (semantics unmeasured), sales
+override block, comments blocks, FROM/TO account columns (firm-account
+design pending), OB_ORDER_TRADE_SYNDICATE (43,608 rows — second batch).

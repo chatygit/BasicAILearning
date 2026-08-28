@@ -597,3 +597,32 @@ joins in all three views to it — the TRANSACTION_ID=DEAL_ID guess never
 matched and never will (format mismatch proven); keep OB_DEAL_ISSUER
 fallbacks underneath; (3) consider MAX(OBT.DEAL_REGION) via otid as a
 DCM region layer. Ontology/skill exposure follows the deploy.
+
+### RELEASE 3 STAGED IN VIEWS (2026-08-28) — config round blocked on deploy
+Batch (see view-notes RELEASE 3): TRANSACTION_ID everywhere + DCM PCM
+re-key (D1); ISSUER_LEI ECM; DCM investor geography (95%) + investor
+type (67%) filling INVESTOR_REGION/INVESTOR_CATEGORY placeholders;
+SALES_PERSON; DCM syndicate member list. Deploy-check rows 1n-1t added.
+POST-DEPLOY CONFIG ROUND (do not pre-apply): de-scope investor_region +
+investor_category from ECM-only (retire their _PRODUCT_PINS; ten-NULL
+list -> eight), expose transaction_id (addressing doctrine: "transaction
+75041397" resolves on ALL views; DCM coverage forward-populated only —
+disclose), issuer_lei (ECM-only), sales_person (DCM ~30%),
+syndicate_member_name DCM = member list now. STILL OPEN for release 3+:
+hedge/trade NEW views (need clean desc of OB_HEDGE_ORDER +
+OB_ORDER_TRADE — OCR names not trustworthy for CREATE SQL), order-type
+derivation (IS_FIRM/IS_POT product decision), CV-book census,
+firm-account population, ECM sales columns measurement.
+
+### Release 3b drafted (2026-08-28): vw_hedge_order + vw_trade_detail
+Built from CLEAN descs (ho-1..3, trade-1..3 — inventories in
+base-table-columns.md). Single-branch DCM views, latest-PUBLISHED_TS
+dedupe, keys join the existing world (ROOT/PARENT/SIBLING = deal/
+tranche/order). ENTITLEMENT PROVISIONAL (2026-08-28, user confirming with team):
+working conclusion — product-level DCM entitlement
+covers both views; CLASSIFICATION is the DG feed label (constant
+'Confidential', also on OB_ORDER which we already serve) — NOT the
+lifecycle status the ECM branches filter. No row filter; exposure hold
+LIFTED — hedge/trade ontology objects join the post-deploy config round. Deferred to a later batch: ECONOMIC_*
+money semantics, OB_ORDER_TRADE_SYNDICATE, FROM/TO account columns,
+sales-override + comments blocks.

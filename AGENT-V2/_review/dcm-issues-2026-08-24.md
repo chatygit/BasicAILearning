@@ -116,3 +116,23 @@ tracks it.
   exposure (376,991 rows); (d) hedge/trade NEW VIEWS pending P1b/P5
   grain samples. CV book still unlocated (maybe OB_ECM_ORDER_BOOK_* —
   P1b counts them).
+
+### D2 CLOSE — full prompt-to-source map (2026-08-28; numbers approximate
+### per user note, some null columns unscreenshotted)
+| Prompt concept | Source, confirmed |
+|---|---|
+| Hedge book: investor count / total hedge amount / "managed by X" | OB_HEDGE_ORDER (300,741): INVESTOR_*, HEDGESIZE_AMOUNT, BND |
+| Trade book: trade id / B&D / salesperson | OB_ORDER_TRADE (489,400): ORDER_TRADE_ID, BND; sales via OB_ORDER/HEDGE SALES_* |
+| CV book | NOT located by name — candidates: book/trade TYPE columns ('Institutional Pot'/'SyndicateBilled Pot' vocab), OB_ECM_ORDER_BOOK_*; one census at design time |
+| Firm account | VG_BCOSMOS_* EMPTY; OBO_NAME/OBO_LEGAL_ENTITY_ID + ACCOUNT_X_PM_ID on orders are the live candidates |
+| DCM investor type | OB_ORDER.TYPE (~67%): Asset managers/Banks/... — another "unavailable" field that EXISTS |
+| DCM order types | IS_FIRM_ORDER x IS_POT (firm/pot; case variants) |
+| Salesperson | OB_ORDER SALES_ID/SOEID/names (30%) + OB_INVESTOR_SALES (19-row ref) + hedge-order SALES_* |
+| Issuer LEI | ECM 83% (ISSUER_LEID); DCM absent — data-team ask |
+| DCM syndicate members | OB_TRANCHE_SYNDICATE_MEMBER 376,991 rows, 100% DCM-keyed |
+| DCM investor country | OB_ORDER.COUNTRY 95% |
+GRAIN + ENTITLEMENT DESIGN NOTES for release 3: hedge/trade rows key
+deal+tranche+ORDER (SIBLING_ID) — new views join our world directly;
+hedge rows are CLASSIFICATION='Confidential' (entitlement gate design
+input). Release-3 candidates now fully measured except CV-book naming
+and firm-account population.
