@@ -1,0 +1,193 @@
+# ---------------------------------------------------------------------------
+# Governed ontology — TRADE BOOK object (release 3b, 2026-08-28).
+# One row per order trade. Source OB_ORDER_TRADE measured 489,400 rows PROD;
+# every row is DCM (the OB world). Keys join the other objects directly:
+# deal_id/tranche_id/order_id are the SAME ids as the deal/tranche/order
+# objects; trade_id is unique at this grain and trade_reference carries the
+# external booking reference. The trade-syndicate table (43,608 rows) is a
+# LATER batch — syndicate attribution per trade is not modelled yet.
+# ---------------------------------------------------------------------------
+source: capital_markets_trade
+version: "1"
+dialect: trino
+
+connection:
+  catalog: bds_dg_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: bds_dg_oraas.dgstream.vw_trade_detail
+
+grain: [product, trade_id]
+
+purpose: >-
+  The DCM TRADE BOOK: trades booked from orders — trade ids/references,
+  counterparties, trade sizes and allocations, price basis, direction,
+  billing bank, salesperson. "Trade" in the ask routes HERE.
+
+max_limit: 5000
+query_timeout_seconds: 30
+
+how_to_use:
+  - "DCM ONLY. Every row is PRODUCT='DCM'; an ECM-only caller gets zero
+     rows by entitlement design — say trade-book data is DCM."
+  - "'What is the trade ID for <investor>' = filter counterparty_name like
+     '%NAME%' scoped by the deal/tranche ids, project trade_id AND
+     trade_reference (the external booking reference) — present both,
+     labelled."
+  - "Sizes/allocations are NOTIONAL NUMBERS with NO currency column —
+     label totals 'currency not recorded on the trade book'."
+  - "TRADE_STATUS and the type vocabulary are OPEN (seen: 'Institutional
+     Pot' / 'SyndicateBilled Pot' types; statuses unmeasured) — never
+     treat a value guess as closed; rely on suggestions on 0 rows."
+  - "Ids are TEXT, quote them; scope via deal_id/tranche_id/order_id
+     ferried from the other objects (smaller side first, 4-query budget)."
+
+metrics:
+  trade_count:
+    column: trade_id
+    aggregation: COUNT_DISTINCT
+    description: Number of distinct trades in scope.
+  counterparty_count:
+    column: counterparty_gp_id
+    aggregation: COUNT_DISTINCT
+    description: Distinct trade counterparties in scope (skips NULL ids — disclose).
+  total_trade_size:
+    column: trade_size
+    aggregation: SUM
+    numeric: true
+    description: Total trade notional in scope — NOT currency-scoped; label plainly.
+  total_trade_allocation:
+    column: trade_allocation
+    aggregation: SUM
+    numeric: true
+    description: Total allocated across trades in scope — NOT currency-scoped.
+  row_count:
+    column: trade_id
+    aggregation: COUNT
+    description: Raw row count (one row per trade after dedupe).
+
+dimensions:
+  product: {column: product, description: "Always 'DCM' on this object."}
+  deal_id: {column: deal_id, description: "Deal id — SAME family as the other objects. TEXT."}
+  tranche_id: {column: tranche_id, description: "Tranche id the trade attaches to. TEXT."}
+  order_id: {column: order_id, description: "The originating ORDER's id — joins capital_markets_order rows. TEXT."}
+  trade_id: {column: trade_id, description: "Unique trade id — the drill-down handle; project it in listings. TEXT."}
+  parent_trade_id: {column: parent_trade_id, description: "Parent trade id when the trade descends from another (nullable). TEXT."}
+  trade_reference: {column: trade_reference, description: "EXTERNAL booking reference — what desks quote back; project it beside trade_id."}
+  trade_type: {column: trade_type, description: "Trade type (seen: 'Institutional Pot'). Open vocabulary."}
+  trade_sub_type: {column: trade_sub_type, description: "Trade sub-type (seen: 'SyndicateBilled Pot'). Open vocabulary."}
+  allocation_type: {column: allocation_type, description: "Allocation type (open vocabulary; sparse)."}
+  direction: {column: direction, description: "Trade direction (seen: 'Sell')."}
+  billed_by: {column: billed_by, description: "Billing bank on the trade (full names) — same value family as the order object's billed_by."}
+  counterparty_name: {column: counterparty_name, description: "Trade counterparty (investor/institution) name."}
+  counterparty_gp_id: {column: counterparty_gp_id, description: "Counterparty GP id. TEXT."}
+  counterparty_type: {column: counterparty_type, description: "Counterparty type (seen: 'Institution')."}
+  sales_person: {column: sales_person, description: "Covering salesperson (first + last; NULL when not recorded)."}
+  sales_region: {column: sales_region, description: "Salesperson's region label (sparse)."}
+  trade_size: {column: trade_size, description: "Trade notional (NUMBER). No currency scoping exists."}
+  trade_allocation: {column: trade_allocation, description: "Final allocation on the trade (NUMBER)."}
+  price_basis_code: {column: price_basis_code, description: "Price basis code (seen: 'IP')."}
+  price_basis_value: {column: price_basis_value, description: "Price basis value (NUMBER; seen: 55, 0)."}
+  trade_status: {column: trade_status, description: "Trade status (open vocabulary — unmeasured)."}
+  trade_source_system: {column: trade_source_system, description: "Source system of the booking (sparse)."}
+
+filters:
+  product:
+    column: product
+    operators: [eq, in]
+    case_insensitive: true
+    values: ["DCM"]
+    description: Always DCM; the entitlement gate injects/validates this.
+  deal_id:
+    column: deal_id
+    operators: [eq, in]
+    description: TEXT ids — quote, max 40 per in-list.
+  tranche_id:
+    column: tranche_id
+    operators: [eq, in]
+    description: TEXT ids.
+  order_id:
+    column: order_id
+    operators: [eq, in]
+    description: TEXT ids.
+  trade_id:
+    column: trade_id
+    operators: [eq, in]
+    description: TEXT ids.
+  trade_reference:
+    column: trade_reference
+    operators: [eq, in, like, is_null, is_not_null]
+    description: External booking reference — exact when the user pastes one.
+  counterparty_name:
+    column: counterparty_name
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: Contains-match ('%MANULIFE%') — stored names vary.
+  billed_by:
+    column: billed_by
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Bank names; Citi = the CITIGROUP GLOBAL MARKETS stem.
+  direction:
+    column: direction
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Seen 'Sell'; treat as open vocabulary.
+  trade_type:
+    column: trade_type
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Open vocabulary — like on the stem, rely on suggestions.
+  trade_status:
+    column: trade_status
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Open vocabulary (unmeasured).
+  sales_person:
+    column: sales_person
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Contains-match; sparse — is_null = not recorded.
+  trade_size:
+    column: trade_size
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: Notional threshold — no currency scoping.
+
+usage_notes:
+  - One metric per request; filters are ANDed; ids ferry between objects
+    (smaller side first, 4-query budget).
+  - EVERY ranking or paged request ends its order with trade_id.
+  - Superlative asks follow the limit-3 tie doctrine.
+  - Sizes are unlabelled notionals — never attach a currency.
+  - Per-trade syndicate attribution is NOT modelled yet (the trade-
+    syndicate table is a later batch) — say so rather than substituting
+    the tranche object's syndicate list.
+
+examples:
+  - question: What is the trade ID for Manulife on deal 1500009396?
+    request:
+      source: capital_markets_trade
+      dimensions: [trade_id, trade_reference, counterparty_name, order_id]
+      metric: row_count
+      filters:
+        - {field: deal_id, op: eq, value: "1500009396"}
+        - {field: counterparty_name, op: like, value: "%MANULIFE%"}
+      order:
+        - {field: trade_id, dir: asc}
+      limit: 50
+    note: Present trade_id AND trade_reference, both labelled.
+  - question: Total trade size for tranche X of deal Y
+    request:
+      source: capital_markets_trade
+      metric: total_trade_size
+      filters:
+        - {field: deal_id, op: eq, value: "Y"}
+        - {field: tranche_id, op: eq, value: "X"}
+    note: Label the figure "currency not recorded on the trade book".

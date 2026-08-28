@@ -1,0 +1,226 @@
+# ---------------------------------------------------------------------------
+# Governed ontology — HEDGE BOOK object (release 3b, 2026-08-28).
+# One row per hedge order in the DCM new-issue hedge book. Source table
+# OB_HEDGE_ORDER measured 300,741 rows PROD; every row is DCM (the OB world).
+# Keys join the other objects directly: deal_id/tranche_id/order_id are the
+# SAME ids as capital_markets_deal/tranche/order — a hedge's SIBLING is the
+# order it hedges. Entitlement: the product gate applies as everywhere; the
+# feed CLASSIFICATION label is metadata, not a filter (see view-notes).
+# ---------------------------------------------------------------------------
+source: capital_markets_hedge
+version: "1"
+dialect: trino
+
+connection:
+  catalog: bds_dg_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: bds_dg_oraas.dgstream.vw_hedge_order
+
+grain: [product, hedge_order_id]
+
+purpose: >-
+  The DCM HEDGE BOOK: hedge orders attached to deals/tranches/orders —
+  hedge amounts, hedge managers, hedge investors, hedged securities.
+  "Hedge" in the ask routes HERE, never to the order object.
+
+max_limit: 5000
+query_timeout_seconds: 30
+
+how_to_use:
+  - "DCM ONLY. Every row is PRODUCT='DCM'; an ECM-entitled-only caller gets
+     zero rows by entitlement design — do not retry, say hedge data is DCM."
+  - "HEDGE_STATUS vocabulary seen: new, updated, cancelled (lowercase). For
+     'the hedge book' / current-book asks, EXCLUDE cancelled (hedge_status
+     ne 'cancelled') and say you did; include them only when the user asks
+     about cancelled/all hedges. A ne filter drops NULL-status rows —
+     count with is_null when precision matters."
+  - "'Hedges managed by <bank>' = hedge_manager like '%STEM%' (bank NAMES,
+     same value family as billed_by; the CITIGROUP GLOBAL MARKETS stem
+     doctrine applies to Citi)."
+  - "Amounts are NOTIONAL NUMBERS with NO currency column on this object —
+     label totals 'currency not recorded on the hedge book' and never
+     invent a currency. One metric per request; filters are ANDed."
+  - "Scope by deal_id/tranche_id/order_id from the other objects' rows —
+     ids are TEXT, quote them. tranche_id here is the DCM tranche id
+     family; a '5YR tranche' ask resolves the tranche id on
+     capital_markets_tranche FIRST, then filters it here (ids two-step,
+     smaller side first, 4-query budget)."
+
+metrics:
+  hedge_count:
+    column: hedge_order_id
+    aggregation: COUNT_DISTINCT
+    description: Number of distinct hedge orders in scope.
+  investor_count:
+    column: investor_gp_id
+    aggregation: COUNT_DISTINCT
+    description: >-
+      Distinct hedge-book investors in scope ("how many investors are in
+      the hedge book"). Skips NULL ids — disclose if the listing shows
+      unnamed rows.
+  total_hedge_amount:
+    column: hedge_amount
+    aggregation: SUM
+    numeric: true
+    description: >-
+      Total hedge notional in scope. NOT currency-scoped (no currency
+      column) — label it plainly and never attach a currency symbol.
+  max_hedge_amount:
+    column: hedge_amount
+    aggregation: MAX
+    numeric: true
+    description: Largest single hedge notional in scope (superlative rules apply).
+  row_count:
+    column: hedge_order_id
+    aggregation: COUNT
+    description: Raw row count (one row per hedge order after dedupe).
+
+dimensions:
+  product: {column: product, description: "Always 'DCM' on this object."}
+  deal_id: {column: deal_id, description: "Deal id — SAME id family as the deal/tranche/order objects. TEXT, quote it."}
+  tranche_id: {column: tranche_id, description: "Tranche id the hedge attaches to. TEXT."}
+  order_id: {column: order_id, description: "The hedged ORDER's id (the hedge's sibling) — joins capital_markets_order rows. TEXT."}
+  hedge_order_id: {column: hedge_order_id, description: "Unique hedge order id — the drill-down handle; project it in listings. TEXT."}
+  hedge_type: {column: hedge_type, description: "Hedge type (seen: 'hedge'). Open vocabulary."}
+  hedge_source: {column: hedge_source, description: "Who initiated the hedge (seen: 'investor')."}
+  hedge_status: {column: hedge_status, description: "new / updated / cancelled (lowercase). Current-book asks exclude cancelled — see how_to_use."}
+  hedge_manager: {column: hedge_manager, description: "Bank MANAGING the hedge (full names; nullable). 'Hedges managed by X' filters here."}
+  settlement_period: {column: settlement_period, description: "Settlement period label (seen: 'T+1')."}
+  settlement_ts: {column: settlement_ts, description: "Hedge settlement timestamp (sparse — blanks mean not recorded)."}
+  investor_name: {column: investor_name, description: "Hedge investor name — same investor universe as the order object."}
+  investor_gp_id: {column: investor_gp_id, description: "Investor GP id. TEXT, quote it."}
+  investor_lei: {column: investor_lei, description: "Investor LEI (sparse)."}
+  investor_region: {column: investor_region, description: "Investor country name (United States, Japan…) — same semantics as the order object's investor_region."}
+  investor_category: {column: investor_category, description: "Investor type (Asset Managers, Insurers, Hedge funds… — case variants real, match case-insensitively)."}
+  investor_qib_status: {column: investor_qib_status, description: "QIB flag ('false'/'true'/NULL as stored text)."}
+  sales_person: {column: sales_person, description: "Covering salesperson (first + last name; NULL when not recorded)."}
+  hedge_amount: {column: hedge_amount, description: "Hedge notional (NUMBER). No currency scoping exists — label accordingly."}
+  hedge_isn_amount: {column: hedge_isn_amount, description: "IssueNet-reported hedge amount (NUMBER, sparse)."}
+  hedge_weight_type: {column: hedge_weight_type, description: "Sizing basis: oneForOne / durationweighted / amount."}
+  hedge_pct_face: {column: hedge_pct_face, description: "Percent of face (NUMBER; 0/100 common)."}
+  security_isin: {column: security_isin, description: "Hedged security ISIN. TEXT."}
+  security_cusip: {column: security_cusip, description: "Hedged security CUSIP. TEXT."}
+  security_name: {column: security_name, description: "Hedged security name (sparse)."}
+  security_maturity_ts: {column: security_maturity_ts, description: "Hedged security maturity (timestamp; sparse)."}
+  security_coupon: {column: security_coupon, description: "Hedged security coupon (stored as text)."}
+  security_coupon_type: {column: security_coupon_type, description: "Coupon type of the hedged security (seen: 'fixed')."}
+  security_type: {column: security_type, description: "Hedged security type (seen: 'hedge')."}
+  security_issuer: {column: security_issuer, description: "Hedged security issuer (seen: 'UST')."}
+
+filters:
+  product:
+    column: product
+    operators: [eq, in]
+    case_insensitive: true
+    values: ["DCM"]
+    description: Always DCM; the entitlement gate injects/validates this.
+  deal_id:
+    column: deal_id
+    operators: [eq, in]
+    description: TEXT ids — quote, keep leading zeros, max 40 per in-list.
+  tranche_id:
+    column: tranche_id
+    operators: [eq, in]
+    description: TEXT ids.
+  order_id:
+    column: order_id
+    operators: [eq, in]
+    description: TEXT ids — scope hedges to specific orders.
+  hedge_order_id:
+    column: hedge_order_id
+    operators: [eq, in]
+    description: TEXT ids.
+  hedge_status:
+    column: hedge_status
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      new / updated / cancelled. Current-book asks: ne 'cancelled', say so;
+      ne also drops NULL-status rows — count with is_null when it matters.
+  hedge_manager:
+    column: hedge_manager
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Bank names — match with like on the name stem ('%WELLS FARGO%');
+      Citi = the CITIGROUP GLOBAL MARKETS stem. is_null = no manager
+      recorded.
+  investor_name:
+    column: investor_name
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: Contains-match ('%BLACKROCK%') — stored names vary.
+  investor_region:
+    column: investor_region
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Country names (United States, Japan…). ne drops NULLs — disclose.
+  investor_category:
+    column: investor_category
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Investor types (Asset Managers, Insurers…) — case variants, match case-insensitively.
+  sales_person:
+    column: sales_person
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Salesperson name — contains-match; sparse, is_null = not recorded.
+  security_isin:
+    column: security_isin
+    operators: [eq, in, is_null, is_not_null]
+    description: Exact ISIN. TEXT.
+  security_cusip:
+    column: security_cusip
+    operators: [eq, in, is_null, is_not_null]
+    description: Exact CUSIP. TEXT.
+  settlement_ts:
+    column: settlement_ts
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: Sparse — a date bound reads only rows carrying a settlement.
+  hedge_amount:
+    column: hedge_amount
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: Notional threshold — remember there is no currency scoping.
+
+usage_notes:
+  - One metric per request; filters are ANDed; there are no joins — ids
+    ferry between objects (smaller side first, 4-query budget).
+  - EVERY ranking or paged request ends its order with hedge_order_id.
+  - Superlative asks follow the limit-3 tie doctrine.
+  - Amounts are unlabelled notionals — never attach a currency.
+  - This is the DCM new-issue hedge book, not a market-risk or trading
+    hedge system — say so when an ask assumes broader hedging data.
+
+examples:
+  - question: How many investors are in the hedge book for deal 1500009396?
+    request:
+      source: capital_markets_hedge
+      metric: investor_count
+      filters:
+        - {field: deal_id, op: eq, value: "1500009396"}
+        - {field: hedge_status, op: ne, value: "cancelled"}
+    note: Disclose that cancelled hedges were excluded.
+  - question: Total hedge amount for tranche X of deal Y
+    request:
+      source: capital_markets_hedge
+      metric: total_hedge_amount
+      filters:
+        - {field: deal_id, op: eq, value: "Y"}
+        - {field: tranche_id, op: eq, value: "X"}
+        - {field: hedge_status, op: ne, value: "cancelled"}
+    note: Label the figure "currency not recorded on the hedge book".
+  - question: How many investors' hedges are managed by Wells Fargo?
+    request:
+      source: capital_markets_hedge
+      metric: investor_count
+      filters:
+        - {field: hedge_manager, op: like, value: "%WELLS FARGO%"}
+        - {field: hedge_status, op: ne, value: "cancelled"}

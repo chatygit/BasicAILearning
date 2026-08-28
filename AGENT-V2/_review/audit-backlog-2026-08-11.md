@@ -626,3 +626,23 @@ lifecycle status the ECM branches filter. No row filter; exposure hold
 LIFTED — hedge/trade ontology objects join the post-deploy config round. Deferred to a later batch: ECONOMIC_*
 money semantics, OB_ORDER_TRADE_SYNDICATE, FROM/TO account columns,
 sales-override + comments blocks.
+
+### RELEASE 3 CONFIGS APPLIED (2026-08-28, user: "start with all changes")
+Two NEW ontology objects: capital_markets_hedge (vw_hedge_order; metrics
+hedge/investor counts, total/max hedge amount; hedge_manager doctrine,
+cancelled-excluded-by-default, no-currency labelling) and
+capital_markets_trade (vw_trade_detail; trade_id + trade_reference,
+counterparties, sizes; syndicate-per-trade NOT modelled yet). Existing
+objects: transaction_id on deal/tranche/order (forward-populated DCM
+doctrine), issuer_lei ECM on deal/tranche, investor_region +
+investor_category DE-SCOPED to both products (test example switched to
+investor_category_key + new de-scoping regression test), sales_person
+(DCM), syndicate_member_name DCM = member list. SKILL: six objects, two
+routing rows, transaction-id addressing row, ECM/DCM-only lists rebuilt
+(also fixed stale deal_region entry), DCM-members flip. agents.yaml: two
+routing bullets + order-line extension. Gate: 2 pins retired, +5 product
+pins, [release3] block (7 checks). Bars 1212/206/110.
+ENTITLEMENT RIDER: if the team narrows hedge access, PULL the two new
+objects from the config push — nothing else depends on them.
+DEPLOY ORDER: release-3 views FIRST (all six files), deploy-check
+1n-1t + new-view checks, THEN MCP (ontology) + skill + agents.

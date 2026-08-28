@@ -255,13 +255,15 @@ dimensions:
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field)."}
   currency: {column: currency, description: "Pricing/denomination currency (scalar at this grain). Required alongside any DCM money figure. Since release 2 the ECM value carries a global name fallback, matching the deal list; a residual NULL means genuinely not recorded."}
   settlement_ts: {column: settlement_ts, products: ["DCM"], description: "DCM. The tranche's OWN settlement timestamp (release 2) — 'tranches settling in <period>' filters here. NULL on ECM at this grain: ECM settlement asks go to the deal object's settlement_ts."}
+  transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: origination transaction id — FORWARD-POPULATED (recent Ipreo deals; NULL = predates the link). TEXT."}
+  issuer_lei: {column: issuer_lei, products: ["ECM"], description: "ECM (release 3, ~83%). Issuer LEI. NULL on DCM — no source column; offer GFCID/ticker instead."}
   tranche_region: {column: tranche_region, description: "Tranche target region (NAM/EMEA/APAC). This is the TRANCHE's market, not the investor's geography (that lives on capital_markets_order). ~1 in 5 DCM tranches carry one; ECM effectively empty."}
   # --- ECM-only ---
   product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the instrument CLASS ('common stock', 'convertible') use equity_type — now on THIS object too."}
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…) — denormalized from the deal (round 2), so class asks ranked by tranche metrics are ONE request here. Same values and rules as the deal object's equity_type. NULL on DCM."}
   exchange: {column: exchange, products: ["ECM"], description: "ECM. Listing venue — holds FULL venue names AND sometimes the abbreviation itself ('NYSE'); match BOTH tokens with like (full name first, abbreviation on a 0-row retry), never equality. A dual-listed tranche may show only one venue."}
   # --- syndicate (aligned pipe lists) ---
-  syndicate_member_name: {column: syndicate_member_name, description: "ECM: pipe-delimited syndicate banks, ordered the same way as syndicate_role/broker_code/bnd_broker (pair by position only when the element counts match). A member token may carry an inline '(true)'/'(false)' suffix duplicating the B&D flag — never filter on it, and STRIP it when displaying the name. DCM: a SINGLE bank string which IS the B&D bank, not the syndicate."}
+  syndicate_member_name: {column: syndicate_member_name, description: "ECM: pipe-delimited syndicate banks, ordered the same way as syndicate_role/broker_code/bnd_broker (pair by position only when the element counts match). A member token may carry an inline '(true)'/'(false)' suffix duplicating the B&D flag — never filter on it, and STRIP it when displaying the name. DCM (release 3): the FULL deduped member pipe list where membership exists, falling back to the single B&D bank on older tranches — 'syndicate members of a DCM transaction' is now answerable; DCM roles/broker codes remain NULL (unmeasured), so members come WITHOUT role attribution on DCM."}
   syndicate_role: {column: syndicate_role, products: ["ECM"], description: "ECM. Pipe-delimited roles, aligned with syndicate_member_name. NULL on DCM. Display only — never attribute a role to a bank by matching lists."}
   broker_code: {column: broker_code, products: ["ECM"], description: "ECM. Pipe-delimited broker codes, aligned with syndicate_member_name. NULL on DCM."}
   bnd_broker: {column: bnd_broker, description: "ECM: pipe list of 'true'/'false', one per syndicate member, aligned with the member list; no member name is embedded in it. DCM: a SCALAR computed as 'is the B&D bank Citigroup Global', with NO null branch — so 'false' covers BOTH 'another bank billed' AND 'no B&D bank recorded at all', and it is never NULL on DCM. Split those two cases with bnd_bank is_null. Legacy either way; prefer bnd_bank."}
@@ -350,6 +352,21 @@ filters:
       genuinely unrecorded, and a ne/not_in predicate silently drops those
       rows — count them with is_null and disclose the number. 'RMB' means CNY
       and CNH: say which you used.
+  transaction_id:
+    column: transaction_id
+    operators: [eq, in, like, is_null, is_not_null]
+    description: >-
+      Transaction-id addressing. ECM = deal_id. DCM = origination
+      transaction id, FORWARD-POPULATED (recent Ipreo deals only) — 0 rows
+      on a DCM id may mean the deal predates the link: say so and offer
+      deal_id addressing. TEXT.
+  issuer_lei:
+    column: issuer_lei
+    products: ["ECM"]
+    operators: [eq, in, like, is_null, is_not_null]
+    description: >-
+      ECM (release 3, ~83%). Issuer LEI — exact when pasted. NULL on DCM
+      (no source column); offer GFCID/ticker.
   settlement_ts:
     column: settlement_ts
     products: ["DCM"]

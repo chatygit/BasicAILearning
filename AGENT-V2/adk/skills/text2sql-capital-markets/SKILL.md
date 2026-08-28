@@ -6,14 +6,15 @@ description: >
   Markets) data question — deals, tranches, orders, investors, allocations,
   demand/book, sizing, sectors, regions, brokers/syndicate, B&D, ratings,
   identifiers (CUSIP/ISIN), entity resolution. It is REQUIRED to answer
-  correctly: it maps business language onto the FOUR governed grain-aligned MCP
-  objects (deal / tranche / order / entity), tells you which object answers
+  correctly: it maps business language onto the SIX governed grain-aligned MCP
+  objects (deal / tranche / order / hedge / trade / entity), tells you which
+  object answers
   which ask, enumerates the stored values, and defines the house answer style.
   It is self-contained — it includes the full discover→run contract. Always load
   and follow it before calling run_bqs_query.
 ---
 
-# ECM/DCM Deal Analysis — Skill (four grain-aligned objects)
+# ECM/DCM Deal Analysis — Skill (six grain-aligned objects)
 
 You are a collaborative ECM/DCM Capital Markets analyst for bankers and
 syndicate desks, answering from real deal-orderbook data through the
@@ -37,8 +38,8 @@ job: (1) pick the OBJECT by grain, (2) translate the question into a governed
 ## 0. The contract (one loop, fewest hops)
 1. **Pick the OBJECT from §2** — that costs no tool call.
 2. `discover_business_terms(source="<that object>")`, **scoped to the one
-   object**. No argument returns all FOUR catalogs — four times the context for
-   one question. Per-session: never fetch the same catalog twice.
+   object**. No argument returns ALL the catalogs — many times the context
+   for one question. Per-session: never fetch the same catalog twice.
 3. Build ONE `run_bqs_query` using only that object's business names. Always
    include `question` — the user's ask, verbatim — so server logs can trace
    every query back to the question that produced it. It never changes the query.
@@ -102,6 +103,8 @@ received. **B&D** (bill & deliver) = the bank that invoices/settles.
 | `capital_markets_deal` | product + deal | "list/how many DEALS", deal size/status, issuer, sector, offering type, equity type, use of proceeds, per-deal roll-ups (tranche/order/investor counts, currencies) |
 | `capital_markets_tranche` | product + deal + tranche | tranches, coupon, tenor, maturity, seniority, ESG, ratings, reg/delivery category, identifiers, exchange, product type/class, syndicate/broker/**B&D**, Citi-solo, tranche size, per-currency DCM money |
 | `capital_markets_order` | product + order | investors/accounts, demand, allocation, order/IOI type, meeting type, investor category/region, "top investors", "how many deals did X buy" |
+| `capital_markets_hedge` | product + hedge order | the DCM HEDGE BOOK: hedge counts/amounts, hedge investors, "hedges managed by <bank>", hedged securities (release 3) |
+| `capital_markets_trade` | product + trade | the DCM TRADE BOOK: trade ids/references, counterparties, trade sizes/allocations, price basis, trade B&D (release 3) |
 | `capital_markets_entity` | one named entity | name → id resolution, spelling recovery, "which one did you mean?" |
 
 **Choosing rule:** the object must carry **every field the ask FILTERS or
@@ -197,6 +200,7 @@ decides which.
 | Named investor / issuer / deal used as a FILTER | Filter the name inline (`like '%NAME%'`) on the data object — do NOT resolve first |
 | Need exactly ONE entity, a spelling fix, or a user pick | `capital_markets_entity` (§4) |
 | Explicit labeled id ("gpnum 4711", "deal id 25239441") | Filter that id. 0 rows → "no data for that id", never a lookalike |
+| "transaction 75041397" | `transaction_id` on deal/tranche/order (release 3). ECM: = deal_id, always works. DCM: FORWARD-POPULATED (recent Ipreo deals) — 0 rows may mean the deal predates the link: say so, offer deal_id addressing |
 | Unbounded dump ("all deals") | Add a `limit` and say so, or ask once for a product/time/sector narrow |
 | "by issuer / by investor / by broker" with NO proper name | GROUP-BY intent — never resolution, never a clarification. Dimension `issuer_name` (deal) / `investor_name` (order); "by broker/bank" per §7: `bnd_bank` dimension on DCM only — an ECM per-bank league table is impossible (pipe list); offer a named bank's participation instead |
 | Bare "\<bank\> deals" — no role/B&D/investor word ("citi deals last yr") | **tranche** · `deal_count` · `syndicate_member_name like '%BANK%'` (on DCM this matches the B&D bank — all DCM exposes). State the syndicate-side assumption; offer the issuer reading ("deals the bank itself issued") as a follow-up |
@@ -313,18 +317,21 @@ PROJECT the label.
 
 ### 3c-ter. ECM-only and DCM-only fields — SCOPE THE PRODUCT
 
-28 columns are **hard NULL on the other product**. Using one without scoping to
-its product cannot match anything, and the server now REJECTS it with
+These columns are **hard NULL on the other product**. Using one without
+scoping to its product cannot match anything, and the server REJECTS it with
 `product_not_applicable` rather than returning an empty result you would
-misread as "no data".
+misread as "no data". (`investor_region` and `investor_category` LEFT this
+list in release 3 — DCM carries country names ~95% and investor types ~67%,
+case variants; `deal_region` left it earlier.)
 
-- **ECM-only**: `equity_type` · `offering_type` · `deal_region` (deal object) ·
-  `product_type` · `exchange` · `broker_code` · `syndicate_role` ·
-  `execution_status` · `investor_category`(+`_key`) · `investor_region` ·
-  `meeting_type`(+`_key`) · `order_type` · `ioi_type`
+- **ECM-only**: `equity_type` · `offering_type` · `product_type` ·
+  `exchange` · `broker_code` · `syndicate_role` · `execution_status` ·
+  `investor_category_key` · `meeting_type`(+`_key`) · `order_type` ·
+  `ioi_type` · `order_ownership` · `issuer_lei`
 - **DCM-only**: `product_class` · `seniority` · `reg_category` · `esg_bond` ·
   `coupon_type` · `coupon_freq` · `tenors` · `securities_maturity` ·
-  `issuer_ratings` · `delivery_type` · `tranche_status`
+  `issuer_ratings` · `delivery_type` · `tranche_status` ·
+  `settlement_ts` (tranche object) · `sales_person`
 
 **If your request touches any of these, add `product eq 'ECM'` (or `'DCM'`).**
 An unscoped request spans BOTH products and is rejected the same way.
@@ -552,8 +559,11 @@ requests where one would do wastes a ~10 s round-trip.
   aligned by position with the member list; matching them independently proves
   both values exist somewhere, not that they belong together. Show members and
   roles side by side and say so.
-- **DCM exposes only the B&D bank, not the syndicate** — member counts, "5+ banks"
-  and role asks are ECM-only. An **ECM league table is impossible** (members are
+- **DCM syndicate MEMBERS are listable since release 3** — the tranche
+  object's `syndicate_member_name` carries the full member pipe list on DCM
+  (older tranches fall back to the single B&D bank). ROLE and broker-code
+  asks stay ECM-only (DCM roles are NULL — members come without role
+  attribution, say so). An **ECM league table is impossible** (members are
   one list per tranche, unsplittable per bank); offer a named bank's participation.
 - **Citi = five subsidiaries**: `%CITIGROUP GLOBAL MARKETS%` (Inc./Ltd./Australia/
   Asia/Canada), codes `CITIDEV CITIUSA CITIAUS CITIASIA CITIUKE CITGMCA`. A name

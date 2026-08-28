@@ -127,17 +127,20 @@ def test_ecm_only_field_on_dcm_is_rejected_not_empty():
     if not _deps():
         SKIPPED.append("product applicability (pydantic/yaml not installed)")
         return
+    # investor_category was this test's example until release 3 de-scoped
+    # it (DCM carries investor types now). investor_category_key stays
+    # ECM-only — the guard itself is unchanged.
     e = _expect_code(
         {
             "source": "capital_markets_order",
             "metric": "order_count",
-            "dimensions": ["investor_category"],
+            "dimensions": ["investor_category_key"],
             "filters": [{"field": "product", "op": "eq", "value": "DCM"}],
         },
         "product_not_applicable",
-        "investor_category is hard NULL on every DCM row",
+        "investor_category_key is hard NULL on every DCM row",
     )
-    assert "investor_category" in e.message
+    assert "investor_category_key" in e.message
 
 
 def test_same_field_on_ecm_is_accepted():
@@ -147,8 +150,23 @@ def test_same_field_on_ecm_is_accepted():
     plan = _plan({
         "source": "capital_markets_order",
         "metric": "order_count",
-        "dimensions": ["investor_category"],
+        "dimensions": ["investor_category_key"],
         "filters": [{"field": "product", "op": "eq", "value": "ECM"}],
+    })
+    assert plan.metric.business_name == "order_count"
+
+
+def test_descoped_field_on_dcm_is_now_accepted():
+    # Release 3: investor_category works on BOTH products — the old
+    # rejection must NOT fire (this is the de-scoping's regression guard).
+    if not _deps():
+        SKIPPED.append("release-3 de-scoping (pydantic/yaml not installed)")
+        return
+    plan = _plan({
+        "source": "capital_markets_order",
+        "metric": "order_count",
+        "dimensions": ["investor_category"],
+        "filters": [{"field": "product", "op": "eq", "value": "DCM"}],
     })
     assert plan.metric.business_name == "order_count"
 
@@ -327,6 +345,7 @@ CASES = [
     ("bare offset is refused", test_offset_with_nothing_to_sort_is_refused),
     ("ECM-only field on DCM rejected", test_ecm_only_field_on_dcm_is_rejected_not_empty),
     ("same field on ECM accepted", test_same_field_on_ecm_is_accepted),
+    ("release-3 de-scoped field on DCM accepted", test_descoped_field_on_dcm_is_now_accepted),
     ("partition_by plans and compiles", test_partition_by_plans_and_compiles),
     ("partition explicit order sorts globally", test_partition_with_explicit_order_sorts_survivors_globally),
     ("partition_by misuse rejected", test_partition_by_misuse_is_rejected),

@@ -266,6 +266,8 @@ dimensions:
   first_priced: {column: first_priced, description: "Earliest tranche pricing timestamp on the deal (MIN). Equals last_priced on a single-tranche deal — present one date, not two."}
   last_priced: {column: last_priced, description: "Latest tranche pricing timestamp on the deal (MAX) and the default deal date field. Equals first_priced on a single-tranche deal."}
   settlement_ts: {column: settlement_ts, description: "Settlement timestamp (deal grain = MAX across tranches, i.e. the LAST settlement). Partial coverage (QA 2026-08-18: ~66% of DCM deals, ~26% of ECM) — blanks mean 'not captured'. 'Deals settling in <period>' filters here; per-TRANCHE settlement lives on the tranche object (DCM, release 2); a bare 'Settled deals' is a deal_status ask."}
+  transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: origination transaction id — FORWARD-POPULATED (recent Ipreo deals; NULL on history means 'predates the link', not 'no transaction'). TEXT. 'Transaction 75041397' addressing filters here."}
+  issuer_lei: {column: issuer_lei, products: ["ECM"], description: "ECM (release 3, ~83% populated). Issuer LEI. NULL on every DCM row — no DCM issuer LEI exists at source; a DCM issuer-LEI ask is honestly unanswerable (offer GFCID/ticker)."}
 
 # -------------------------------- FILTERS ----------------------------------
 filters:
@@ -566,6 +568,22 @@ filters:
       bare 'Settled deals' (no date window) is still a deal_status ask, not
       a date ask. Trailing windows need BOTH bounds (gte start, lt
       tomorrow-midnight).
+  transaction_id:
+    column: transaction_id
+    operators: [eq, in, like, is_null, is_not_null]
+    description: >-
+      Transaction-id addressing ("transaction 75041397"). ECM = deal_id.
+      DCM = origination transaction id, FORWARD-POPULATED (recent
+      Ipreo-vintage deals only) — 0 rows on a DCM id may mean the deal
+      predates the link: say so and offer deal_id addressing. TEXT.
+  issuer_lei:
+    column: issuer_lei
+    products: ["ECM"]
+    operators: [eq, in, like, is_null, is_not_null]
+    description: >-
+      ECM (release 3, ~83% populated). Issuer Legal Entity Identifier —
+      exact match when the user pastes one. NULL on DCM (no source
+      column): a DCM issuer-LEI ask is unanswerable — offer GFCID/ticker.
 
 unsupported_intents:
   announced_date:

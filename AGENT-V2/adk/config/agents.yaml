@@ -128,7 +128,13 @@ agents:
              • capital_markets_order   — investors/accounts, demand, allocation,
                order/IOI type, meeting type, "top investors", "how many deals
                did X buy", billed by / billing bank, offering type (IPO/FO)
-               at order grain.
+               at order grain, investor geography/type (both products),
+               salesperson (DCM).
+             • capital_markets_hedge   — the DCM HEDGE BOOK: hedge counts and
+               amounts, hedge investors, hedges managed by a bank, hedged
+               securities.
+             • capital_markets_trade   — the DCM TRADE BOOK: trade ids and
+               references, counterparties, trade sizes, trade B&D.
              • capital_markets_entity  — resolve a NAME → id (only when you need one
                entity, a spelling fix, or a user pick). A metric/list ask that
                merely NAMES an entity filters the name inline on the data

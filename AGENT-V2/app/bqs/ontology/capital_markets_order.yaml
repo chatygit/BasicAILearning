@@ -75,11 +75,14 @@ how_to_use:
   - "ALWAYS set 'product'. ECM allocations/demand are SHARE COUNTS; DCM order
      amounts are notional MONEY — scope one 'currency' or group by 'currency' for
      DCM money totals. State the unit in the answer."
-  - "PRODUCT APPLICABILITY IS A LOOKUP, NOT A JUDGEMENT. Ten fields are
+  - "PRODUCT APPLICABILITY IS A LOOKUP, NOT A JUDGEMENT. Eight fields are
      ECM-ONLY — the view hard-casts them to NULL on every DCM row, so the list is
-     complete and closed: investor_region, investor_category,
-     investor_category_key, meeting_type, meeting_type_key, order_type, ioi_type,
-     offering_type, equity_type, order_ownership.
+     complete and closed: investor_category_key, meeting_type,
+     meeting_type_key, order_type, ioi_type,
+     offering_type, equity_type, order_ownership. (investor_region and
+     investor_category LEFT this list in release 3 — DCM carries country
+     names ~95% and investor types ~67%.) sales_person is the one
+     DCM-only field (NULL on ECM).
      Everything else works on BOTH products: deal_id, deal_name, tranche_id,
      tranche_name, order_id, investor_name, investor_id, order_allocation,
      order_demand_qty, order_amount, currency, pricing_date, billed_by (the
@@ -302,8 +305,8 @@ dimensions:
   order_id: {column: order_id, description: "Unique order id — the unique key at this grain, on BOTH products. Use it as the final sort key on every paged listing."}
   investor_name: {column: investor_name, description: "Investor/account name (display). NOT unique — several ids can share a name, and one investor is spelled several ways."}
   investor_id: {column: investor_gp_id, description: "Investor GP id (investor-side key). TEXT — quote it, leading zeros matter. NULLABLE at source: grouping by it silently drops those orders."}
-  investor_region: {column: investor_region, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Investor's own geography — never the deal's target region. Mixes full names and codes ('United States' and 'US')."}
-  investor_category: {column: investor_category, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Investor category (Long Only, Hedge Fund, Asset Manager…). This is CATEGORY — 'classification' is a different, untracked taxonomy; see unsupported_intents."}
+  investor_region: {column: investor_region, description: "Investor's own geography — never the deal's target region. BOTH products since release 3: ECM mixes full names and codes ('United States' and 'US'); DCM is country NAMES (~95% populated). NULL = not recorded."}
+  investor_category: {column: investor_category, description: "Investor category, BOTH products since release 3. ECM vocabulary: Long Only, Hedge Fund, Asset Manager… DCM vocabulary: Asset managers, Banks, Insurers, Hedge funds, Corporates, Pension funds, Others (~67% populated, CASE VARIANTS real — match case-insensitively). This is CATEGORY — 'classification' is a different, untracked taxonomy; see unsupported_intents."}
   investor_category_key: {column: investor_category_key, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Coded investor category key (LONG_ONLY, HEDGE_FUND, OUTRIGHT…). Display uses investor_category, not this."}
   meeting_type: {column: meeting_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Investor/issuer meeting type. USER WORDS MAP TO THE STORED VALUE: '1x1', '1-1', 'one-on-one', 'one to one', 'One-to-One' ALL mean the stored literal '1:1' (with a COLON) — sending the user's spelling verbatim returns zero rows. PREFER meeting_type_key for filtering ('ONE_TO_ONE'): it has no punctuation to get wrong. The stored literal is '1:1' (not 'One-to-One'); 'No Meeting' is also a value. There is no stored 'roadshow' value — reading 'roadshow'/'met the issuer' as 'anything but No Meeting' is an INTERPRETATION, so say so in the answer."}
   meeting_type_key: {column: meeting_type_key, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Coded meeting type (NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING). 'One-to-One' exists ONLY here — the displayed value is '1:1'."}
@@ -315,6 +318,8 @@ dimensions:
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Deal-level offering type denormalized to order grain — only 'IPO' and 'FO' stored. Makes 'investors in IPOs' ONE request on this object (no deal-id ferry). NULL on DCM."}
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS denormalized to order grain (release 2) — 'investor X in convertibles' is ONE request here now. Same values/rules as the deal object's equity_type; match class words with like. NULL on DCM."}
   order_ownership: {column: order_ownership, products: ["ECM"], description: "ECM. HOME = our (owned) book, AWAY = orders seen away. BOTH are in every total since release 2 (before it, every figure was HOME-only — ECM population grew ~45% at the flip). 'Our orders'/'Citi's book' = HOME. NULL = flag not stored. NULL on DCM (no such flag)."}
+  sales_person: {column: sales_person, products: ["DCM"], description: "DCM (release 3; NULL on ECM until its sales columns are measured). Covering salesperson, first + last name (~30% populated). 'Orders covered by <person>' filters here; NULL = not recorded."}
+  transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: the origination transaction id — FORWARD-POPULATED (recent Ipreo deals only; NULL on history) — a NULL means the deal predates the link, not 'no transaction'. TEXT, quote it. 'Transaction 75041397' asks filter here."}
   order_amount: {column: order_amount, description: "Order/indication amount. DCM: the order amount (money). ECM: the HIGHEST limit point on that order's IOI curve — label it 'highest IOI limit', never 'order size'."}
   currency: {column: currency, description: "Pricing currency (scalar). Required alongside any DCM money figure. Can be NULL on ECM when the order's tranche id matches no tranche."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field). NULL on ECM orders whose tranche id matches no tranche — those rows drop out of every date-bounded query."}
@@ -385,12 +390,12 @@ filters:
     description: "Filter by deal name — like '%NAME%'. Project it too, or the server pays a second database round-trip to disambiguate."
   investor_region:
     column: investor_region
-    products: ["ECM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
     description: >-
-      ECM-ONLY (hard NULL on DCM). Investor geography — mixes full names and
+      BOTH products since release 3 (DCM = country names, ~95% populated —
+      the old ECM-only rule is DEAD). Investor geography — ECM mixes full names and
       codes. USA → in ['United States','US']; NEVER like '%US%' (it matches
       RUSSIA, AUSTRIA and AUSTRALIA). "Non-USA" is not_in on that same pair, not
       like '%NON%'. Codes seen: US UK JP EU AP LA CA AZ CEEMEA (also stored
@@ -403,12 +408,15 @@ filters:
       the value list above first; if you must probe, probe with ONE spelling.
   investor_category:
     column: investor_category
-    products: ["ECM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
     description: >-
-      ECM-ONLY (hard NULL on DCM). Investor category. The vocabulary carried
+      BOTH products since release 3. DCM vocabulary (~67% populated): Asset
+      managers · Banks · Insurers · Hedge funds · Corporates · Pension funds
+      · Others — CASE VARIANTS are real stored values, match
+      case-insensitively and merge variants before a breakdown. The ECM
+      vocabulary carried
       over from v1 is Outright · Long Only · Hedge Fund · Long/Hedge ·
       Outright/Hedge · Central Bank · Official Institution · Insurance/Pension ·
       Asset Manager · Corporate Treasury · Bank Treasury · Private Bank ·
@@ -572,6 +580,27 @@ filters:
       NEVER OR with the tranche object's product_type. Denormalized in
       release 2: "how much did <investor> put into <class> deals" is ONE
       request HERE — the deal-id two-step for equity_type is dead.
+  sales_person:
+    column: sales_person
+    products: ["DCM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      DCM (release 3). Covering salesperson name — contains-match
+      ('%KEDIA%'); ~30% populated, so disclose that a salesperson filter
+      reads only covered orders (is_null counts the rest). NULL on every
+      ECM row until the ECM sales columns are measured.
+  transaction_id:
+    column: transaction_id
+    operators: [eq, in, like, is_null, is_not_null]
+    description: >-
+      Transaction id addressing ("transaction 75041397"). ECM = deal_id
+      (always populated). DCM = origination transaction id,
+      FORWARD-POPULATED — recent Ipreo-vintage deals only; a NULL means
+      the deal predates the link. When a transaction-id filter returns 0
+      rows on DCM, say the id may predate the transaction link and offer
+      deal_id addressing instead. TEXT — quote it.
   order_ownership:
     column: order_ownership
     products: ["ECM"]
@@ -663,11 +692,12 @@ usage_notes:
     max_demand, total_order_amount, max_order_amount. Every OTHER metric here —
     order_count, investor_count, deal_count, tranche_count, row_count — is
     unit-free; drop the filter on those only if you put 'product' in dimensions."
-  - "Ten fields are ECM-only and NULL on every DCM row: investor_region,
-     investor_category, investor_category_key, meeting_type, meeting_type_key,
+  - "Eight fields are ECM-only and NULL on every DCM row:
+     investor_category_key, meeting_type, meeting_type_key,
      order_type, ioi_type, offering_type, equity_type, order_ownership. Do not
      run a knowably-empty query — refuse the combination and offer the ECM
-     version or a both-product field."
+     version or a both-product field. investor_region and investor_category
+     work on BOTH products since release 3; sales_person is DCM-only."
   - "ALL ECM figures cover the FULL order book (home + away) since release 2 —
      before it, everything was HOME-only and the population grew ~45% at the
      flip; never read a pre/post-release comparison as order growth. 'Our

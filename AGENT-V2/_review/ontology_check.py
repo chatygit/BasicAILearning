@@ -1638,9 +1638,11 @@ _PRODUCT_PINS = [
     # measured 8,260/46,931 QA deals), so the declaration was deleted ON
     # PURPOSE. The [round3] pins below guard the replacement doctrine.
     ("capital_markets_deal.yaml", "execution_status", "ECM"),
-    ("capital_markets_order.yaml", "investor_category", "ECM"),
+    # (order, investor_region/investor_category, ECM) RETIRED 2026-08-28:
+    # release 3 fills both on DCM (COUNTRY_NAME ~95%, TYPE ~67%) — the
+    # declarations were deleted ON PURPOSE; [release3] pins below guard the
+    # replacement doctrine. investor_category_key STAYS ECM-only.
     ("capital_markets_order.yaml", "investor_category_key", "ECM"),
-    ("capital_markets_order.yaml", "investor_region", "ECM"),
     ("capital_markets_order.yaml", "meeting_type", "ECM"),
     ("capital_markets_order.yaml", "meeting_type_key", "ECM"),
     ("capital_markets_order.yaml", "order_type", "ECM"),
@@ -1650,6 +1652,9 @@ _PRODUCT_PINS = [
     ("capital_markets_order.yaml", "offering_type", "ECM"),
     ("capital_markets_order.yaml", "equity_type", "ECM"),
     ("capital_markets_order.yaml", "order_ownership", "ECM"),
+    ("capital_markets_order.yaml", "sales_person", "DCM"),
+    ("capital_markets_deal.yaml", "issuer_lei", "ECM"),
+    ("capital_markets_tranche.yaml", "issuer_lei", "ECM"),
     ("capital_markets_tranche.yaml", "settlement_ts", "DCM"),
     ("capital_markets_tranche.yaml", "exchange", "ECM"),
     ("capital_markets_tranche.yaml", "syndicate_role", "ECM"),
@@ -1790,6 +1795,34 @@ check(has(SKILL, "BY THE TIE COUNT")
       "2026-08-21: 100 orders share one allocation) — the agent names an "
       "arbitrary 'top' from a uniform field instead of reporting the "
       "uniformity")
+# RELEASE 3 (2026-08-28): two NEW ontology objects + the DCM field wave.
+# Losing any of these strands deployed view columns or re-teaches dead
+# refusals ("geography not available for DCM", "no transaction id").
+_HEDGE = ROOT / "app" / "bqs" / "ontology" / "capital_markets_hedge.yaml"
+_TRADE = ROOT / "app" / "bqs" / "ontology" / "capital_markets_trade.yaml"
+check(_HEDGE.exists() and has(_HEDGE, "hedge_manager")
+      and has(_HEDGE, "investor_count"),
+      "[release3] capital_markets_hedge.yaml missing/gutted — hedge-book "
+      "prompts (count/amount/managed-by) fall back to refusals")
+check(_TRADE.exists() and has(_TRADE, "trade_reference")
+      and has(_TRADE, "counterparty_name"),
+      "[release3] capital_markets_trade.yaml missing/gutted — trade-id "
+      "asks fall back to refusals")
+check(has(ORDER, "BOTH products since release 3"),
+      "[release3] order yaml: the investor_region/category de-scoping "
+      "prose is gone — the agent re-learns 'geography not available for "
+      "DCM' while the DCM columns sit populated")
+check(has(DEAL, "transaction_id:") and has(TRANCHE, "transaction_id:")
+      and has(ORDER, "transaction_id:"),
+      "[release3] transaction_id is not declared on all three data "
+      "objects — 'transaction 75041397' addressing breaks")
+check(has(SKILL, "capital_markets_hedge") and has(SKILL, "capital_markets_trade")
+      and has(SKILL, "FORWARD-POPULATED"),
+      "[release3] SKILL.md: hedge/trade routing rows or the "
+      "forward-populated transaction-id doctrine are gone")
+check(has(SKILL, "DCM syndicate MEMBERS are listable"),
+      "[release3] SKILL.md: the DCM syndicate-members flip is gone — the "
+      "agent refuses member asks the tranche view now answers")
 check(has(SKILL, "two-step is MANDATORY")
       and has(SKILL, "ids two-step IS the supported answer")
       and has(SKILL, "SMALLER side")

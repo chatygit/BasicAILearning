@@ -438,9 +438,14 @@ Document doc = dBuilder.parse(inputStream);
 
 **Q:** What are the HTTP parameters necessary to upload/download a file? (header says "upload"; body describes a FileDownloadServlet download — go with download)
 
-**Best guess: `directory,filename`** (folder + file, matching "download a file in the application's directory").
+**ANSWER (confirmed): `path,file`**
 
-Fallback order: `path,filename` / `directory,file` / `path,file` / `filename`. Exact names are the `request.getParameter("...")` literals in FileDownloadServlet.java — confirm via source or by probing the endpoint after "Show systems".
+Discovered by probing the endpoint: `?path=test` → "File and path cannot be null" (file missing); `?path=test&file=test` → "Incorrect path /var/lib/tomcat9" (both params accepted, base dir leaked). So the two params are `path` and `file`.
+
+Exploit half: `path` is validated against a base, `file` is unsanitized → directory traversal:
+`curl -si "$T/FileDownloadServlet?path=/var/lib/tomcat9&file=../../../etc/passwd"`
+
+**Install path of the web application:** `/var/lib/tomcat9` (leaked by the "Incorrect path /var/lib/tomcat9" error — Tomcat 9 CATALINA_BASE). Fallback if they want the deployed app dir: `/var/lib/tomcat9/webapps/ROOT`.
 
 ---
 
