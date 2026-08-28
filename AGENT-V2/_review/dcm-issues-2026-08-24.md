@@ -79,3 +79,21 @@ doctrine + data-team ask.
 Most look like the deployed skill lagging the 2026-08-21 rules
 (zero-claim, grain-collision, disclosure). RETEST after the release-2
 skill deploy; pull debug traces for any that still fail.
+
+### D2 update — V1-V4 verdicts (2026-08-27): EVERYTHING EXISTS AT SOURCE
+| Concept | Verdict |
+|---|---|
+| Hedge book | OB_DCM_HEDGE_ORDER/TRADE exist — NEW-VIEW scope |
+| Trade book (trade id, syndicate) | OB_DCM_ORDER_TRADE(_SYNDICATE) exist — NEW-VIEW scope |
+| Salesperson | OB_INVESTOR_SALES + OB_ORDER.SALES_ID/SOEID/names |
+| Firm accounts | VG_BCOSMOS_CUSTOMER/GENERAL_ACCOUNT |
+| Issuer LEI | ECM: OPUS_ECM_TRANSACTION.ISSUER_LEID (column add). DCM: none found — honest refusal + data-team ask |
+| DCM syndicate members | 376,942 rows, 100% DCM-keyed — column/view add |
+| DCM investor geography | OB_ORDER COUNTRY/REGION/GEOGRAPHY — our "not available for DCM" is a VIEW placeholder, not data absence |
+| DCM classification/QIB/alloc lifecycle | all on OB_ORDER (82 cols; we read 7) |
+P-series population queries staged in _checks/_dcm-books-check.sql.
+Design note: hedge/trade books are NEW GRAINS (likely new views), not
+column adds — needs a design pass after P-series lands. The ten-NULL-
+fields refusal doctrine stays until views change, but its wording should
+say "not available in this dataset", never "not tracked" — the source
+tracks it.

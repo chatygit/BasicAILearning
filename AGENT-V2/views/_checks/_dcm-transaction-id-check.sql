@@ -16,8 +16,11 @@
 --    complete going forward.
 --  * T3: 890 distinct otids; 785 (88%) exist in BOTH OPUS_BASE_TRANSACTION
 --    and RELATED_PARTIES.
---  * T4: strong payoff on the joined subset (776/944 pending exact column
---    reading from the user).
+--  * T4: DCM_DEALS_JOINED=944, WITH_PRIMARY_CLIENT=776 (82%) — resolved
+--    by consistency (WITH_* <= JOINED; deals can share an otid, so 944
+--    deals over 890 otids is sound). WITH_BASE_REGION was cut off in the
+--    shot — treat as unmeasured; deploy-check 1n + the region INFO rows
+--    will show the real number post-deploy. DO NOT re-ask.
 --  * CONSEQUENCE: the DCM party-master join keyed TRANSACTION_ID=DEAL_ID
 --    is PROVEN WRONG (id families don't even share a format — it has
 --    never matched a row). Release-train: roll otid to deal grain, expose
