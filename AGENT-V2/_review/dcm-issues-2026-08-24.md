@@ -97,3 +97,22 @@ column adds — needs a design pass after P-series lands. The ten-NULL-
 fields refusal doctrine stays until views change, but its wording should
 say "not available in this dataset", never "not tracked" — the source
 tracks it.
+
+### D2 update 2 — P-series results (2026-08-28)
+* OB_DCM_* book tables = EMPTY SHELLS; the GENERIC tables are live
+  (OB_HEDGE_ORDER 300,741 / OB_HEDGE_TRADE 155,693). Trade-book counts
+  still pending (P1b: OB_ORDER_TRADE etc.).
+* OB_ORDER COUNTRY = 95% populated — DCM INVESTOR COUNTRY IS RICH; the
+  "geography not available for DCM" refusal hides it. REGION/GEOGRAPHY
+  sparse (1.2/10.7%); SALES_ID 30%; RATIONALE/LEGAL_ID near-dead.
+* ECM ISSUER_LEID = 83% — one-column release-3 add.
+* OB_INVESTOR_SALES = 19 rows: a salesperson REFERENCE table (id->name),
+  joins OB_ORDER.SALES_ID.
+* TYPE/SUB_TYPE/IS_FIRM_ORDER/IS_POT = the "allowed order types"
+  candidates — P6 census staged.
+* RELEASE-3 SHAPE EMERGING: (a) column wave on vw_order_detail — DCM
+  INVESTOR_COUNTRY (95%), salesperson (30%), order TYPE fields pending
+  P6; (b) ECM ISSUER_LEID on deal/tranche; (c) DCM syndicate members
+  exposure (376,991 rows); (d) hedge/trade NEW VIEWS pending P1b/P5
+  grain samples. CV book still unlocated (maybe OB_ECM_ORDER_BOOK_* —
+  P1b counts them).

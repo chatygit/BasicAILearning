@@ -24,7 +24,45 @@
 -- NEXT: population/grain measurement per table (P-series below) before
 -- any view design; this is NEW-VIEW scope (hedge/trade grains), not
 -- column adds.
+--
+-- P-SERIES RESULTS (PROD, 2026-08-28):
+--  * P1: the OB_DCM_* book tables are EMPTY SHELLS (all 0 rows). The
+--    GENERIC tables are live: OB_HEDGE_ORDER 300,741 / OB_HEDGE_TRADE
+--    155,693. OB_INVESTOR_SALES = 19 rows (salesperson REFERENCE table,
+--    joins via OB_ORDER.SALES_ID). VG_BCOSMOS_CUSTOMER_ACCOUNT = 0.
+--    NOT YET COUNTED (P1b below): OB_ORDER_TRADE(_SYNDICATE),
+--    OB_TRANCHE_HEDGE_SECURITY, OB_ECM_ORDER_BOOK_*, OB_ECM_TRADE_BOOK_*,
+--    VG_BCOSMOS_GENERAL_ACCOUNT.
+--  * P2 (OB_ORDER, 5,021,143 rows): COUNTRY 4,767,836 (95%!) — DCM
+--    investor country is RICH; REGION 1.2%; GEOGRAPHY 10.7%; SALES_ID
+--    30%; LEGAL_ID 0.5%; RATIONALE 0.1%; DRAFT_ALLOC 2.4%.
+--  * P3: ECM ISSUER_LEID 24,581/29,564 (83%) — easy release-3 column.
+--  * P4: empty (DCM_ shells) — re-sample from the GENERIC tables (P1b).
+--  * Id-series exact: 74,505 tranche rows / 1,916 with otid / 47,060
+--    deals / 945 with otid / 891 otids / 786 join base+RP / 777 with
+--    Primary Client. Syndicate census re-run: 376,991.
 -- ===========================================================================
+
+-- P1b — the LIVE tables the first pass missed + grain samples.
+SELECT 'OB_ORDER_TRADE' AS T, COUNT(*) AS ROWS_ FROM DGSTREAM.OB_ORDER_TRADE
+UNION ALL SELECT 'OB_ORDER_TRADE_SYNDICATE', COUNT(*) FROM DGSTREAM.OB_ORDER_TRADE_SYNDICATE
+UNION ALL SELECT 'OB_TRANCHE_HEDGE_SECURITY', COUNT(*) FROM DGSTREAM.OB_TRANCHE_HEDGE_SECURITY
+UNION ALL SELECT 'OB_ECM_ORDER_BOOK_DETAILS', COUNT(*) FROM DGSTREAM.OB_ECM_ORDER_BOOK_DETAILS
+UNION ALL SELECT 'OB_ECM_ORDER_BOOK_SUMMARY', COUNT(*) FROM DGSTREAM.OB_ECM_ORDER_BOOK_SUMMARY
+UNION ALL SELECT 'OB_ECM_TRADE_BOOK_INVESTOR_TRADE', COUNT(*) FROM DGSTREAM.OB_ECM_TRADE_BOOK_INVESTOR_TRADE
+UNION ALL SELECT 'OB_ECM_TRADE_BOOK_UNDERWRITING_TRADE', COUNT(*) FROM DGSTREAM.OB_ECM_TRADE_BOOK_UNDERWRITING_TRADE
+UNION ALL SELECT 'VG_BCOSMOS_GENERAL_ACCOUNT', COUNT(*) FROM DGSTREAM.VG_BCOSMOS_GENERAL_ACCOUNT;
+
+-- P5 — grain/key samples from the LIVE hedge + trade tables.
+SELECT * FROM DGSTREAM.OB_HEDGE_ORDER FETCH FIRST 10 ROWS ONLY;
+SELECT * FROM DGSTREAM.OB_ORDER_TRADE FETCH FIRST 10 ROWS ONLY;
+
+-- P6 — DCM order-type vocabulary (prompt: "allowed order types"):
+SELECT TYPE, SUB_TYPE, IS_FIRM_ORDER, IS_POT, COUNT(*) AS ROWS_
+FROM   DGSTREAM.OB_ORDER
+GROUP  BY TYPE, SUB_TYPE, IS_FIRM_ORDER, IS_POT
+ORDER  BY ROWS_ DESC
+FETCH FIRST 20 ROWS ONLY;
 
 -- P-SERIES — population + join-rate per new table (run when convenient).
 -- P1 — row counts in one pass.
