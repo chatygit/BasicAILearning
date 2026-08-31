@@ -1992,6 +1992,49 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
               f"lists ({[len(b) for b in _branches]} aliases) — positional "
               f"pairing ships corrupt data; align the branch SELECT lists")
 
+# SUBQUERY PROJECTION CONSISTENCY (2026-08-31, the OD.TOTAL_DEMAND DEV
+# failure — third ORA-00904 class: an outer SELECT references ALIAS.COL
+# but the aliased subquery never projects COL; a silent no-op .replace()
+# planted it and no existing check could see it). For every view: collect
+# outer ALIAS.NAME references, and unless the subquery uses SELECT *, the
+# NAME string must appear inside that alias's block.
+import re as _re2
+for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
+    _txt = text(_vf)
+    _blocks = {}
+    for _m in _re2.finditer(r"\)\s+([A-Z][A-Z0-9_]{0,5})\b", _txt):
+        _alias = _m.group(1)
+        _end = _m.start()
+        _depth, _i = 0, _end
+        while _i >= 0:
+            if _txt[_i] == ")": _depth += 1
+            elif _txt[_i] == "(":
+                _depth -= 1
+                if _depth == 0: break
+            _i -= 1
+        if _i >= 0:
+            _blocks.setdefault(_alias, []).append(_txt[_i:_end + 1])
+    # An alias also used for a BASE TABLE anywhere is scope-ambiguous
+    # textually — skip it; the uniquely-subquery aliases (hand-built
+    # projections) are where the ORA-00904 risk lives.
+    _table_aliases = set(_re2.findall(
+        r"(?:FROM|JOIN)\s+DGSTREAM\.\w+\s+([A-Z][A-Z0-9_]{0,5})\b", _txt))
+    _missing = []
+    for _ref in set(_re2.findall(r"\b([A-Z][A-Z0-9_]{0,5})\.([A-Z][A-Z0-9_]+)", _txt)):
+        _alias, _col = _ref
+        if _alias in ("DGSTREAM",) or _alias not in _blocks \
+                or _alias in _table_aliases:
+            continue
+        _bodies = _blocks[_alias]
+        if any(".*" in _b for _b in _bodies):
+            continue
+        if not any(_col in _b for _b in _bodies):
+            _missing.append(f"{_alias}.{_col}")
+    check(not _missing,
+          f"[views] {_vf.name}: outer reference(s) missing from their "
+          f"subquery projection (the OD.TOTAL_DEMAND class): "
+          f"{sorted(_missing)[:6]}")
+
 # COMMENT-FREE VIEW FILES (user doctrine 2026-08-19): the view team
 # transcribes these files into migration scripts — comment blocks bloat the
 # merge surface and obscured the statement boundary the PCM paste hid
