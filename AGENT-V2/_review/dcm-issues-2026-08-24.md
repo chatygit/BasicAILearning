@@ -136,3 +136,32 @@ deal+tranche+ORDER (SIBLING_ID) — new views join our world directly;
 hedge rows are CLASSIFICATION='Confidential' (entitlement gate design
 input). Release-3 candidates now fully measured except CV-book naming
 and firm-account population.
+
+### WAVE B — first drop extracted (2026-08-31; user: "in progress")
+Received + archived (18 desc shots + wave-a validation): OB_ECM_ORDER
+(full!), OPUS_ECM_TRANSACTION (full), OPUS_ECM_TRANSACTION_TRANCHE
+(full), OB_HEDGE_TRADE, OB_ORDER_TRADE_SYNDICATE, OB_ECM_ORDER_BOOK_
+DETAILS/SUMMARY, OB_ECM_TRADE_BOOK_INVESTOR_TRADE, OB_TRANCHE_HEDGE_
+SECURITY, VG_BCOSMOS_CUSTOMER_ACCOUNT (out of domain — banking
+balances; firm account = investor-trade FIRM_ACCOUNT_*).
+WAVE-A NAME VALIDATION PASSED (4x "no rows selected").
+SIX REFUSAL-KILLERS FOUND (exposure = census first, then config):
+1. ECM salesperson + sales-trader blocks (OB_ECM_ORDER)
+2. IPO price range: BASE_PRICE + REOFFER_LOW/HIGH (OPUS_ECM_TRANSACTION)
+3. Issuer DOMICILE country (OPUS_ECM_TRANSACTION)
+4. GREENSHOE: over-allotment authorized/exercised (OPUS_ECM_TXN_TRANCHE)
+5. ECM INVESTOR_CLASSIFICATION_KEY/VALUE (OB_ECM_ORDER — the "untracked
+   taxonomy" may be tracked; CENSUS before flipping the refusal)
+6. ECM "allowed order types" = the ALLOW_* flag family (OPUS tranche)
+NAME LANDMINES for the build: ECM IS_POT_ORDER (vs DCM IS_POT); ECM
+PRAEPICIUM_FEE vs DCM PRAECIPIUM_FEES; ECM SELLING_CONCESSION_FEE
+spelled correctly vs DCM CONSESSION (sic). DCM designations =
+OB_ORDER_TRADE_SYNDICATE (DEALER + DESIGNATION_AMT per trade).
+STILL AWAITED (in progress): descs for OB_ECM_TRADE_BOOK_DESIGNATION,
+MOGA_SPLIT_TRADES, OB_ORDER_MATCH_GROUP_TRADE_SPLIT; OB_INVESTOR_SALES
+19 rows; the 3 population counts; hedge-trade/trade-syndicate/
+book-summary samples. BUILD PLAN once complete: vw_hedge_trade,
+vw_trade_syndicate (designations both products?), ECM branch of
+vw_trade_detail (investor-trade blotter, firm accounts), ECM fat wave on
+existing views (sales/classification/price-range/greenshoe/dates/
+allow-flags), vw_book_summary decision.

@@ -410,3 +410,38 @@ check on every new source name — instant ORA-00904 on any transcription
 typo). WAVE B (needs descs): _checks/_wave-b-desc-requests.sql — unlocks
 ECM order riches, ECM trade branch, hedge-trades + trade-syndicate views,
 firm accounts, salesperson reference.
+
+## RELEASE 3 — FINAL WAVE (2026-08-31, Wave B complete): NINE VIEWS,
+## FULL DOMAIN
+NEW: vw_hedge_trade (155,693 — hedge executions; SIBLING = hedge order),
+vw_designation (ECM designation cards, 10,696 — firm account, pot
+splits, per-card fee economics), vw_trade_syndicate (DCM dealer
+designations — SCHEMA-ONLY/EMPTY today; created for the whitelist
+window; P1b's 43,608 was a count misalignment, actual 0).
+vw_trade_detail is now TWO branches: DCM (OB_ORDER_TRADE) + ECM
+(OB_ECM_TRADE_BOOK_INVESTOR_TRADE, 724 rows — the FINRA-style blotter);
++5 columns both branches: TRADE_PRICE, FIRM_ACCOUNT_NUMBER/TYPE,
+COMMISSION_RATE, EXECUTION_TS.
+ECM FILLS from the Wave B descs: order view — SALES_PERSON =
+INVESTOR_SALESPERSON_NAME, SALES_SOEID, IS_FIRM_ORDER, IS_POT
+(source IS_POT_ORDER), DRAFT_ALLOC (TO_CHAR of NUMBER), +5 new both
+branches: WALL_CROSSED, INVESTOR_CLASSIFICATION (DCM real too),
+EXISTING_HOLDER, ACTIVE_PRICE, BOOK_STATUS (kills the book-summary
+view — state lives at order grain). Tranche view — six ECM fee fills
+(name landmines respected: MANAGEMENT_FEE sing., PRAEPICIUM_FEE,
+SELLING_CONCESSION correct on ECM), ANNOUNCEMENT/TRADE_TS fills, +6 new:
+GROSS_SPREAD_PER_FEE, DESIGNATION_FEE, OVER_ALLOTMENT_AUTHORIZED/
+EXERCISED_SHARES (GREENSHOE — the refusal dies at config time),
+FIRST_TRADE_TS, LOCKUP_TS. Deal view — FIRST_ANNOUNCED ECM fill
+(ANNOUNCE_TS), +7 new: BASE_PRICE, REOFFER_LOW/HIGH_PRICE (price
+range), FX_RATE, ISSUER_COUNTRY, ISSUER_DOMICILE (refusal dies),
+OFFERING_FORMAT.
+NOT built (recorded): MOGA splits (70 rows — doctrine footnote, not a
+view), match-group split (thin), OB_INVESTOR_SALES (contact-email
+routing — not analytics), OB_TRANCHE_HEDGE_SECURITY (already
+denormalized on hedge rows), VG accounts (out of domain).
+PRE-HANDOVER: _checks/_wave-a-name-validation.sql (now 12 statements)
+must ALL return "no rows selected". CONFIG ROUNDS AFTER WHITELIST:
+hedge_trade/designation/trade_syndicate objects, ECM trade branch
+de-scoping, new-column exposure, refusal flips (greenshoe, domicile,
+price range, classification-after-census).
