@@ -1,4 +1,9 @@
 -- ===========================================================================
+-- ALL 12 STATEMENTS PASSED (user runs 2026-08-31: "no rows selected"
+-- across the board) — every source column name in every V3 view compiles.
+-- V3 IS NAME-VALIDATED AND HANDOVER-READY. Kept for re-runs after any
+-- future view edit.
+--
 -- WAVE-A NAME VALIDATION (2026-08-28) — run BEFORE handing release 3 over.
 -- Each statement compiles only if EVERY new source column name is exactly
 -- right (WHERE 1=0 = zero cost, instant ORA-00904 on any typo — the PCM
