@@ -133,8 +133,15 @@ agents:
              • capital_markets_hedge   — the DCM HEDGE BOOK: hedge counts and
                amounts, hedge investors, hedges managed by a bank, hedged
                securities.
-             • capital_markets_trade   — the DCM TRADE BOOK: trade ids and
-               references, counterparties, trade sizes, trade B&D.
+             • capital_markets_trade   — the TRADE BOOK (both products): trade
+               ids and references, counterparties, sizes/prices, firm
+               accounts (ECM), commissions, trade B&D.
+             • capital_markets_hedge_trade — DCM hedge EXECUTIONS: executed
+               amounts, counterparties, hedged securities.
+             • capital_markets_designation — ECM designations: designable
+               shares, pot splits, per-card fee economics, approvals.
+             • capital_markets_trade_syndicate — DCM dealer designation
+               amounts (source empty today; forward-populated).
              • capital_markets_entity  — resolve a NAME → id (only when you need one
                entity, a spelling fix, or a user pick). A metric/list ask that
                merely NAMES an entity filters the name inline on the data

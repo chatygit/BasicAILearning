@@ -257,6 +257,28 @@ dimensions:
   settlement_ts: {column: settlement_ts, products: ["DCM"], description: "DCM. The tranche's OWN settlement timestamp (release 2) — 'tranches settling in <period>' filters here. NULL on ECM at this grain: ECM settlement asks go to the deal object's settlement_ts."}
   transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: origination transaction id — FORWARD-POPULATED (recent Ipreo deals; NULL = predates the link). TEXT."}
   issuer_lei: {column: issuer_lei, products: ["ECM"], description: "ECM (release 3, ~83%). Issuer LEI. NULL on DCM — no source column; offer GFCID/ticker instead."}
+  coupon: {column: coupon, products: ["DCM"], description: "DCM (V3). The tranche COUPON as stored text ('5.25%'-style variants) — this is the RATE; coupon_type is the structure. Population unmeasured."}
+  yield: {column: yield, products: ["DCM"], description: "DCM (V3). Yield as stored text. Population unmeasured."}
+  price: {column: price, products: ["DCM"], description: "DCM (V3). Tranche price (NUMBER). Population unmeasured."}
+  price_guidance: {column: price_guidance, products: ["DCM"], description: "DCM (V3). Price guidance text (display)."}
+  order_book_size_usd: {column: order_book_size_usd, products: ["DCM"], description: "DCM (V3). USD-normalized order book size — STORED AS TEXT; display only, never SUM it (a numeric conversion is a future batch)."}
+  total_fee: {column: total_fee, description: "Tranche TOTAL fee (NUMBER, both products since V3; populations unmeasured — blanks = not captured). Deal-level fee = SUM this per deal; component fees are separate columns."}
+  underwriting_fee: {column: underwriting_fee, description: "Underwriting fee component (both products; unmeasured)."}
+  management_fees: {column: management_fees, description: "Management fee component (both products; unmeasured)."}
+  selling_concession_fee: {column: selling_concession_fee, description: "Selling concession component (both products; unmeasured)."}
+  praecipium_fees: {column: praecipium_fees, description: "Praecipium fee component (both products; unmeasured)."}
+  retail_uw_fee: {column: retail_uw_fee, description: "Retail underwriting fee component (both products; unmeasured)."}
+  gross_spread_per_fee: {column: gross_spread_per_fee, products: ["ECM"], description: "ECM (V3). Gross spread percentage fee."}
+  designation_fee: {column: designation_fee, products: ["ECM"], description: "ECM (V3). Designation fee at tranche level (per-card economics live on capital_markets_designation)."}
+  over_allotment_authorized_shares: {column: over_allotment_authorized_shares, products: ["ECM"], description: "ECM (V3). GREENSHOE authorized shares — the greenshoe refusal is DEAD for ECM. NULL on DCM (not tracked)."}
+  over_allotment_exercised_shares: {column: over_allotment_exercised_shares, products: ["ECM"], description: "ECM (V3). Greenshoe EXERCISED shares — is_not_null = 'greenshoe was exercised'."}
+  announcement_ts: {column: announcement_ts, description: "Tranche announcement timestamp (both products since V3; DCM measured ~29.5k rows, ECM unmeasured)."}
+  issue_ts: {column: issue_ts, products: ["DCM"], description: "DCM (V3). Issue date (~32.6k rows measured)."}
+  trade_ts: {column: trade_ts, description: "Tranche trade date (both products; DCM ~26.5k measured)."}
+  first_trade_ts: {column: first_trade_ts, products: ["ECM"], description: "ECM (V3). First trade date."}
+  lockup_ts: {column: lockup_ts, products: ["ECM"], description: "ECM (V3). Managers' lockup date — 'when does the lockup expire' lands here."}
+  target_market: {column: target_market, products: ["DCM"], description: "DCM (V3). Target market label (~7.8k rows) — NOT a region; tranche_name carries target-market labels on ECM."}
+  frn_coupon_index: {column: frn_coupon_index, products: ["DCM"], description: "DCM (V3). Floating-rate coupon index (SOFR/EURIBOR…) for FRN tranches."}
   tranche_region: {column: tranche_region, description: "Tranche target region (NAM/EMEA/APAC). This is the TRANCHE's market, not the investor's geography (that lives on capital_markets_order). ~1 in 5 DCM tranches carry one; ECM effectively empty."}
   # --- ECM-only ---
   product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the instrument CLASS ('common stock', 'convertible') use equity_type — now on THIS object too."}
@@ -352,6 +374,61 @@ filters:
       genuinely unrecorded, and a ne/not_in predicate silently drops those
       rows — count them with is_null and disclose the number. 'RMB' means CNY
       and CNH: say which you used.
+  total_fee:
+    column: total_fee
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      Tranche total fee threshold (both products since V3; populations
+      unmeasured — a fee filter reads only rows carrying fees, disclose).
+  coupon:
+    column: coupon
+    products: ["DCM"]
+    operators: [eq, like, is_null, is_not_null]
+    case_insensitive: true
+    description: >-
+      DCM coupon RATE stored as text — like-match ('%5.25%'); range math
+      is not possible on text, say so for 'coupons above X' asks.
+  price:
+    column: price
+    products: ["DCM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: DCM tranche price threshold (unmeasured population).
+  announcement_ts:
+    column: announcement_ts
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      'Tranches announced in <period>'. Both products since V3; partial
+      coverage — disclose blanks. Trailing windows need BOTH bounds.
+  trade_ts:
+    column: trade_ts
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: Tranche trade-date window (partial coverage — disclose).
+  first_trade_ts:
+    column: first_trade_ts
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: ECM first-trade window.
+  lockup_ts:
+    column: lockup_ts
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      ECM lockup expiration window — 'lockups expiring next month' = gte
+      start, lt end.
+  over_allotment_exercised_shares:
+    column: over_allotment_exercised_shares
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      ECM greenshoe: is_not_null = exercised; gt 0 for 'deals where the
+      shoe was exercised'. The old greenshoe refusal is DEAD for ECM.
+  target_market:
+    column: target_market
+    products: ["DCM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: DCM target-market label (~10% populated — disclose).
   transaction_id:
     column: transaction_id
     operators: [eq, in, like, is_null, is_not_null]

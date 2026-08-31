@@ -6,15 +6,16 @@ description: >
   Markets) data question — deals, tranches, orders, investors, allocations,
   demand/book, sizing, sectors, regions, brokers/syndicate, B&D, ratings,
   identifiers (CUSIP/ISIN), entity resolution. It is REQUIRED to answer
-  correctly: it maps business language onto the SIX governed grain-aligned MCP
-  objects (deal / tranche / order / hedge / trade / entity), tells you which
+  correctly: it maps business language onto the NINE governed grain-aligned MCP
+  objects (deal / tranche / order / hedge / hedge-trade / trade /
+  trade-syndicate / designation / entity), tells you which
   object answers
   which ask, enumerates the stored values, and defines the house answer style.
   It is self-contained — it includes the full discover→run contract. Always load
   and follow it before calling run_bqs_query.
 ---
 
-# ECM/DCM Deal Analysis — Skill (six grain-aligned objects)
+# ECM/DCM Deal Analysis — Skill (nine grain-aligned objects)
 
 You are a collaborative ECM/DCM Capital Markets analyst for bankers and
 syndicate desks, answering from real deal-orderbook data through the
@@ -104,7 +105,10 @@ received. **B&D** (bill & deliver) = the bank that invoices/settles.
 | `capital_markets_tranche` | product + deal + tranche | tranches, coupon, tenor, maturity, seniority, ESG, ratings, reg/delivery category, identifiers, exchange, product type/class, syndicate/broker/**B&D**, Citi-solo, tranche size, per-currency DCM money |
 | `capital_markets_order` | product + order | investors/accounts, demand, allocation, order/IOI type, meeting type, investor category/region, "top investors", "how many deals did X buy" |
 | `capital_markets_hedge` | product + hedge order | the DCM HEDGE BOOK: hedge counts/amounts, hedge investors, "hedges managed by <bank>", hedged securities (release 3) |
-| `capital_markets_trade` | product + trade | the DCM TRADE BOOK: trade ids/references, counterparties, trade sizes/allocations, price basis, trade B&D (release 3) |
+| `capital_markets_trade` | product + trade | the TRADE BOOK (BOTH products since V3 — ECM branch is tiny ~724): trade ids/references, counterparties, sizes/allocations/prices, FIRM ACCOUNTS (ECM), commissions, trade B&D |
+| `capital_markets_hedge_trade` | product + hedge trade | hedge EXECUTIONS (DCM): executed amounts, counterparties, hedged securities, execution references |
+| `capital_markets_designation` | product + designation card | ECM DESIGNATIONS: designable shares, pot splits, per-card selling concession / underwriting / management economics, firm account, approval status |
+| `capital_markets_trade_syndicate` | product + trade + dealer | DCM dealer-level designation amounts — SOURCE EMPTY today: 0 rows = "not yet populated", never "not tracked" |
 | `capital_markets_entity` | one named entity | name → id resolution, spelling recovery, "which one did you mean?" |
 
 **Choosing rule:** the object must carry **every field the ask FILTERS or
@@ -322,7 +326,15 @@ scoping to its product cannot match anything, and the server REJECTS it with
 `product_not_applicable` rather than returning an empty result you would
 misread as "no data". (`investor_region` and `investor_category` LEFT this
 list in release 3 — DCM carries country names ~95% and investor types ~67%,
-case variants; `deal_region` left it earlier.)
+case variants; `deal_region` left it earlier.) The V3 final wave added many
+more product-scoped fields — the lists below are the HIGH-TRAFFIC ones; the
+authoritative per-field scoping is each catalog's `products:` declarations,
+which discover shows you. Notables: ECM-only — price range (reoffer),
+deal_fee_mm, deal_size_mm, issuer_domicile/country, greenshoe, lockup,
+wall_crossed, active_price/book_status, investor_lei, trade_price,
+firm_account_number, execution_ts. DCM-only — coupon/yield/price at
+tranche grain, order_book_size_usd, target_market, issue_ts, QIB,
+investor_sub_type, allocation-lifecycle texts, obo_*, esg_tag.
 
 - **ECM-only**: `equity_type` · `offering_type` · `product_type` ·
   `exchange` · `broker_code` · `syndicate_role` · `execution_status` ·
@@ -428,6 +440,14 @@ and `investor_count` undercounts — say so on a headcount.
 | ECM order size | order · `total_allocation` / `total_demand` — **never SUM `order_amount` on ECM** |
 | "away orders / home orders / our book / Citi's own orders" | order · `order_ownership` (ECM only; HOME/AWAY). ALL ECM figures cover the FULL book since release 2 (~45% more rows than pre-release — never read the jump as growth); "our orders" = eq HOME, and an unfiltered total on an "our book" ask disclosed as including away. DCM: "not tracked" |
 | "tranches settling in <period>" | tranche · `settlement_ts` (DCM; ECM routes to deal object) |
+| "price range" / "reoffer range" | deal · `reoffer_low_price` + `reoffer_high_price` (ECM, V3). NO stage history — "Initial vs Revised" is still not tracked, say so |
+| fees / gross spread / economics | deal · `deal_fee_mm`(+currency) for the ECM deal fee; tranche · `total_fee` (+components, both products) — DCM deal fee = SUM tranche total_fee. Per-designation economics = designation object. Populations unmeasured — disclose blanks |
+| greenshoe / over-allotment | tranche · `over_allotment_authorized/exercised_shares` (ECM, V3) — "was the shoe exercised" = exercised gt 0. DCM: not tracked |
+| "domiciled / incorporated in" | deal · `issuer_domicile` (ECM, V3). DCM: not tracked — say so |
+| firm account | trade · `firm_account_number/type` (ECM trades); designation · `firm_account` (ECM cards); DCM order-side candidate = `obo_name` |
+| "lockup expiring" | tranche · `lockup_ts` (ECM, V3) |
+| firm / pot orders | order · `is_firm_order` × `is_pot` (both products; case variants; NOT mutually exclusive — never present as exclusive buckets) |
+| wall-crossed investors | order · `wall_crossed` (ECM, V3; population unmeasured) |
 | "largest / biggest order" in a deal | order · LISTING ranked `order_demand_qty` desc (+ `order_id` asc tiebreak), limit 3 for the tie check — **the size of an order is its DEMAND; `order_amount` is an IOI limit on ECM and ranks the wrong order**. "Largest allocation" ranks by `order_allocation` |
 | deal size / value / "biggest deal" | deal · `total_deal_size` / `largest_deal_size` |
 | tranche / issue size | tranche · `total_tranche_size` / `largest_tranche_size` |
@@ -946,10 +966,12 @@ status-sensitive answer spans both.
   have no pricing date, so a pricing-date sort cannot show them — disclose this
   and offer the current pipeline via a `deal_status` filter (draft/announced/
   live, matched case-insensitively — case variants are real stored values).
-- **There is no announced/created/launch date** (measured all-zero at the
-  source). Never substitute pricing for "announced on" — say it is not tracked
-  and offer the `announced` STATUS if that is what they meant. Settlement
-  dates DO exist now — deal-object `settlement_ts`, partial coverage (§3b).
+- **Announced dates EXIST since V3** — deal-object `first_announced` (DCM =
+  earliest tranche announcement, partial; ECM coverage unmeasured) and
+  tranche-object `announcement_ts`. "Announced in <period>" is a real
+  filter now; disclose blanks. Created/launch dates remain untracked —
+  never substitute pricing for those. Settlement
+  dates DO exist too — deal/tranche `settlement_ts`, partial coverage (§3b).
 - A year/quarter not clearly in the future is HISTORY — just query it.
 - **ECM orders can carry a NULL pricing date** (an order whose tranche is missing
   from the tranche spine), plus a NULL tranche name and currency. Every

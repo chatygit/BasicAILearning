@@ -1,0 +1,149 @@
+# ---------------------------------------------------------------------------
+# Governed ontology — HEDGE TRADE object (V3 final round, 2026-08-31).
+# One row per hedge EXECUTION (OB_HEDGE_TRADE, 155,693 PROD). A hedge trade's
+# keys: deal_id/tranche_id + hedge_order_id (its sibling) — drill from
+# capital_markets_hedge rows. DCM only.
+# ---------------------------------------------------------------------------
+source: capital_markets_hedge_trade
+version: "1"
+dialect: trino
+
+connection:
+  catalog: bds_dg_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: bds_dg_oraas.dgstream.vw_hedge_trade
+
+grain: [product, hedge_trade_id]
+
+purpose: >-
+  Hedge EXECUTIONS (trades booked against hedge orders): direction,
+  counterparty, amounts, hedged security, trade reference/status. A hedge
+  ORDER ask (book membership, managers, amounts pending) is
+  capital_markets_hedge; this object is the executions.
+
+max_limit: 5000
+query_timeout_seconds: 30
+
+how_to_use:
+  - "DCM ONLY (every row). Scope by deal_id/tranche_id or hedge_order_id
+     ferried from the hedge object; ids are TEXT."
+  - "TRADE_STATUS vocabulary seen: open, cancelled — treat as open
+     vocabulary; 'the executed book' excludes cancelled (say so)."
+  - "Amounts are unlabelled notionals (no currency column) — never attach
+     a currency."
+
+metrics:
+  hedge_trade_count:
+    column: hedge_trade_id
+    aggregation: COUNT_DISTINCT
+    description: Number of distinct hedge executions in scope.
+  total_hedge_trade_amount:
+    column: hedge_amount
+    aggregation: SUM
+    numeric: true
+    description: Total executed hedge notional — NOT currency-scoped; label plainly.
+  counterparty_count:
+    column: counterparty_gp_id
+    aggregation: COUNT_DISTINCT
+    description: Distinct execution counterparties (skips NULL ids — disclose).
+  row_count:
+    column: hedge_trade_id
+    aggregation: COUNT
+    description: Raw row count (one row per hedge trade after dedupe).
+
+dimensions:
+  product: {column: product, description: "Always 'DCM'."}
+  deal_id: {column: deal_id, description: "Deal id — same family as the other objects. TEXT."}
+  tranche_id: {column: tranche_id, description: "Tranche id. TEXT."}
+  hedge_order_id: {column: hedge_order_id, description: "The hedge ORDER this execution belongs to — joins capital_markets_hedge. TEXT."}
+  hedge_trade_id: {column: hedge_trade_id, description: "Unique hedge execution id — the drill-down handle. TEXT."}
+  trade_type: {column: trade_type, description: "Execution type (seen: 'Hedge'). Open vocabulary."}
+  trade_sub_type: {column: trade_sub_type, description: "Sub-type (seen: 'SyndicateBilled Pot', 'OwnerBilled Pot')."}
+  direction: {column: direction, description: "Buy/Sell (seen: 'Buy')."}
+  hedge_type: {column: hedge_type, description: "Hedge type (seen: 'hedge')."}
+  hedge_manager: {column: hedge_manager, description: "Managing bank (full names, test entities exist in lower envs)."}
+  settlement_period: {column: settlement_period, description: "Settlement period label (seen: 'T+1')."}
+  counterparty_name: {column: counterparty_name, description: "Execution counterparty name."}
+  counterparty_gp_id: {column: counterparty_gp_id, description: "Counterparty GP id. TEXT."}
+  counterparty_type: {column: counterparty_type, description: "Counterparty type (seen: 'Institution')."}
+  hedge_amount: {column: hedge_amount, description: "Executed notional (NUMBER, not currency-scoped)."}
+  hedge_weight_type: {column: hedge_weight_type, description: "Sizing basis (oneForOne / percentofFace / amount…)."}
+  hedge_pct_face: {column: hedge_pct_face, description: "Percent of face (NUMBER)."}
+  security_isin: {column: security_isin, description: "Hedged security ISIN. TEXT."}
+  security_cusip: {column: security_cusip, description: "Hedged security CUSIP. TEXT."}
+  security_name: {column: security_name, description: "Hedged security name."}
+  security_maturity_ts: {column: security_maturity_ts, description: "Hedged security maturity."}
+  security_coupon: {column: security_coupon, description: "Hedged security coupon (text)."}
+  security_issuer: {column: security_issuer, description: "Hedged security issuer (e.g. 'UST')."}
+  sales_person: {column: sales_person, description: "Covering salesperson (first + last)."}
+  sales_region: {column: sales_region, description: "Salesperson region."}
+  trade_reference: {column: trade_reference, description: "External execution reference — project beside hedge_trade_id."}
+  trade_status: {column: trade_status, description: "open / cancelled (open vocabulary)."}
+
+filters:
+  product:
+    column: product
+    operators: [eq, in]
+    case_insensitive: true
+    values: ["DCM"]
+    description: Always DCM; the entitlement gate injects/validates this.
+  deal_id: {column: deal_id, operators: [eq, in], description: TEXT ids — quote, max 40 per in-list.}
+  tranche_id: {column: tranche_id, operators: [eq, in], description: TEXT ids.}
+  hedge_order_id: {column: hedge_order_id, operators: [eq, in], description: TEXT ids — scope executions to hedge orders.}
+  hedge_trade_id: {column: hedge_trade_id, operators: [eq, in], description: TEXT ids.}
+  trade_status:
+    column: trade_status
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: open / cancelled seen; ne drops NULLs — count with is_null.
+  hedge_manager:
+    column: hedge_manager
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Bank names — like on the stem; Citi = the CITIGROUP GLOBAL MARKETS stem.
+  counterparty_name:
+    column: counterparty_name
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: Contains-match — stored names vary.
+  direction:
+    column: direction
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Buy/Sell (open vocabulary).
+  security_isin: {column: security_isin, operators: [eq, in, is_null, is_not_null], description: Exact ISIN.}
+  security_cusip: {column: security_cusip, operators: [eq, in, is_null, is_not_null], description: Exact CUSIP.}
+  sales_person:
+    column: sales_person
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Contains-match; is_null = not recorded.
+  hedge_amount:
+    column: hedge_amount
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: Notional threshold — no currency scoping.
+
+usage_notes:
+  - One metric per request; ids ferry between objects (smaller side first,
+    4-query budget). EVERY ranking ends its order with hedge_trade_id.
+  - Superlative asks follow the limit-3 tie doctrine.
+  - Executions vs orders can disagree (an order may have several or zero
+    executions) — never present execution totals as book totals.
+
+examples:
+  - question: Total executed hedge amount for deal X's 5YR tranche
+    request:
+      source: capital_markets_hedge_trade
+      metric: total_hedge_trade_amount
+      filters:
+        - {field: deal_id, op: eq, value: "X"}
+        - {field: tranche_id, op: eq, value: "<resolved tranche id>"}
+        - {field: trade_status, op: ne, value: "cancelled"}
+    note: Label "currency not recorded"; disclose cancelled exclusion.

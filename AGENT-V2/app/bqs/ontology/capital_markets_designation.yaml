@@ -1,0 +1,172 @@
+# ---------------------------------------------------------------------------
+# Governed ontology — DESIGNATION object (V3 final round, 2026-08-31).
+# One row per ECM designation card (OB_ECM_TRADE_BOOK_DESIGNATION, 10,696
+# PROD): an investor's designation of economics to syndicate members —
+# firm account, pot splits, per-card fee economics, approval workflow.
+# ECM only. (DCM's dealer-level designations live on
+# capital_markets_trade_syndicate — source empty today, forward-populated.)
+# ---------------------------------------------------------------------------
+source: capital_markets_designation
+version: "1"
+dialect: trino
+
+connection:
+  catalog: bds_dg_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: bds_dg_oraas.dgstream.vw_designation
+
+grain: [product, designation_id]
+
+purpose: >-
+  ECM DESIGNATIONS: investor designation cards — designable shares, pot
+  splits, selling concession / underwriting / management economics per
+  card, firm account, approval status. "Designation" in the ask routes
+  HERE.
+
+max_limit: 5000
+query_timeout_seconds: 30
+
+how_to_use:
+  - "ECM ONLY (every row). A DCM designation ask: the dealer-level table
+     exists but is EMPTY today — say designations are not yet populated
+     for DCM, never 'not tracked'."
+  - "Fee figures are PER-CARD economics (selling concession, underwriting,
+     management, EV) — not deal-level fees (those are on the deal/tranche
+     objects). Not currency-scoped beyond the card's CURRENCY column."
+  - "Scope by deal_id/tranche_id/trade_id from the other objects; ids are
+     TEXT."
+
+metrics:
+  designation_count:
+    column: designation_id
+    aggregation: COUNT_DISTINCT
+    description: Number of designation cards in scope.
+  investor_count:
+    column: investor_gp_id
+    aggregation: COUNT_DISTINCT
+    description: Distinct designating investors (skips NULL ids — disclose).
+  total_designable_shares:
+    column: designable_shares
+    aggregation: SUM
+    numeric: true
+    description: Total designable shares in scope.
+  total_selling_concession:
+    column: selling_concession
+    aggregation: SUM
+    numeric: true
+    description: Total selling concession across cards in scope.
+  row_count:
+    column: designation_id
+    aggregation: COUNT
+    description: Raw row count (one row per card after dedupe).
+
+dimensions:
+  product: {column: product, description: "Always 'ECM'."}
+  deal_id: {column: deal_id, description: "Deal id. TEXT."}
+  tranche_id: {column: tranche_id, description: "Tranche id. TEXT."}
+  tranche_name: {column: tranche_name, description: "Tranche name (display)."}
+  designation_id: {column: designation_id, description: "Unique card id — the drill-down handle. TEXT."}
+  trade_id: {column: trade_id, description: "Related trade id (TEXT; joins capital_markets_trade)."}
+  investor_name: {column: investor_name, description: "Designating investor."}
+  investor_gp_id: {column: investor_gp_id, description: "Investor GP id. TEXT."}
+  firm_account: {column: firm_account, description: "Firm account on the card."}
+  side: {column: side, description: "Side of the card."}
+  sales_id: {column: sales_id, description: "Salesperson id (TEXT)."}
+  currency: {column: currency, description: "Card currency."}
+  quantity: {column: quantity, description: "Card quantity (NUMBER)."}
+  designable_shares: {column: designable_shares, description: "Designable shares (NUMBER)."}
+  pot_split: {column: pot_split, description: "Pot split amount (NUMBER)."}
+  pot_split_percentage: {column: pot_split_percentage, description: "Pot split percentage (NUMBER)."}
+  selling_concession: {column: selling_concession, description: "Selling concession on the card (NUMBER)."}
+  underwriting_fees: {column: underwriting_fees, description: "Underwriting fees on the card (NUMBER)."}
+  management_fees: {column: management_fees, description: "Management fees on the card (NUMBER)."}
+  ev: {column: ev, description: "EV figure on the card (NUMBER)."}
+  security_id: {column: security_id, description: "Security identifier on the card. TEXT."}
+  security_id_type: {column: security_id_type, description: "Identifier type (CUSIP/ISIN…)."}
+  broker_name: {column: broker_name, description: "Designated broker/member name."}
+  broker_code: {column: broker_code, description: "Designated broker code."}
+  designation_type: {column: designation_type, description: "Designation type (open vocabulary)."}
+  submission_status: {column: submission_status, description: "Submission status (open vocabulary)."}
+  card_status: {column: card_status, description: "Card status (open vocabulary)."}
+  status: {column: status, description: "Overall status (open vocabulary)."}
+  trade_ts: {column: trade_ts, description: "Trade date on the card."}
+  settlement_ts: {column: settlement_ts, description: "Settlement date on the card."}
+  approved_ts: {column: approved_ts, description: "Approval timestamp (NULL = not approved)."}
+  approved_by: {column: approved_by, description: "Approver id."}
+
+filters:
+  product:
+    column: product
+    operators: [eq, in]
+    case_insensitive: true
+    values: ["ECM"]
+    description: Always ECM; the entitlement gate injects/validates this.
+  deal_id: {column: deal_id, operators: [eq, in], description: TEXT ids — quote, max 40 per in-list.}
+  tranche_id: {column: tranche_id, operators: [eq, in], description: TEXT ids.}
+  trade_id: {column: trade_id, operators: [eq, in], description: TEXT ids.}
+  designation_id: {column: designation_id, operators: [eq, in], description: TEXT ids.}
+  investor_name:
+    column: investor_name
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: Contains-match ('%FIDELITY%').
+  broker_name:
+    column: broker_name
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Designated member bank — like on the name stem.
+  firm_account:
+    column: firm_account
+    operators: [eq, in, like, is_null, is_not_null]
+    description: Firm account — exact when the user pastes one.
+  status:
+    column: status
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Open vocabulary — rely on suggestions on 0 rows.
+  card_status:
+    column: card_status
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Open vocabulary.
+  approved_ts:
+    column: approved_ts
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: is_not_null = approved cards; is_null = pending.
+  trade_ts:
+    column: trade_ts
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: Trailing windows need BOTH bounds (gte start, lt tomorrow-midnight).
+
+usage_notes:
+  - One metric per request; ids ferry between objects (smaller side first,
+    4-query budget). EVERY ranking ends its order with designation_id.
+  - Superlative asks follow the limit-3 tie doctrine.
+  - Card economics never reconcile to deal-level fees by definition —
+    quote one grain and name it.
+
+examples:
+  - question: Total selling concession designated to Goldman on deal X
+    request:
+      source: capital_markets_designation
+      metric: total_selling_concession
+      filters:
+        - {field: deal_id, op: eq, value: "X"}
+        - {field: broker_name, op: like, value: "%GOLDMAN%"}
+  - question: Which designation cards are still unapproved for deal X?
+    request:
+      source: capital_markets_designation
+      dimensions: [designation_id, investor_name, broker_name, card_status]
+      metric: row_count
+      filters:
+        - {field: deal_id, op: eq, value: "X"}
+        - {field: approved_ts, op: is_null}
+      order:
+        - {field: designation_id, dir: asc}
+      limit: 50

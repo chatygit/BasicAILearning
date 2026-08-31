@@ -1656,6 +1656,41 @@ _PRODUCT_PINS = [
     ("capital_markets_deal.yaml", "issuer_lei", "ECM"),
     ("capital_markets_tranche.yaml", "issuer_lei", "ECM"),
     ("capital_markets_tranche.yaml", "settlement_ts", "DCM"),
+    ("capital_markets_deal.yaml", "base_price", "ECM"),
+    ("capital_markets_deal.yaml", "reoffer_low_price", "ECM"),
+    ("capital_markets_deal.yaml", "reoffer_high_price", "ECM"),
+    ("capital_markets_deal.yaml", "fx_rate", "ECM"),
+    ("capital_markets_deal.yaml", "issuer_country", "ECM"),
+    ("capital_markets_deal.yaml", "issuer_domicile", "ECM"),
+    ("capital_markets_deal.yaml", "offering_format", "ECM"),
+    ("capital_markets_deal.yaml", "deal_fee_mm", "ECM"),
+    ("capital_markets_deal.yaml", "deal_size_mm", "ECM"),
+    ("capital_markets_tranche.yaml", "coupon", "DCM"),
+    ("capital_markets_tranche.yaml", "yield", "DCM"),
+    ("capital_markets_tranche.yaml", "price", "DCM"),
+    ("capital_markets_tranche.yaml", "order_book_size_usd", "DCM"),
+    ("capital_markets_tranche.yaml", "issue_ts", "DCM"),
+    ("capital_markets_tranche.yaml", "target_market", "DCM"),
+    ("capital_markets_tranche.yaml", "frn_coupon_index", "DCM"),
+    ("capital_markets_tranche.yaml", "gross_spread_per_fee", "ECM"),
+    ("capital_markets_tranche.yaml", "designation_fee", "ECM"),
+    ("capital_markets_tranche.yaml", "over_allotment_authorized_shares", "ECM"),
+    ("capital_markets_tranche.yaml", "over_allotment_exercised_shares", "ECM"),
+    ("capital_markets_tranche.yaml", "first_trade_ts", "ECM"),
+    ("capital_markets_tranche.yaml", "lockup_ts", "ECM"),
+    ("capital_markets_order.yaml", "investor_lei", "ECM"),
+    ("capital_markets_order.yaml", "wall_crossed", "ECM"),
+    ("capital_markets_order.yaml", "existing_holder", "ECM"),
+    ("capital_markets_order.yaml", "active_price", "ECM"),
+    ("capital_markets_order.yaml", "book_status", "ECM"),
+    ("capital_markets_order.yaml", "investor_qib_status", "DCM"),
+    ("capital_markets_order.yaml", "investor_sub_type", "DCM"),
+    ("capital_markets_order.yaml", "obo_name", "DCM"),
+    ("capital_markets_order.yaml", "esg_tag", "DCM"),
+    ("capital_markets_trade.yaml", "trade_price", "ECM"),
+    ("capital_markets_trade.yaml", "firm_account_number", "ECM"),
+    ("capital_markets_trade.yaml", "commission_rate", "ECM"),
+    ("capital_markets_trade.yaml", "execution_ts", "ECM"),
     ("capital_markets_tranche.yaml", "exchange", "ECM"),
     ("capital_markets_tranche.yaml", "syndicate_role", "ECM"),
     ("capital_markets_tranche.yaml", "broker_code", "ECM"),
@@ -1724,10 +1759,8 @@ check(has(DEAL, "  settlement_ts:"),
 check(not has(DEAL, "settlement_date:"),
       "[round3] capital_markets_deal.yaml: a settlement_date unsupported-"
       "intent is BACK — it would re-refuse the live settlement_ts filter")
-check(has(DEAL, "announced_date:"),
-      "[round3] capital_markets_deal.yaml: the announced_date refusal is "
-      "gone — ANNOUNCE/LAUNCH/CLOSING_TS measured ALL ZERO (2026-08-18); "
-      "without it the agent substitutes pricing dates for 'announced on'")
+# (announced_date refusal pin RETIRED 2026-08-31: V3 exposes
+# first_announced — the flip is deliberate; successor pin in [v3cfg].)
 check(has(DEAL, "JAPAN"),
       "[round3] capital_markets_deal.yaml: the JAPAN/LATAM region vocabulary "
       "is gone — the closed NAM/EMEA/APAC set is FALSE (measured census) and "
@@ -1820,6 +1853,43 @@ check(has(SKILL, "capital_markets_hedge") and has(SKILL, "capital_markets_trade"
       and has(SKILL, "FORWARD-POPULATED"),
       "[release3] SKILL.md: hedge/trade routing rows or the "
       "forward-populated transaction-id doctrine are gone")
+# V3 FINAL CONFIG ROUND (2026-08-31): nine objects; refusal flips.
+for _f, _need, _why in [
+    ("capital_markets_hedge_trade.yaml", "hedge_trade_id",
+     "hedge executions object gone"),
+    ("capital_markets_designation.yaml", "firm_account",
+     "designations object gone"),
+    ("capital_markets_trade_syndicate.yaml", "EMPTY",
+     "trade-syndicate object or its empty-source doctrine gone"),
+]:
+    check(has(ROOT / "app" / "bqs" / "ontology" / _f, _need),
+          f"[v3cfg] {_f}: {_why}")
+check(has(DEAL, "reoffer_low_price:") and has(DEAL, "issuer_domicile:")
+      and has(DEAL, "deal_fee_mm:") and has(DEAL, "first_announced:"),
+      "[v3cfg] deal yaml lost a final-wave field — price range/domicile/"
+      "fees/announced regress to refusals")
+check("greenshoe_overallotment" not in text(DEAL)
+      and "issuer_country_domicile" not in text(DEAL)
+      and "deal_fees:" not in text(DEAL),
+      "[v3cfg] a dead refusal came back to the deal yaml — greenshoe/"
+      "domicile/fees are ANSWERABLE now (V3 columns)")
+check(has(TRANCHE, "over_allotment_exercised_shares:")
+      and has(TRANCHE, "total_fee:"),
+      "[v3cfg] tranche yaml lost greenshoe/fees")
+check(has(ORDER, "investor_classification")
+      and has(ORDER, "unsupported_intents"),
+      "[v3cfg] the classification HOLD is gone — it must stay a refusal "
+      "until the census (production-incident history); the column exists "
+      "in the VIEW only")
+check('values: ["ECM", "DCM"]' in text(
+          ROOT / "app" / "bqs" / "ontology" / "capital_markets_trade.yaml"),
+      "[v3cfg] trade object re-scoped to one product — the ECM blotter "
+      "branch becomes unreachable")
+check(has(SKILL, "nine grain-aligned objects")
+      and has(SKILL, "capital_markets_designation"),
+      "[v3cfg] SKILL lost the nine-object routing")
+check(has(SKILL, "Announced dates EXIST"),
+      "[v3cfg] SKILL re-learns the dead no-announced-date doctrine")
 check(has(SKILL, "DCM syndicate MEMBERS are listable"),
       "[release3] SKILL.md: the DCM syndicate-members flip is gone — the "
       "agent refuses member asks the tranche view now answers")

@@ -1,0 +1,78 @@
+# ---------------------------------------------------------------------------
+# Governed ontology — TRADE SYNDICATE object (V3 final round, 2026-08-31).
+# One row per trade + dealer: DCM dealer-level designation amounts
+# (OB_ORDER_TRADE_SYNDICATE). SOURCE IS EMPTY TODAY (schema-only;
+# forward-population expected) — every prose promise below is hedged
+# accordingly. DCM only.
+# ---------------------------------------------------------------------------
+source: capital_markets_trade_syndicate
+version: "1"
+dialect: trino
+
+connection:
+  catalog: bds_dg_oraas
+  schema: dgstream
+  sslmode: require
+
+base_view: bds_dg_oraas.dgstream.vw_trade_syndicate
+
+grain: [product, trade_id, dealer]
+
+purpose: >-
+  DCM per-trade DEALER designations (designation/carveout amounts by
+  dealer). Source is EMPTY today — answer "no designations recorded yet",
+  never "not tracked".
+
+max_limit: 5000
+query_timeout_seconds: 30
+
+how_to_use:
+  - "DCM ONLY, and the source table is EMPTY as of 2026-08-31 — a 0-row
+     result is the EXPECTED state, not a query failure: say DCM dealer
+     designations are not yet populated. When rows appear, the shape is
+     one row per trade+dealer, joined by trade_id to
+     capital_markets_trade."
+
+metrics:
+  dealer_count:
+    column: dealer
+    aggregation: COUNT_DISTINCT
+    description: Distinct dealers with designations in scope.
+  total_designation_amount:
+    column: designation_amt
+    aggregation: SUM
+    numeric: true
+    description: Total designated amount — not currency-scoped; label plainly.
+  row_count:
+    column: trade_id
+    aggregation: COUNT
+    description: Raw row count.
+
+dimensions:
+  product: {column: product, description: "Always 'DCM'."}
+  trade_id: {column: trade_id, description: "Trade id — joins capital_markets_trade. TEXT."}
+  dealer: {column: dealer, description: "Dealer (bank) name."}
+  designation_amt: {column: designation_amt, description: "Designated amount (NUMBER)."}
+  adjusted_designation_amt: {column: adjusted_designation_amt, description: "Adjusted designated amount (NUMBER)."}
+  adjusted_designation_pct: {column: adjusted_designation_pct, description: "Adjusted designation percentage (NUMBER)."}
+  carveout_amt: {column: carveout_amt, description: "Carveout amount (NUMBER)."}
+  distributed_carveout: {column: distributed_carveout, description: "Distributed carveout (NUMBER)."}
+
+filters:
+  product:
+    column: product
+    operators: [eq, in]
+    case_insensitive: true
+    values: ["DCM"]
+    description: Always DCM; the entitlement gate injects/validates this.
+  trade_id: {column: trade_id, operators: [eq, in], description: TEXT ids.}
+  dealer:
+    column: dealer
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Bank names — like on the stem; Citi = the CITIGROUP GLOBAL MARKETS stem.
+
+usage_notes:
+  - Source empty today — 0 rows = "not yet populated", disclosed as such.
+  - One metric per request; rankings end with trade_id then dealer.

@@ -668,3 +668,22 @@ coverage rule (every source reference since last deploy, not just the
 newest wave). Flyway aborted at tranche (script _22) — every later
 script (order + 5 new views) never ran; ONE re-handed file unblocks the
 chain.
+
+### V3 FINAL CONFIG ROUND BUILT (2026-08-31, user: "build")
+NINE ontology objects: +capital_markets_hedge_trade, +designation (ECM
+cards: firm account, pot splits, per-card economics), +trade_syndicate
+(empty-source doctrine baked in). Exposure wave: deal +12 fields (price
+range, domicile, country, offering format, FX, deal fee/size MM,
+first_announced), tranche +22 (coupon/yield/price/book-size, 6 shared
+fees + 2 ECM fees, greenshoe, announce/issue/trade/first-trade/lockup
+dates, target market, FRN), order +21 (LEI, order_status, QIB, sub-type,
+firm/pot, alloc lifecycle, OBO, ESG, wall-crossed, existing-holder,
+active price/book status, sales_soeid), trade de-scoped to BOTH products
++5 (trade_price, firm accounts, commission, execution). REFUSALS FLIPPED
+(deal yaml intents deleted): announced_date, issuer_country_domicile,
+greenshoe_overallotment, deal_fees. HELD: investor_classification (census
+first — gate-pinned to stay). SKILL nine-object routing + 9 capability
+rows + §3c-ter pointer restructure; agents.yaml +3 bullets. Gate: +36
+product pins, [v3cfg] block (10 checks), announced pin retired. Bars
+1451/206/110. DEPLOY: MCP + skill + agents to DEV (views already live);
+then smoke; then whitelist/PROD.

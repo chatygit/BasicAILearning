@@ -21,16 +21,19 @@ base_view: bds_dg_oraas.dgstream.vw_trade_detail
 grain: [product, trade_id]
 
 purpose: >-
-  The DCM TRADE BOOK: trades booked from orders — trade ids/references,
-  counterparties, trade sizes and allocations, price basis, direction,
-  billing bank, salesperson. "Trade" in the ask routes HERE.
+  The TRADE BOOK, both products since V3: trade ids/references,
+  counterparties, trade sizes/allocations/prices, firm accounts,
+  commissions, direction, billing bank, salesperson. "Trade" in the ask
+  routes HERE.
 
 max_limit: 5000
 query_timeout_seconds: 30
 
 how_to_use:
-  - "DCM ONLY. Every row is PRODUCT='DCM'; an ECM-only caller gets zero
-     rows by entitlement design — say trade-book data is DCM."
+  - "BOTH PRODUCTS since V3. The ECM branch is the investor-trade blotter
+     — TINY population (~724 rows PROD): an empty ECM result usually means
+     'not booked through this system', say so. DCM is the main book
+     (~489k)."
   - "'What is the trade ID for <investor>' = filter counterparty_name like
      '%NAME%' scoped by the deal/tranche ids, project trade_id AND
      trade_reference (the external booking reference) — present both,
@@ -91,14 +94,19 @@ dimensions:
   price_basis_value: {column: price_basis_value, description: "Price basis value (NUMBER; seen: 55, 0)."}
   trade_status: {column: trade_status, description: "Trade status (open vocabulary — unmeasured)."}
   trade_source_system: {column: trade_source_system, description: "Source system of the booking (sparse)."}
+  trade_price: {column: trade_price, products: ["ECM"], description: "ECM (V3). Trade price (NUMBER). NULL on DCM (price basis lives in price_basis_code/value)."}
+  firm_account_number: {column: firm_account_number, products: ["ECM"], description: "ECM (V3). FIRM ACCOUNT number on the trade — 'which firm account' asks land here. NULL on DCM."}
+  firm_account_type: {column: firm_account_type, products: ["ECM"], description: "ECM (V3). Firm account type."}
+  commission_rate: {column: commission_rate, products: ["ECM"], description: "ECM (V3). Commission rate (NUMBER)."}
+  execution_ts: {column: execution_ts, products: ["ECM"], description: "ECM (V3). Execution timestamp."}
 
 filters:
   product:
     column: product
     operators: [eq, in]
     case_insensitive: true
-    values: ["DCM"]
-    description: Always DCM; the entitlement gate injects/validates this.
+    values: ["ECM", "DCM"]
+    description: Both products since V3; the entitlement gate injects/validates this.
   deal_id:
     column: deal_id
     operators: [eq, in]
@@ -159,6 +167,16 @@ filters:
     column: trade_size
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
     description: Notional threshold — no currency scoping.
+  firm_account_number:
+    column: firm_account_number
+    products: ["ECM"]
+    operators: [eq, in, like, is_null, is_not_null]
+    description: ECM firm account — exact when the user pastes one.
+  execution_ts:
+    column: execution_ts
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: ECM execution window — both bounds for trailing windows.
 
 usage_notes:
   - One metric per request; filters are ANDed; ids ferry between objects

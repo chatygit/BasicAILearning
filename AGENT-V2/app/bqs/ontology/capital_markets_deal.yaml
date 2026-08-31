@@ -268,6 +268,18 @@ dimensions:
   settlement_ts: {column: settlement_ts, description: "Settlement timestamp (deal grain = MAX across tranches, i.e. the LAST settlement). Partial coverage (QA 2026-08-18: ~66% of DCM deals, ~26% of ECM) — blanks mean 'not captured'. 'Deals settling in <period>' filters here; per-TRANCHE settlement lives on the tranche object (DCM, release 2); a bare 'Settled deals' is a deal_status ask."}
   transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: origination transaction id — FORWARD-POPULATED (recent Ipreo deals; NULL on history means 'predates the link', not 'no transaction'). TEXT. 'Transaction 75041397' addressing filters here."}
   issuer_lei: {column: issuer_lei, products: ["ECM"], description: "ECM (release 3, ~83% populated). Issuer LEI. NULL on every DCM row — no DCM issuer LEI exists at source; a DCM issuer-LEI ask is honestly unanswerable (offer GFCID/ticker)."}
+  first_announced: {column: first_announced, description: "First announcement timestamp (V3). DCM = earliest tranche announcement; ECM = the transaction announce timestamp (was empty in QA — coverage unmeasured, hedge blanks as 'not captured'). 'Deals announced in <period>' filters here — the old 'no announced date' refusal is DEAD."}
+  base_price: {column: base_price, products: ["ECM"], description: "ECM (V3). Base/offer price of the transaction. NULL on DCM. Population unmeasured — blanks = not captured."}
+  reoffer_low_price: {column: reoffer_low_price, products: ["ECM"], description: "ECM (V3). LOW end of the reoffer PRICE RANGE. With reoffer_high_price answers 'what was the price range' — the range refusal is DEAD. No STAGE history exists (Initial vs Revised is still not tracked — say so)."}
+  reoffer_high_price: {column: reoffer_high_price, products: ["ECM"], description: "ECM (V3). HIGH end of the reoffer price range."}
+  fx_rate: {column: fx_rate, products: ["ECM"], description: "ECM (V3). Deal FX rate (population unmeasured)."}
+  issuer_country: {column: issuer_country, products: ["ECM"], description: "ECM (V3). Issuer's country. NULL on DCM."}
+  issuer_domicile: {column: issuer_domicile, products: ["ECM"], description: "ECM (V3). Issuer's DOMICILE country — 'incorporated in / domiciled in' asks land HERE; the old domicile refusal is DEAD for ECM (DCM: still not tracked)."}
+  offering_format: {column: offering_format, products: ["ECM"], description: "ECM (V3). Offering format (open vocabulary; population unmeasured)."}
+  deal_fee_mm: {column: deal_fee_mm, products: ["ECM"], description: "ECM (V3). Deal-level FEE in millions, paired with deal_fee_currency — the deal-fees refusal is DEAD for ECM. DCM deal-level fee = SUM the tranche object's total_fee instead."}
+  deal_fee_currency: {column: deal_fee_currency, products: ["ECM"], description: "ECM (V3). Currency of deal_fee_mm — always present it with the fee figure."}
+  deal_size_mm: {column: deal_size_mm, products: ["ECM"], description: "ECM (V3). Deal MONEY size in millions (paired with deal_size_currency) — ends the shares-vs-money ambiguity: deal_size is SHARES on ECM, THIS is the money figure."}
+  deal_size_currency: {column: deal_size_currency, products: ["ECM"], description: "ECM (V3). Currency of deal_size_mm."}
 
 # -------------------------------- FILTERS ----------------------------------
 filters:
@@ -584,43 +596,57 @@ filters:
       ECM (release 3, ~83% populated). Issuer Legal Entity Identifier —
       exact match when the user pastes one. NULL on DCM (no source
       column): a DCM issuer-LEI ask is unanswerable — offer GFCID/ticker.
-
-unsupported_intents:
-  announced_date:
-    patterns: ["announced", "announcement date", "launch date", "when was it launched", "created date"]
-    reason: >-
-      No announcement, launch or creation date exists — the ECM source's
-      ANNOUNCE_TS/LAUNCH_TS/CLOSING_TS columns measured ALL ZERO
-      (2026-08-18). The deal carries pricing dates and a partially-populated
-      settlement_ts only.
-    user_message: >-
-      Announcement/launch dates aren't tracked — the deal carries pricing
-      dates and (for many deals) a settlement date. I can show first/last
-      priced or the settlement date instead, or filter on an "announced"
-      STATUS if that's what you meant. Would either work?
-  issuer_country_domicile:
-    patterns: ["country of domicile", "domicile is", "domicile country", "incorporated in", "country of incorporation", "issuer country", "headquartered in"]
-    reason: >-
-      Issuer geography is not tracked on any of the four objects. This is
-      distinct from INVESTOR geography, which IS available on ECM through
-      capital_markets_order.
-    user_message: >-
-      I'm unable to filter by the issuer's country of domicile or incorporation —
-      that isn't tracked. I can use the deal's region (North America / EMEA /
-      APAC) as a geographic proxy, or if you meant where the INVESTORS are based
-      (e.g. US-based investors), that IS supported — just say which.
-  greenshoe_overallotment:
-    patterns: ["greenshoe", "green shoe", "over-allotment", "overallotment", "over allotment"]
-    reason: No greenshoe or over-allotment column is exposed on the deal view.
-    user_message: >-
-      Greenshoe/over-allotment data is not available in this dataset. I can show
-      deal size or allocation detail for the deal instead.
-  deal_fees:
-    patterns: ["fees", "gross spread", "underwriting fee", "economics"]
-    reason: No fee or economics columns are exposed on the deal view.
-    user_message: >-
-      Fee economics aren't available. I can show deal sizes, tranche sizes and
-      order demand instead.
+  first_announced:
+    column: first_announced
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      'Announced in <period>' (V3 — the old refusal is DEAD). DCM =
+      earliest tranche announcement; ECM coverage unmeasured (QA was
+      empty) — disclose blanks. Trailing windows need BOTH bounds.
+  reoffer_low_price:
+    column: reoffer_low_price
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      ECM price range LOW bound — project with reoffer_high_price for
+      'what was the price range'. NO stage history (Initial vs Revised
+      not tracked — say so when asked for stages).
+  reoffer_high_price:
+    column: reoffer_high_price
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: ECM price range HIGH bound.
+  issuer_domicile:
+    column: issuer_domicile
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM issuer domicile country — 'incorporated in / domiciled in'
+      filters here (V3; refusal DEAD for ECM). DCM: not tracked — say so.
+  issuer_country:
+    column: issuer_country
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: ECM issuer country (headquarters side; domicile is the legal one).
+  deal_fee_mm:
+    column: deal_fee_mm
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      ECM deal fee in millions — ALWAYS present with deal_fee_currency.
+      Population unmeasured; blanks = not captured. DCM: SUM the tranche
+      object's total_fee.
+  deal_size_mm:
+    column: deal_size_mm
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: >-
+      ECM deal MONEY size in millions (with deal_size_currency) — use for
+      money-size comparisons; deal_size stays the share count.
 
 usage_notes:
   - Always set a product filter ('ECM' for equity, 'DCM' for debt). Count metrics

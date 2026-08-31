@@ -320,6 +320,30 @@ dimensions:
   order_ownership: {column: order_ownership, products: ["ECM"], description: "ECM. HOME = our (owned) book, AWAY = orders seen away. BOTH are in every total since release 2 (before it, every figure was HOME-only — ECM population grew ~45% at the flip). 'Our orders'/'Citi's book' = HOME. NULL = flag not stored. NULL on DCM (no such flag)."}
   sales_person: {column: sales_person, products: ["DCM"], description: "DCM (release 3; NULL on ECM until its sales columns are measured). Covering salesperson, first + last name (~30% populated). 'Orders covered by <person>' filters here; NULL = not recorded."}
   transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: the origination transaction id — FORWARD-POPULATED (recent Ipreo deals only; NULL on history) — a NULL means the deal predates the link, not 'no transaction'. TEXT, quote it. 'Transaction 75041397' asks filter here."}
+  order_status: {column: order_status, description: "Order status (V3, both products). NOTE: the ECM branch already excludes CANCELLED/DELETED/PASS rows at the view layer; DCM applies no exclusion — a DCM status breakdown can include statuses ECM never shows."}
+  investor_lei: {column: investor_lei, products: ["ECM"], description: "ECM (V3). Investor LEI (sparse). NULL on DCM."}
+  investor_qib_status: {column: investor_qib_status, products: ["DCM"], description: "DCM (V3). QIB flag as stored text ('false'/'true'/NULL)."}
+  investor_sub_type: {column: investor_sub_type, products: ["DCM"], description: "DCM (V3). Investor sub-type beneath investor_category (sparse)."}
+  is_firm_order: {column: is_firm_order, description: "Firm-order flag (V3, both products; stored text 'true'/NULL). With is_pot this is the DCM order-type vocabulary: FIRM vs POT."}
+  is_pot: {column: is_pot, description: "Pot-order flag (V3, both products; CASE VARIANTS real — 'True'/'true'/'False'; match case-insensitively). Pot dominates DCM (~3.4M rows)."}
+  draft_alloc: {column: draft_alloc, description: "Draft allocation (V3, both products; stored/rendered as TEXT — display only, never SUM)."}
+  soft_alloc: {column: soft_alloc, products: ["DCM"], description: "DCM (V3). Soft allocation (text; display only)."}
+  isn_alloc: {column: isn_alloc, products: ["DCM"], description: "DCM (V3). IssueNet allocation (text; display only)."}
+  retention: {column: retention, products: ["DCM"], description: "DCM (V3). Retention figure (text)."}
+  rationale: {column: rationale, products: ["DCM"], description: "DCM (V3). Allocation rationale text (near-dead population — is_null almost everywhere)."}
+  rationale_type: {column: rationale_type, products: ["DCM"], description: "DCM (V3). Rationale type (near-dead)."}
+  fx_currency: {column: fx_currency, products: ["DCM"], description: "DCM (V3). Order FX currency (sparse)."}
+  obo_name: {column: obo_name, products: ["DCM"], description: "DCM (V3). On-behalf-of name — the order-level firm-account candidate (trade-level firm accounts live on capital_markets_trade)."}
+  obo_legal_entity_id: {column: obo_legal_entity_id, products: ["DCM"], description: "DCM (V3). On-behalf-of legal entity id (sparse)."}
+  esg_tag: {column: esg_tag, products: ["DCM"], description: "DCM (V3). ESG tag on the order (sparse; esg_bond on the tranche object is the instrument-level flag)."}
+  order_size_change: {column: order_size_change, products: ["DCM"], description: "DCM (V3). Order size change (NUMBER)."}
+  is_affiliated: {column: is_affiliated, products: ["DCM"], description: "DCM (V3). Affiliated-investor flag (text)."}
+  one_off_investor: {column: one_off_investor, products: ["DCM"], description: "DCM (V3). One-off investor flag (text)."}
+  sales_soeid: {column: sales_soeid, description: "Salesperson SOEID (V3, both products) — the precise person key behind sales_person."}
+  wall_crossed: {column: wall_crossed, products: ["ECM"], description: "ECM (V3). Wall-crossing value — 'wall-crossed investors' asks land here (population unmeasured)."}
+  existing_holder: {column: existing_holder, products: ["ECM"], description: "ECM (V3). Existing-holder value (population unmeasured)."}
+  active_price: {column: active_price, products: ["ECM"], description: "ECM (V3). Active book price at order level (NUMBER)."}
+  book_status: {column: book_status, products: ["ECM"], description: "ECM (V3). Order-book status (e.g. NEVER_OPENED; open vocabulary) — 'is the book open' asks land here."}
   order_amount: {column: order_amount, description: "Order/indication amount. DCM: the order amount (money). ECM: the HIGHEST limit point on that order's IOI curve — label it 'highest IOI limit', never 'order size'."}
   currency: {column: currency, description: "Pricing currency (scalar). Required alongside any DCM money figure. Can be NULL on ECM when the order's tranche id matches no tranche."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field). NULL on ECM orders whose tranche id matches no tranche — those rows drop out of every date-bounded query."}
@@ -601,6 +625,74 @@ filters:
       the deal predates the link. When a transaction-id filter returns 0
       rows on DCM, say the id may predate the transaction link and offer
       deal_id addressing instead. TEXT — quote it.
+  order_status:
+    column: order_status
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      V3, both products. ECM rows never show CANCELLED/DELETED/PASS (view
+      exclusion); DCM has no exclusion and its vocabulary includes a
+      lowercase 'confidential' — match case-insensitively, merge variants.
+  investor_lei:
+    column: investor_lei
+    products: ["ECM"]
+    operators: [eq, in, like, is_null, is_not_null]
+    description: ECM investor LEI — exact when pasted; sparse.
+  is_firm_order:
+    column: is_firm_order
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    case_insensitive: true
+    description: >-
+      'Firm orders' = eq 'true' (case-insensitive). NULL is a large
+      population — disclose; firm and pot are NOT mutually exclusive.
+  is_pot:
+    column: is_pot
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    case_insensitive: true
+    description: >-
+      'Pot orders' = eq 'true' case-insensitively ('True'/'true' both
+      stored). Firm+pot combinations are real — never present the two as
+      exclusive buckets.
+  investor_qib_status:
+    column: investor_qib_status
+    products: ["DCM"]
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: DCM QIB flag ('QIB investors' = eq 'true' case-insensitively).
+  obo_name:
+    column: obo_name
+    products: ["DCM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: On-behalf-of name — contains-match; sparse.
+  esg_tag:
+    column: esg_tag
+    products: ["DCM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: DCM order ESG tag (sparse — disclose blanks).
+  sales_soeid:
+    column: sales_soeid
+    operators: [eq, in, is_null, is_not_null]
+    description: Exact SOEID lookup for a salesperson's orders (both products).
+  wall_crossed:
+    column: wall_crossed
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: ECM wall-crossing value — population unmeasured, disclose.
+  book_status:
+    column: book_status
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: ECM book status (NEVER_OPENED seen; open vocabulary).
   order_ownership:
     column: order_ownership
     products: ["ECM"]
