@@ -89,7 +89,7 @@ filters:
     case_insensitive: true
     values: ["DCM"]
     description: Always DCM; the entitlement gate injects/validates this.
-  deal_id: {column: deal_id, operators: [eq, in], description: TEXT ids — quote, max 40 per in-list.}
+  deal_id: {column: deal_id, operators: [eq, in], description: "TEXT ids — quote, max 40 per in-list."}
   tranche_id: {column: tranche_id, operators: [eq, in], description: TEXT ids.}
   hedge_order_id: {column: hedge_order_id, operators: [eq, in], description: TEXT ids — scope executions to hedge orders.}
   hedge_trade_id: {column: hedge_trade_id, operators: [eq, in], description: TEXT ids.}

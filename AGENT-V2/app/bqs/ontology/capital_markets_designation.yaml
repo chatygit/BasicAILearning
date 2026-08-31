@@ -103,7 +103,7 @@ filters:
     case_insensitive: true
     values: ["ECM"]
     description: Always ECM; the entitlement gate injects/validates this.
-  deal_id: {column: deal_id, operators: [eq, in], description: TEXT ids — quote, max 40 per in-list.}
+  deal_id: {column: deal_id, operators: [eq, in], description: "TEXT ids — quote, max 40 per in-list."}
   tranche_id: {column: tranche_id, operators: [eq, in], description: TEXT ids.}
   trade_id: {column: trade_id, operators: [eq, in], description: TEXT ids.}
   designation_id: {column: designation_id, operators: [eq, in], description: TEXT ids.}
