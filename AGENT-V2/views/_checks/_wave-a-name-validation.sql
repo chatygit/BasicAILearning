@@ -82,3 +82,12 @@ SELECT ANNOUNCE_TS, BASE_PRICE, REOFFER_LOW_PRICE, REOFFER_HIGH_PRICE,
 FROM   DGSTREAM.OPUS_ECM_TRANSACTION WHERE 1 = 0;
 
 SELECT INVESTOR_CLASSIFICATION FROM DGSTREAM.OB_ORDER WHERE 1 = 0;
+
+-- Added 2026-08-31 after the DEV tranche failure (ORA-00904
+-- "S"."SYNDICATE_MEMBER_NAME"): the SYNM block predated this file and
+-- was never validated — the member-name column on the OB member table is
+-- DEALER, not SYNDICATE_MEMBER_NAME (that name belongs to the ECM
+-- table). RULE: this file must cover EVERY source column referenced
+-- since the last deploy, not just the newest wave.
+SELECT DEAL_TRANCHE_ID, DEALER
+FROM   DGSTREAM.OB_TRANCHE_SYNDICATE_MEMBER WHERE 1 = 0;

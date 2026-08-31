@@ -656,3 +656,15 @@ key-format check (likely OPUS transaction keys, different join shape),
 then a UNION branch + de-scope the trade object from DCM-only. Same
 question applies to hedge (ECM hedging unlikely at bookbuild — OB_HEDGE_
 ORDER keys are all I-format/DCM; revisit only if the business asks).
+
+### DEV V3 deploy failure #1 (2026-08-31): SYNM column name — FIXED
+vw_tranche_summary failed ORA-00904 "S"."SYNDICATE_MEMBER_NAME": the
+DCM member-list block (added release 2, PREDATING the name-validation
+file) borrowed the ECM syndicate table's column name; OB_TRANCHE_
+SYNDICATE_MEMBER's member column is DEALER (proven by the deployed DST
+block on the same table). Fixed: SYNM reads DEALER, view-level alias
+unchanged. Validation file extended with the missing statement + the
+coverage rule (every source reference since last deploy, not just the
+newest wave). Flyway aborted at tranche (script _22) — every later
+script (order + 5 new views) never ran; ONE re-handed file unblocks the
+chain.
