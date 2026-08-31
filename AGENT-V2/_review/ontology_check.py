@@ -1802,6 +1802,12 @@ check(has(SKILL, "FULL book"),
       "[present] SKILL.md: the full-book (home+away) doctrine is gone "
       "(release 2) — the ~45% population jump gets read as order growth "
       "and 'our orders' asks stop filtering HOME")
+check(has(SKILL, "top investors by ORDER SIZE")
+      and has(SKILL, "SAME-VALUE hint fires"),
+      "[metric] SKILL.md: the cross-product order-size rule or the "
+      "same-value-hint diagnostic is gone (USD-denominated trace "
+      "2026-08-31) — ECM IOI limits get summed into money totals again "
+      "and constraint-killed zeros go unexplained")
 check(has(SKILL, "ZERO IS A CLAIM, NOT A DEFAULT"),
       "[present] SKILL.md: the negative-claim evidence rule is gone (PROD "
       "issue #8, 2026-08-21) — failed attempts get reported as 'none "

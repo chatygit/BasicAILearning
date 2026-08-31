@@ -199,3 +199,14 @@ pricing-order. SKILL: BlackRock-class = ONE request, two-step re-exampled
 2 routing rows. Gate: retired 2 stale pins with successors, +3 product
 pins, order_ownership whitelisted as construction-closed enum. Bars
 1165/206/109. DEPLOY ORDER: views FIRST, then MCP + skill.
+
+## #9 — "Top investors by order size, USD, 12 months" (2026-08-31 trace)
+Two findings: (1) metric violation — total_order_amount summed with
+product IN (ECM,DCM): sums the forbidden ECM IOI limit AND mixes
+shares/money; new SKILL routing row: DCM-scoped total_order_amount or
+total_demand with product in dimensions. (2) the server's same-value hint
+("USD is real — other constraints killed it") was received and ignored —
+new §8 rule: one diagnostic re-run to NAME the killing constraint
+(likely the 12-month window vs data vintage here). Both gate-pinned.
+RELEASE-TRAIN candidate: planner guard — money metric + multi-product IN
++ no product dimension = reject with steer (units-mixing shape).

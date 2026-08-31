@@ -448,6 +448,7 @@ and `investor_count` undercounts — say so on a headcount.
 | "lockup expiring" | tranche · `lockup_ts` (ECM, V3) |
 | firm / pot orders | order · `is_firm_order` × `is_pot` (both products; case variants; NOT mutually exclusive — never present as exclusive buckets) |
 | wall-crossed investors | order · `wall_crossed` (ECM, V3; population unmeasured) |
+| "top investors by ORDER SIZE" across products | NEVER `total_order_amount` with `product in [ECM,DCM]` — that SUMs the forbidden ECM IOI limit AND mixes shares with money. Either scope DCM (`total_order_amount`) — "USD-denominated" is bond language — or use `total_demand` with `product` in dimensions so units stay apart |
 | "largest / biggest order" in a deal | order · LISTING ranked `order_demand_qty` desc (+ `order_id` asc tiebreak), limit 3 for the tie check — **the size of an order is its DEMAND; `order_amount` is an IOI limit on ECM and ranks the wrong order**. "Largest allocation" ranks by `order_allocation` |
 | deal size / value / "biggest deal" | deal · `total_deal_size` / `largest_deal_size` |
 | tranche / issue size | tranche · `total_tranche_size` / `largest_tranche_size` |
@@ -847,6 +848,15 @@ status-sensitive answer spans both.
 - **0 rows + `suggestions`/`did_you_mean`**: retry with a real value (§7b/§7c
   first). Never delete the question's defining filter to force a result. For a
   valid question with no matches: "no matching records" plus ONE widening idea.
+- **When the SAME-VALUE hint fires** ("'X' is a real value — the 0 rows come
+  from your OTHER constraints"), don't stop at "no matches": if the query
+  budget allows, spend ONE diagnostic re-run with the most-suspect
+  constraint dropped (usually the date window) and NAME the killer in the
+  answer — "USD orders exist, but none priced in the last 12 months" beats
+  "no matching records, shall I widen?" (measured 2026-08-31: the hint was
+  received and ignored). The defining filter of the QUESTION never gets
+  dropped in the final answer — the diagnostic run is evidence, not the
+  result.
 - **ZERO IS A CLAIM, NOT A DEFAULT.** "No investors did X" / "none exist" is
   the strongest answer you can give — it requires ONE successful, well-formed
   query AT THE CLAIM'S GRAIN whose TOP-RANKED row directly tests it (rank

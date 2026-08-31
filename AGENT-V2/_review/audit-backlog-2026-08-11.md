@@ -687,3 +687,9 @@ rows + §3c-ter pointer restructure; agents.yaml +3 bullets. Gate: +36
 product pins, [v3cfg] block (10 checks), announced pin retired. Bars
 1451/206/110. DEPLOY: MCP + skill + agents to DEV (views already live);
 then smoke; then whitelist/PROD.
+
+### Release-train item (2026-08-31, issue #9): units-mixing planner guard
+Reject money metrics (total/max order_amount, total_demand at money
+grain) when product IN spans both products AND product is not in
+dimensions — the shape sums ECM shares/IOI limits into DCM money.
+Steer: "scope one product or add product to dimensions."
