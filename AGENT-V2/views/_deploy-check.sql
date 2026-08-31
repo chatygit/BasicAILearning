@@ -62,6 +62,27 @@ FROM (
           AND table_name IN ('VW_DEAL_SUMMARY','VW_TRANCHE_SUMMARY'))
       OR (column_name = 'SALES_PERSON' AND table_name = 'VW_ORDER_DETAIL'))
   UNION ALL
+  -- V3 FINAL WAVE: the four new views exist.
+  SELECT '1u. four new views exist (hedge order/trade, designation, trade synd)', '4',
+         TO_CHAR(COUNT(DISTINCT table_name))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM'
+  AND    table_name IN ('VW_HEDGE_ORDER','VW_HEDGE_TRADE',
+                        'VW_DESIGNATION','VW_TRADE_SYNDICATE')
+  UNION ALL
+  SELECT '1v. final-wave columns landed (trade/order/tranche/deal)', '10',
+         TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM'
+  AND   ((table_name = 'VW_TRADE_DETAIL' AND column_name IN
+            ('TRADE_PRICE','FIRM_ACCOUNT_NUMBER','EXECUTION_TS'))
+      OR (table_name = 'VW_ORDER_DETAIL' AND column_name IN
+            ('WALL_CROSSED','INVESTOR_CLASSIFICATION','ACTIVE_PRICE'))
+      OR (table_name = 'VW_TRANCHE_SUMMARY' AND column_name IN
+            ('GROSS_SPREAD_PER_FEE','OVER_ALLOTMENT_AUTHORIZED_SHARES'))
+      OR (table_name = 'VW_DEAL_SUMMARY' AND column_name IN
+            ('REOFFER_LOW_PRICE','ISSUER_DOMICILE')))
+  UNION ALL
   SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
          'NUMBER,NUMBER',
          LISTAGG(data_type, ',') WITHIN GROUP (ORDER BY table_name)
@@ -86,11 +107,12 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_rows,
          COUNT(CASE WHEN PRODUCT = 'ECM' THEN ISSUER_NAME END) AS ecm_issuer,
          COUNT(CASE WHEN PRODUCT = 'ECM' THEN ISSUER_LEI END) AS ecm_lei,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN REOFFER_LOW_PRICE END) AS ecm_reoffer,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN ISSUER_DOMICILE END) AS ecm_domicile,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN TRANSACTION_ID END) AS dcm_txn,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN 1 END) AS dcm_rows,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN DEAL_REGION END) AS dcm_region,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN SETTLEMENT_TS END) AS dcm_settle,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN TRANSACTION_ID END) AS dcm_txn,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND CURRENCIES IS NOT NULL
                      AND REGEXP_LIKE(CURRENCIES, '[A-Za-z]')
                     THEN 1 END) AS ecm_alpha,
@@ -108,16 +130,15 @@ SELECT '1e. ECM deals with issuer name (INFO, expect ~6,892 UAT)' AS check_,
        'INFO' AS verdict_
 FROM agg
 UNION ALL
-SELECT '1n. DCM deals with TRANSACTION_ID (INFO, ~890 PROD, forward-filled)',
-       '(info)',
-       TO_CHAR(dcm_txn) || ' of ' || TO_CHAR(dcm_rows), 'INFO'
-FROM agg
-UNION ALL
 SELECT '1f. DCM deals with region (INFO, expect ~8,260 UAT)', '(info)',
        TO_CHAR(dcm_region) || ' of ' || TO_CHAR(dcm_rows), 'INFO' FROM agg
 UNION ALL
 SELECT '1o. ECM deals with issuer LEI (INFO, expect ~83% — rel 3)', '(info)',
        TO_CHAR(ecm_lei) || ' of ' || TO_CHAR(ecm_rows), 'INFO' FROM agg
+UNION ALL
+SELECT '1w. ECM deals w/ reoffer price range / domicile (INFO — final wave)',
+       '(info)', TO_CHAR(ecm_reoffer) || ' range / ' ||
+       TO_CHAR(ecm_domicile) || ' domicile', 'INFO' FROM agg
 UNION ALL
 SELECT '1p. DCM deals with TRANSACTION_ID (INFO, ~945 PROD, fwd-populated)',
        '(info)', TO_CHAR(dcm_txn) || ' of ' || TO_CHAR(dcm_rows), 'INFO'
@@ -153,7 +174,10 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN SETTLEMENT_TS END) AS dcm_settle,
          COUNT(CASE WHEN PRODUCT = 'DCM'
                      AND SYNDICATE_MEMBER_NAME LIKE '%|%'
-                    THEN 1 END) AS dcm_multi_synd
+                    THEN 1 END) AS dcm_multi_synd,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN TOTAL_FEE END) AS ecm_fee,
+         COUNT(CASE WHEN PRODUCT = 'ECM'
+                    THEN OVER_ALLOTMENT_AUTHORIZED_SHARES END) AS ecm_greenshoe
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
@@ -169,6 +193,11 @@ UNION ALL
 SELECT '1q. DCM tranches with MULTI-member syndicate list (INFO — rel 3;' ||
        ' 0 means the SYNM join did not land)',
        '(info)', TO_CHAR(dcm_multi_synd), 'INFO'
+FROM agg
+UNION ALL
+SELECT '1x. ECM tranches w/ fees / greenshoe (INFO — final wave)', '(info)',
+       TO_CHAR(ecm_fee) || ' fee / ' || TO_CHAR(ecm_greenshoe) || ' greenshoe',
+       'INFO'
 FROM agg
 UNION ALL
 SELECT '8. tranche grain (rows = PRODUCT+DEAL+TRANCHE)', 'Y',
@@ -219,3 +248,78 @@ SELECT '9. order grain (rows = PRODUCT+ORDER_ID)', 'Y',
        CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
        CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
 ORDER BY 1;
+
+-- E. HEDGE ORDER VIEW — ONE scan (new in V3).
+WITH agg AS (
+  SELECT /*+ MATERIALIZE */
+         COUNT(*) AS rows_,
+         COUNT(DISTINCT HEDGE_ORDER_ID) AS keys_,
+         COUNT(DISTINCT INVESTOR_GP_ID) AS investors_,
+         COUNT(HEDGE_MANAGER) AS managed_
+  FROM DGSTREAM.VW_HEDGE_ORDER
+)
+SELECT '10. hedge orders (INFO, ~300,741 source)' AS check_, '(info)' AS expected_,
+       TO_CHAR(rows_) || ' rows / ' || TO_CHAR(investors_) || ' investors / ' ||
+       TO_CHAR(managed_) || ' managed' AS actual_, 'INFO' AS verdict_
+FROM agg
+UNION ALL
+SELECT '10b. hedge-order grain', 'Y',
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+ORDER BY 1;
+
+-- F. HEDGE TRADE VIEW — ONE scan (new in V3).
+WITH agg AS (
+  SELECT /*+ MATERIALIZE */
+         COUNT(*) AS rows_, COUNT(DISTINCT HEDGE_TRADE_ID) AS keys_
+  FROM DGSTREAM.VW_HEDGE_TRADE
+)
+SELECT '11. hedge trades (INFO, ~155,693 source)' AS check_, '(info)' AS expected_,
+       TO_CHAR(rows_) AS actual_, 'INFO' AS verdict_ FROM agg
+UNION ALL
+SELECT '11b. hedge-trade grain', 'Y',
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+ORDER BY 1;
+
+-- G. TRADE VIEW — ONE scan; now TWO branches.
+WITH agg AS (
+  SELECT /*+ MATERIALIZE */
+         COUNT(*) AS rows_, COUNT(DISTINCT PRODUCT||'~'||TRADE_ID) AS keys_,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN 1 END) AS dcm_,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN FIRM_ACCOUNT_NUMBER END) AS firm_
+  FROM DGSTREAM.VW_TRADE_DETAIL
+)
+SELECT '12. trades by product (INFO, ~489k DCM / ~724 ECM source)' AS check_,
+       '(info)' AS expected_,
+       TO_CHAR(dcm_) || ' DCM / ' || TO_CHAR(ecm_) || ' ECM / ' ||
+       TO_CHAR(firm_) || ' w/ firm acct' AS actual_, 'INFO' AS verdict_
+FROM agg
+UNION ALL
+SELECT '12b. trade grain', 'Y',
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+ORDER BY 1;
+
+-- H. DESIGNATION VIEW — ONE scan (new in V3).
+WITH agg AS (
+  SELECT /*+ MATERIALIZE */
+         COUNT(*) AS rows_, COUNT(DISTINCT DESIGNATION_ID) AS keys_,
+         COUNT(FIRM_ACCOUNT) AS firm_
+  FROM DGSTREAM.VW_DESIGNATION
+)
+SELECT '13. designations (INFO, ~10,696 source)' AS check_, '(info)' AS expected_,
+       TO_CHAR(rows_) || ' rows / ' || TO_CHAR(firm_) || ' w/ firm acct'
+         AS actual_, 'INFO' AS verdict_ FROM agg
+UNION ALL
+SELECT '13b. designation grain', 'Y',
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+ORDER BY 1;
+
+-- I. TRADE SYNDICATE VIEW — expected EMPTY today (schema-only source;
+-- forward-population possible). Any rows here = news, not a failure.
+SELECT '14. trade-syndicate rows (INFO, source EMPTY today)' AS check_,
+       '(info)' AS expected_, TO_CHAR(COUNT(*)) AS actual_, 'INFO' AS verdict_
+FROM DGSTREAM.VW_TRADE_SYNDICATE;
