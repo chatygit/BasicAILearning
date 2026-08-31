@@ -381,3 +381,32 @@ trade ontology objects join the post-deploy config round.
 Deferred: ECONOMIC_* money columns (semantics unmeasured), sales
 override block, comments blocks, FROM/TO account columns (firm-account
 design pending), OB_ORDER_TRADE_SYNDICATE (43,608 rows — second batch).
+
+## RELEASE 3 — WAVE A "fat views" (2026-08-28, user direction: maximize
+## the view surface NOW; whitelisting is the slow gate, configs are ours)
+Every column below EXISTS at source (desc'd inventories); populations
+mostly UNMEASURED — deliberate: an empty column costs nothing, a missing
+one costs a whitelist cycle. Ontology exposure = post-deploy config
+rounds, incremental, no view change needed.
+* vw_tranche_summary DCM (+16, ECM typed NULLs): COUPON, YIELD, PRICE,
+  PRICE_GUIDANCE, ORDER_BOOK_SIZE_USD (VARCHAR2 at source — no TO_NUMBER
+  until measured), TOTAL/UNDERWRITING/MANAGEMENT/SELLING_CONCESSION
+  (source spelling CONSESSION, aliased corrected)/PRAECIPIUM/RETAIL_UW
+  fees, ANNOUNCEMENT/ISSUE/TRADE_TS, TARGET_MARKET, FRN_COUPON_INDEX.
+* vw_deal_summary: ECM DEAL_FEE_MM+CURRENCY, DEAL_SIZE_MM+CURRENCY (the
+  OPUS money size; DCM NULLs); FIRST_ANNOUNCED (DCM = MIN tranche
+  announcement — MIN is dup-safe over the raw table; ECM NULL, source
+  all-zero). DCM deal-grain fee SUMs deliberately SKIPPED (raw-table dup
+  inflation risk) — deal fee totals come from the tranche object's SUM
+  over the deduped view at config time.
+* vw_order_detail (+22): ECM real: INVESTOR_LEI, ORDER_STATUS. DCM real:
+  ORDER_STATUS, INVESTOR_QIB_STATUS, INVESTOR_SUB_TYPE, IS_FIRM_ORDER,
+  IS_POT (the order-type pair; case variants), DRAFT/SOFT/ISN_ALLOC
+  (VARCHAR2 at source), RETENTION, RATIONALE(+TYPE), FX_CURRENCY,
+  OBO_NAME, OBO_LEGAL_ENTITY_ID (firm-account candidates), ESG_TAG,
+  ORDER_SIZE_CHANGE, IS_AFFILIATED, ONE_OFF_INVESTOR, SALES_SOEID.
+PRE-HANDOVER: run _checks/_wave-a-name-validation.sql (WHERE 1=0 compile
+check on every new source name — instant ORA-00904 on any transcription
+typo). WAVE B (needs descs): _checks/_wave-b-desc-requests.sql — unlocks
+ECM order riches, ECM trade branch, hedge-trades + trade-syndicate views,
+firm accounts, salesperson reference.

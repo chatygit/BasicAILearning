@@ -646,3 +646,13 @@ ENTITLEMENT RIDER: if the team narrows hedge access, PULL the two new
 objects from the config push — nothing else depends on them.
 DEPLOY ORDER: release-3 views FIRST (all six files), deploy-check
 1n-1t + new-view checks, THEN MCP (ontology) + skill + agents.
+
+### Follow-up (2026-08-28, user): ECM trades branch for vw_trade_detail
+Conceptually real — the OB_ECM_TRADE_BOOK_* family — but measured tiny
+(INVESTOR_TRADE 724 rows, UNDERWRITING_TRADE 0) and never desc'd, so
+release 3 ships the trade object DCM-only (doctrine says so honestly).
+To add ECM: desc + 10-row sample of OB_ECM_TRADE_BOOK_INVESTOR_TRADE,
+key-format check (likely OPUS transaction keys, different join shape),
+then a UNION branch + de-scope the trade object from DCM-only. Same
+question applies to hedge (ECM hedging unlikely at bookbuild — OB_HEDGE_
+ORDER keys are all I-format/DCM; revisit only if the business asks).
