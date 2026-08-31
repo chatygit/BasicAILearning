@@ -693,3 +693,13 @@ Reject money metrics (total/max order_amount, total_demand at money
 grain) when product IN spans both products AND product is not in
 dimensions — the shape sums ECM shares/IOI limits into DCM money.
 Steer: "scope one product or add product to dimensions."
+
+### Helper-column wave (2026-08-31, user: "make answering easier")
+See view-notes ADDENDUM 2: +12 columns across 6 views; the id-ferry has
+ZERO standard fields left; deal cards gained TOTAL_DEMAND/ALLOCATION +
+SUBSCRIPTION_RATIO (and became away-inclusive — release-2 intent
+completed; ECM card counts grow ~45%, disclose at config time).
+POST-DEPLOY CONFIG ROUND: expose all; empty the SKILL two-step list;
+subscription-ratio doctrine (it's a stored ratio — no model math).
+Re-hand: vw_order_detail, vw_tranche_summary, vw_deal_summary,
+vw_hedge_order, vw_hedge_trade, vw_trade_detail (6 of 9).

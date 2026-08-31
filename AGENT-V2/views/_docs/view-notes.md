@@ -445,3 +445,32 @@ must ALL return "no rows selected". CONFIG ROUNDS AFTER WHITELIST:
 hedge_trade/designation/trade_syndicate objects, ECM trade branch
 de-scoping, new-column exposure, refusal flips (greenshoe, domicile,
 price range, classification-after-census).
+
+## V3 ADDENDUM (2026-08-31, whitelist window): order view + DEAL_REGION
+## + TRANCHE_REGION (both branches; ECM = OBT rollup / NULL tranche, DCM
+## = ODT.REGION / TRANCHE_REGION — all deploy-proven names). Kills the
+## region id-ferry: "investors in NAM deals" = ONE query. Re-hand
+## vw_order_detail.
+
+## V3 ADDENDUM 2 (2026-08-31): HELPER-COLUMN ANALYSIS — the ferry dies
+Principle: BQS has no query-time joins, so the views carry them. Audit of
+every remaining multi-step ask class -> columns added (all source names
+deploy-proven; ISSUE_NAME newly validated):
+* ORDER VIEW +6: DEAL_REGION/TRANCHE_REGION (addendum 1), DEAL_STATUS
+  (both branches — joins already existed), DEAL_SIZE, USE_OF_PROCEEDS,
+  SETTLEMENT_TS (DCM). RESULT: NO deal attribute needs the id-ferry any
+  more — "investors in priced/NAM/billion-dollar/refi deals" are all ONE
+  query once configs expose them.
+* TRANCHE VIEW +2: OFFERING_TYPE (ECM — "IPO tranches"), DEAL_SIZE.
+* DEAL VIEW +3: TOTAL_DEMAND, TOTAL_ALLOCATION (pre-computed full-book
+  roll-ups; the ECM OD subquery also DROPPED the leftover IS_OWNED filter
+  release 2 had specified — deal cards now away-inclusive, consistent
+  with the order view; ECM counts grow ~45%), SUBSCRIPTION_RATIO
+  (demand/size, unit-consistent per product, NULL-safe) — "most
+  oversubscribed deals" is one sorted query.
+* HEDGE ORDER/TRADE + TRADE VIEWS +1 each: DEAL_NAME (DCM via grouped
+  OB_DEAL_TRANCHE name rollup; ECM trade branch = ISSUE_NAME) — readable
+  listings, name-scoped asks resolve on the object itself.
+CONFIG ROUND AFTER DEPLOY: expose all of the above; SKILL two-step list
+becomes EMPTY (mechanism stays as fallback for exotic combos); the
+"materiality sample" path then applies only to genuinely exotic asks.

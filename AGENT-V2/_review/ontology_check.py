@@ -1802,6 +1802,16 @@ check(has(SKILL, "FULL book"),
       "[present] SKILL.md: the full-book (home+away) doctrine is gone "
       "(release 2) — the ~45% population jump gets read as order growth "
       "and 'our orders' asks stop filtering HOME")
+check(has(SKILL, "NEVER allocated despite placing orders"),
+      "[routing] SKILL.md: the never-allocated having-eq-0 recipe is gone "
+      "(D3 negative #3) — the agent rebuilds the wrong row-level-filter "
+      "shape and reports 'found none' against 4M structural zeros")
+check(has(SKILL, "materiality sample")
+      and has(SKILL, "never NARRATE one"),
+      "[present] SKILL.md: the answer-first sampling rule or the "
+      "no-plumbing-narration rule is gone (NAM trace 2026-08-31) — the "
+      "agent lectures users on the object model and asks permission for "
+      "samples again")
 check(has(SKILL, "top investors by ORDER SIZE")
       and has(SKILL, "SAME-VALUE hint fires"),
       "[metric] SKILL.md: the cross-product order-size rule or the "

@@ -210,3 +210,19 @@ new §8 rule: one diagnostic re-run to NAME the killing constraint
 (likely the 12-month window vs data vintage here). Both gate-pinned.
 RELEASE-TRAIN candidate: planner guard — money metric + multi-product IN
 + no product dimension = reject with steer (units-mixing shape).
+
+## #10 — "Looks incompetent on large datasets" (NAM/USD/12mo trace, 2026-08-31)
+Truth: large datasets are FINE (server aggregates 5M rows in one query);
+the incompetent look came from (a) deal_region missing on the order view
+→ 251-deal ferry → budget stop → permission menu; (b) narrating object-
+model mechanics to the user; (c) asking instead of answering.
+FIXES: (1) VIEW — DEAL_REGION + TRANCHE_REGION denormalized onto
+vw_order_detail (ECM=OBT rollup/NULL, DCM=ODT.REGION/TRANCHE_REGION;
+all source names deploy-proven) → this ask class becomes ONE query;
+re-hand vw_order_detail in the whitelist window; ontology exposure
+post-deploy. (2) SKILL — over-budget ferry now RUNS the 40-largest
+materiality sample with coverage disclosed in line one, never a menu;
+new no-plumbing-narration rule ("different object"/"two-step" never said
+to users). Gate-pinned. The ferry doctrine remains only for deal_status/
+size/UoP — each denormalization has killed one class (offering_type →
+equity_type → sector → regions).
