@@ -1,5 +1,5 @@
 -- ===========================================================================
--- POST-DEPLOY CHECK — FOUR independent statements. Run as a script (F5).
+-- POST-DEPLOY CHECK — independent statements. Run as a script (F5).
 -- 2026-08-19 (2nd revision): B/C/D each read their view EXACTLY ONCE — the
 -- first revision ran one scalar subquery per row (7 full evaluations of the
 -- deal view alone) and took forever; all population facts now come from a
@@ -8,7 +8,32 @@
 -- always reports WHICH views are current); an old view kills only its own
 -- section. Every non-INFO row must read PASS. INFO expectations are
 -- UAT-measured; in another env judge zero-vs-healthy, not exact.
+--
+-- 2026-09-02 (latency wave, levers B+C): NO column changes this wave, so
+-- section A cannot detect it — statement A0 (LAST_DDL_TIME) shows whether
+-- the five re-handed views were actually recreated. The existing grain
+-- checks (7/8/9/10b/11b/12b) are the CORRECTNESS net for the widened
+-- PARTITION BY keys: a duplicate row per id = lever B broke dedupe = FAIL.
+-- New rows 15/15b guard the lever-C restructure (deal-view DCM demand
+-- must still populate). Section K = TIMING probes: run with timing shown
+-- and screenshot the ELAPSED TIMES — the row values matter less than the
+-- seconds. Expectations: K1 seconds-not-minutes (was 30s-class), K2
+-- seconds (was the 401s class), K3 slow is EXPECTED (inherent order-book
+-- scan), K4 is the lever-D baseline (entity search, measured 40s), K5
+-- stays slow UNTIL the requested OB_ORDER_TRADE(ROOT_ID) index lands.
 -- ===========================================================================
+
+-- A0. WHICH REVISION IS DEPLOYED — recreation timestamps for the wave's
+-- five views. Expect today's date on all five; an old date = Flyway did
+-- not rerun that script.
+SELECT object_name AS view_,
+       TO_CHAR(last_ddl_time, 'DD-MON-YYYY HH24:MI') AS recreated_,
+       'INFO' AS verdict_
+FROM   all_objects
+WHERE  owner = 'DGSTREAM' AND object_type = 'VIEW'
+AND    object_name IN ('VW_DEAL_SUMMARY','VW_ORDER_DETAIL','VW_TRADE_DETAIL',
+                       'VW_HEDGE_ORDER','VW_HEDGE_TRADE')
+ORDER BY object_name;
 
 -- A. STRUCTURAL — always runs. FAIL here = that view is not this revision.
 SELECT check_, expected_, actual_,
@@ -121,7 +146,15 @@ WITH agg AS (
                              THEN DEAL_ID END) AS ecm_unmapped,
          COUNT(CASE WHEN PRODUCT = 'DCM' AND REGEXP_LIKE(CURRENCIES,
                      '(^|\| )([A-Za-z]+)( \|.*\| | \| )\2( \||$)')
-                    THEN 1 END) AS dcm_dupcur
+                    THEN 1 END) AS dcm_dupcur,
+         COUNT(CASE WHEN PRODUCT = 'DCM' AND TOTAL_DEMAND > 0
+                    THEN 1 END) AS dcm_demand_deals,
+         COUNT(CASE WHEN PRODUCT = 'DCM' AND ORDER_COUNT > 0
+                    THEN 1 END) AS dcm_ordered_deals,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND TOTAL_ALLOCATION > 0
+                    THEN 1 END) AS ecm_alloc_deals,
+         COUNT(CASE WHEN SUBSCRIPTION_RATIO IS NOT NULL
+                    THEN 1 END) AS subs_ratio_deals
   FROM DGSTREAM.VW_DEAL_SUMMARY
 )
 SELECT '1e. ECM deals with issuer name (INFO, expect ~6,892 UAT)' AS check_,
@@ -162,6 +195,22 @@ UNION ALL
 SELECT '7. deal grain (rows = PRODUCT+DEAL_ID)', 'Y',
        CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
        CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+-- LATENCY WAVE (lever C): the DCM order aggregate moved from inside the
+-- deal derived table to a top-level LEFT JOIN. If the hoisted join key is
+-- wrong these go to zero.
+SELECT '15. DCM deals still carry demand (lever C hoist intact)', 'Y',
+       CASE WHEN dcm_demand_deals > 0 AND dcm_ordered_deals > 0
+            THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_demand_deals > 0 AND dcm_ordered_deals > 0
+            THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '15b. ECM deals still carry allocation (unchanged branch sanity)', 'Y',
+       CASE WHEN ecm_alloc_deals > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN ecm_alloc_deals > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '15c. deals with SUBSCRIPTION_RATIO (INFO — helper wave)', '(info)',
+       TO_CHAR(subs_ratio_deals), 'INFO' FROM agg
 ORDER BY 1;
 
 -- C. TRANCHE VIEW — ONE scan. Dies alone if VW_TRANCHE_SUMMARY is old.
@@ -323,3 +372,48 @@ ORDER BY 1;
 SELECT '14. trade-syndicate rows (INFO, source EMPTY today)' AS check_,
        '(info)' AS expected_, TO_CHAR(COUNT(*)) AS actual_, 'INFO' AS verdict_
 FROM DGSTREAM.VW_TRADE_SYNDICATE;
+
+-- ===========================================================================
+-- K. TIMING PROBES — the wave's actual deliverable is SECONDS, so run these
+-- with elapsed time visible and screenshot the timings. Each is one
+-- statement so the tool reports per-probe elapsed. Values are INFO only.
+-- ===========================================================================
+
+-- K1. Lever B: deal-scoped DCM order listing. The DEAL_ID filter can now
+-- push into the OB_ORDER dedupe block and use IX_OB_ORDER_ROOT_PARENT_ORDER.
+-- Was: full scan + window sort over 5.0M rows (~30s class). Expect: seconds.
+SELECT 'K1 deal-scoped DCM orders (lever B)' AS probe_,
+       TO_CHAR(COUNT(*)) || ' rows for sampled deal' AS actual_
+FROM DGSTREAM.VW_ORDER_DETAIL
+WHERE PRODUCT = 'DCM'
+AND   DEAL_ID = (SELECT MIN(ROOT_ID) FROM DGSTREAM.OB_ORDER);
+
+-- K2. Lever C: DCM deal count touching NO demand columns. Oracle can now
+-- eliminate the hoisted order-book join. Was: the 401s class. Expect: seconds.
+SELECT 'K2 DCM deal count, no demand cols (lever C)' AS probe_,
+       TO_CHAR(COUNT(*)) || ' DCM deals' AS actual_
+FROM DGSTREAM.VW_DEAL_SUMMARY
+WHERE PRODUCT = 'DCM';
+
+-- K3. Control: DCM total demand DOES touch the order book — the 5.0M-row
+-- aggregation is inherent here. Expected slow; the K2-vs-K3 gap IS lever C.
+SELECT 'K3 DCM total demand (inherent order-book scan)' AS probe_,
+       TO_CHAR(ROUND(SUM(TOTAL_DEMAND))) AS actual_
+FROM DGSTREAM.VW_DEAL_SUMMARY
+WHERE PRODUCT = 'DCM';
+
+-- K4. Lever D baseline: full entity-search pass (view unchanged this wave;
+-- measured 40s in the OCP log). Improvement here = lever C reaching the
+-- entity view's deal branches; remainder is the materialized-view decision.
+SELECT 'K4 entity search full pass (lever D baseline)' AS probe_,
+       TO_CHAR(COUNT(*)) || ' entities' AS actual_
+FROM DGSTREAM.VW_ENTITY_SEARCH;
+
+-- K5. Index-gap witness: deal-scoped DCM trades. OB_ORDER_TRADE has NO
+-- ROOT_ID index yet (requested from the feed team) — expect this SLOW now
+-- and fast after that index lands. Re-run this probe when it does.
+SELECT 'K5 deal-scoped DCM trades (awaits OB_ORDER_TRADE ROOT_ID index)' AS probe_,
+       TO_CHAR(COUNT(*)) || ' trades for sampled deal' AS actual_
+FROM DGSTREAM.VW_TRADE_DETAIL
+WHERE PRODUCT = 'DCM'
+AND   DEAL_ID = (SELECT MIN(ROOT_ID) FROM DGSTREAM.OB_ORDER_TRADE);

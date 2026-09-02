@@ -756,3 +756,17 @@ vw_trade_detail, vw_hedge_order, vw_hedge_trade. Index request list (7)
 + stats-gather request recorded in index-review-2026-09-02.md. Open:
 lever D (entity MV, new whitelist object), OCP timing re-pull after
 deploy.
+
+## 2026-09-02 — MCP result-cache DESIGNED (release-train item)
+Full design in _review/cache-design-2026-09-02.md. Hook: run() between
+assert_read_only and execute; key sha256(source, built.sql, params) —
+entitlement-safe because the product scope is an injected filter
+embedded in the SQL (invariant pinned by test when built). Phase 1
+per-source TTLs (entity 3600s / deal+tranche 900s / order+trade 600s /
+designation+trade_syndicate 180s / 0-row 60s); phase 2 settlement-aware
+24h tier via settled-deal map (user's insight: settled ⇒ orders/trades
+immutable, designations/closeouts still move); phase 3 watermark
+validation (needs PUBLISHED_TS desc indexes — bundle with feed asks),
+warm cache, Redis only if multi-pod hit rates disappoint. Also memoise
+fetch_as_of_date 60s (a per-query serial DB call today). Gate work in
+same change: [latency] log-line pin extension (cache=hit|miss age=).
