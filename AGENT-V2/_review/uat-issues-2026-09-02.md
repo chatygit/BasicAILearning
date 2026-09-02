@@ -33,7 +33,20 @@ two no-GP-ID investors (Ghisallo, 361 Degree) were skipped instead of name-filte
 Agent ran discover + ~5 bqs queries, then asked the user to narrow by year. Given U3's
 measurements (single view queries at 29–437s), the primary suspect is **timeout, not
 name matching** — the agent's "trouble retrieving all deals at once" phrasing fits
-queries dying under it. Secondary suspect: legal-name punctuation ("The ... Companies,
+queries dying under it.
+
+**CONFIRMED (deal-search-timeout.jpg, 2026-09-02 16:06):** the ADK event log shows
+`run_bqs_query` → "MCP tool execution failed: Timed out while waiting for response
+to ClientRequest. Waited 300.0 seconds." So the failure layer is the ADK/MCP
+**client timeout (300s)**, and it pairs with U3's server-side entry (execute 401s,
+total 437s, rows=0): the client abandoned at 300s, the server kept computing ~2
+more minutes for an answer nobody received. Two consequences beyond the speed work:
+(a) RELEASE-TRAIN — the server must enforce a statement/execution timeout BELOW the
+client's 300s (e.g. 240s via Trino session property or driver timeout in
+bqs/executor) so a too-heavy query fails fast with a clean, agent-actionable error
+instead of a transport timeout, and abandoned work stops burning the warehouse;
+(b) do NOT raise the client timeout — 300s already exceeds banker patience; the fix
+is making queries fast, not waits long. Secondary suspect: legal-name punctuation ("The ... Companies,
 Inc.") used verbatim as the match token instead of the distinctive token (V3 SKILL has
 token guidance; V2 config was live).
 Probe 3 settles what the sources actually store for Travelers; retest after config
@@ -60,3 +73,49 @@ same slow views — server-side, release-train item (frozen), logged in backlog.
 - [ ] "List all deals by The Travelers Companies, Inc." (U2) — one entity hop + one list
 - [ ] CUSIP lookup (U2) — contains-match with casing rule
 - [ ] re-pull OCP timings for the same three query shapes (U3)
+
+## U2 addendum (post-wave, ecs-log.jpg 20:12): Travelers ANSWERS now
+deal_count rows=4 in 67.24s (execute 35.69s + enrich 31.55s). The wave killed the
+timeout; remaining cost: (1) the issuer LIKE filter computes the NVL over the
+unindexed RELATED_PARTIES join — index request #4; (2) UPPER(...) LIKE likely does
+not push through Trino to Oracle (function predicate) — full view rows pulled and
+filtered Trino-side; (3) enrich 31.55s = the disambiguation probe re-running the
+expensive shape once (now warm in the probe cache).
+
+## U4 — Trino JDBC "Rounding necessary" kills money-metric queries (NEW ROOT CAUSE)
+The banker ask "top 10 investors by order size, USD, last 12 months" (chat-view/
+chat-debug/ecs-log 2026-09-02 20:12-20:15) failed twice at 112-115s execute each:
+`Trino JDBC "Rounding necessary" persisted even after type-aware TRY_CAST and
+column isolation; returning schema with empty rows`. An Oracle NUMBER value's scale
+exceeds the connector's DECIMAL mapping; TRY_CAST cannot help because the fetch
+itself throws. THREE-LAYER FIX:
+1. VIEWS (ours, whitelist window open): bound the scale at the source — ROUND()
+   money columns in the views. Scale census probes in
+   views/_checks/_scale-probes-2026-09-02.sql decide which columns and what scale
+   (amounts 4dp; prices/fees 6dp; NEVER round FX_RATE).
+2. SERVER (release train): NEVER mask a fetch error as an empty result — the agent
+   zero-claimed and thrashed (widened 12mo→24mo on its own, re-burning 138s). Return
+   a BQSError naming the failure so the agent stops cleanly.
+3. CATALOG (Starburst/BDS team, optional belt+braces): oracle.number.default-scale
+   + oracle.number.rounding-mode=HALF_UP on the bds_dg_oraas catalog.
+Retest after fix: the exact chat ask, expect a populated top-10 in one query.
+
+## Probe results (uat-probe.jpg, 2026-09-02 16:19)
+- **U1 VERDICT — hypothesis 1 CONFIRMED, type ruled out**: ECM orders 96,462;
+  DEMAND_QTY populated on only 6,212 (6.4%); 30,253 orders have allocation but no
+  demand; NON_NUMERIC_DEMAND = 0. IOI covers 23,949 of the 90,250 null-demand
+  orders. FIX (GO, next view wave): ORDER_DEMAND_QTY (ECM branch, vw_order_detail)
+  and the deal-view OD subquery's TOTAL_DEMAND both become
+  NVL(DEMAND_QTY, IOI LIMIT_VALUE) — an IOI's limit IS the stated indication;
+  lifts demand coverage ~5x (6,212 → ~30,161 orders). Disclose in view-notes.
+- **U2 probe 3 — name variants REAL**: six Travelers spellings in OB_DEAL_ISSUER
+  alone ("THE TRAVELERS COMPANIES INC", "Travelers Cos Inc", "Travelers
+  Companies", "THE TRAVELERS CO INC", "The Travelers Companies, Inc.",
+  "Travelers Insurance Institutional Funding"). Verbatim legal-name LIKE cannot
+  win; V3 SKILL distinctive-token rule ('%TRAVELER%') is the answer — config push.
+- **Probe 4 (CUSIP 5C7GNK9W9)**: value below the screenshot fold — number still
+  needed (decides only whether that CUSIP exists at all).
+
+NEXT VIEW WAVE (single bundled handover, do NOT hand files until assembled):
+U1 demand fallback + U4 ROUND scale bounds (waiting on
+_scale-probes-2026-09-02.sql results).

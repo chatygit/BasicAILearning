@@ -770,3 +770,15 @@ validation (needs PUBLISHED_TS desc indexes — bundle with feed asks),
 warm cache, Redis only if multi-pod hit rates disappoint. Also memoise
 fetch_as_of_date 60s (a per-query serial DB call today). Gate work in
 same change: [latency] log-line pin extension (cache=hit|miss age=).
+
+## 2026-09-02 — U2 CONFIRMED: 300s ADK client timeout; server timeout gap
+deal-search-timeout.jpg: run_bqs_query failed with "Timed out while
+waiting for response to ClientRequest. Waited 300.0 seconds" on the
+Travelers deals ask — pairs with the 401s/437s rows=0 server entry
+(client abandoned at 300s, server burned ~2 more minutes for nothing).
+RELEASE-TRAIN item: server-side statement/execution timeout < 300s
+(e.g. 240s, Trino session property or driver timeout in bqs/executor)
+so heavy queries fail fast with a clean agent-actionable error and
+abandoned work is cancelled. Do NOT raise the client timeout. Whether
+the Travelers ask is ALSO a name-variant miss stays open until the UAT
+probes (probe 3) run.
