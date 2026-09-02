@@ -703,3 +703,30 @@ POST-DEPLOY CONFIG ROUND: expose all; empty the SKILL two-step list;
 subscription-ratio doctrine (it's a stored ratio — no model math).
 Re-hand: vw_order_detail, vw_tranche_summary, vw_deal_summary,
 vw_hedge_order, vw_hedge_trade, vw_trade_detail (6 of 9).
+
+### DEV failure #2 (2026-08-31): OD.TOTAL_DEMAND — FIXED + new gate class
+Root cause CHAIN: my scripted edit's old_string included IS_OWNED, which
+the deal view's OD subquery no longer had (release 2 HAD been applied
+there — my "completes release-2 intent" claim was wrong) → python
+.replace() silently no-opped → outer SELECT referenced OD.TOTAL_DEMAND/
+TOTAL_ALLOCATION with no projection → ORA-00904 at deploy. FIXED (SUMs
+added to OD). NEW GATE CLASS: [views] subquery-projection consistency —
+every outer ALIAS.COL must exist in its subquery block (SELECT-* and
+dual-use table aliases skipped) — this check catches the whole class
+locally, including silent no-op replace damage. PROCESS RULE: scripted
+multi-replace edits must ASSERT the replacement happened (count check),
+never print success unconditionally. Re-hand vw_deal_summary; chain
+reruns from script _20.
+
+## 2026-09-02 — DCM latency: source-table index review OPEN
+Users report DCM slowness. Full predicate/join inventory of all nine
+views vs DGSTREAM base tables written to _review/index-review-2026-09-02.md;
+census file views/_checks/_index-census.sql (4 statements: existing
+indexes, table stats/staleness, FBI expressions, parent-key stability).
+Key mechanic: ROW_NUMBER dedupe blocks only push predicates on their
+PARTITION BY columns — deal-scoped order/trade queries full-scan
+OB_ORDER/OB_ORDER_TRADE today, so ROOT_ID indexes pay only with the
+lever-B view change (widen PARTITION BY to include parent keys; census
+statement 4 must return all zeros first; re-handover = user decision).
+GROUP BY blocks (OZ/OC/DN/SYNM) benefit from join-key indexes now.
+Awaiting census screenshots in ADK.
