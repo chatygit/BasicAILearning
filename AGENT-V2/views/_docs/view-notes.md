@@ -505,3 +505,30 @@ no longer pay the 5M-row order-book aggregation (measured 401s for a deal_count)
 
 Files re-handed in this wave: vw_deal_summary, vw_order_detail, vw_trade_detail,
 vw_hedge_order, vw_hedge_trade.
+
+## ADDENDUM 4 — 2026-09-02 bundled wave (grain fix + demand fallback + scale bounds)
+
+Files re-handed: vw_order_detail, vw_deal_summary, vw_tranche_summary.
+
+**Grain fix (DEV deploy-check check 9 FAIL).** The lever-B widened PARTITION BY
+split NULL-ORDER_ID rows into one row per (deal, tranche) — previously PARTITION
+BY ORDER_ID collapsed them all into one junk row. Both order dedupe blocks now
+carry the guard the sibling views always had: WHERE EO.ORDER_ID IS NOT NULL /
+WHERE DO.ORDER_ID IS NOT NULL. Rows without their grain key do not belong in a
+grain-declared view. Gate: 8 NULL-guard pins added (1472 total).
+
+**ECM indication fallback (U1 — measured 2026-09-02).** DEMAND_QTY is populated on
+only 6,212 of 96,462 ECM orders; the IOI table covers 23,949 of the 90,250 null
+rows. ORDER_DEMAND_QTY (order view ECM branch) is now
+NVL(DEMAND_QTY, IOI LIMIT_VALUE), and the deal view's OD subquery computes
+TOTAL_DEMAND as SUM(COALESCE(DEMAND_QTY, IOI LIMIT_VALUE, 0)) via a new IOI join
+— an IOI's limit IS the investor's stated indication. Demand coverage ~5x.
+
+**Scale bounds (U4 — Trino JDBC "Rounding necessary").** Measured deep-scale rows:
+OB_ORDER_SIZE.AMT 17 rows >4dp (feeds total_order_amount — the failing metric),
+ORDER_SIZE_CHANGE 2 rows, DCM tranche fees 45-96 rows each >6dp, ECM tranche fees
+~1,700-1,900 rows each >6dp. Fixes: OZ subqueries (order + deal views) now
+ROUND(MAX(AMT),4); ORDER_SIZE_CHANGE ROUND 4; all tranche fee columns (6 DCM,
+8 ECM incl. GROSS_SPREAD_PER_FEE and DESIGNATION_FEE) ROUND 6. FX_RATE and
+prices measured clean and are untouched. Bounded scale ends the connector's
+DECIMAL read failure at the source.

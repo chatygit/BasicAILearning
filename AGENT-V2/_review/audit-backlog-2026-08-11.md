@@ -782,3 +782,18 @@ so heavy queries fail fast with a clean agent-actionable error and
 abandoned work is cancelled. Do NOT raise the client timeout. Whether
 the Travelers ask is ALSO a name-variant miss stays open until the UAT
 probes (probe 3) run.
+
+## 2026-09-02 — deploy-check verdict + BUNDLED WAVE 2 assembled
+Deploy check: ALL PASS except check 9 (order grain FAIL — NULL-ORDER_ID
+rows split per parent under widened PARTITION BY; fixed with IS NOT NULL
+guards, 8 gate pins added). Lever C intact (15/15b PASS); DCM multi-
+member syndicate 63,320; hedge/trade/designation grains PASS; ECM trades
+grew 724→8,469; K4 entity search CANCELLED by user (ORA-01013) — lever D
+urgency confirmed. Scale probes: AMT 17 rows >4dp (the U4 killer), DCM
+fees 45-96, ECM fees ~1.7-1.9k rows >6dp; all else clean. WAVE 2 EDITS
+(3 files: order, deal, tranche): grain guards + U1 demand fallback
+(NVL demand→IOI limit, deal-grain COALESCE + OI join in OD) + ROUND
+bounds (AMT 4dp, ORDER_SIZE_CHANGE 4dp, all fee cols 6dp). Bars
+1472/206/111. PROBE-DESIGN LESSON: the parent-key stability census
+grouped BY the id, so NULL ids formed one invisible group — the widened
+partition then multiplied them. Probes must census NULL keys too.

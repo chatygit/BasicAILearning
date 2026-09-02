@@ -2035,6 +2035,31 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
           f"subquery projection (the OD.TOTAL_DEMAND class): "
           f"{sorted(_missing)[:6]}")
 
+# GRAIN DEDUPE NULL-GUARDS (2026-09-02, the check-9 DEV grain FAIL): when a
+# grain-defining dedupe block partitions by parent keys + entity id, rows with
+# a NULL id — previously all collapsed into ONE junk row by PARTITION BY id
+# alone — split into one row PER parent, multiplying the view's grain. The
+# sibling views' WHERE <id> IS NOT NULL guard was load-bearing; every
+# grain-defining dedupe block must carry it. (The parent-key stability census
+# could not see this: it grouped BY the id, and NULL ids form one group.)
+_NULL_GUARD_PINS = [
+    ("vw_order_detail.sql", "EO", "ORDER_ID"),
+    ("vw_order_detail.sql", "DO", "ORDER_ID"),
+    ("vw_trade_detail.sql", "OT", "ORDER_TRADE_ID"),
+    ("vw_trade_detail.sql", "IT", "INVESTOR_TRADE_ID"),
+    ("vw_hedge_order.sql", "HO", "HEDGE_ORDER_ID"),
+    ("vw_hedge_trade.sql", "HT", "HEDGE_TRADE_ID"),
+    ("vw_designation.sql", "DS", "DESIGNATION_ID"),
+    ("vw_trade_syndicate.sql", "TS", "ORDER_TRADE_ID"),
+]
+for _fn, _al, _id in _NULL_GUARD_PINS:
+    _vtxt = text(ROOT / "views" / _fn)
+    check(f"WHERE {_al}.{_id} IS NOT NULL" in _vtxt,
+          f"[views] {_fn}: grain dedupe block '{_al}' lost its "
+          f"'WHERE {_al}.{_id} IS NOT NULL' guard — NULL-id rows multiply "
+          f"per parent key under the widened PARTITION BY (DEV check-9 "
+          f"grain FAIL, 2026-09-02)")
+
 # COMMENT-FREE VIEW FILES (user doctrine 2026-08-19): the view team
 # transcribes these files into migration scripts — comment blocks bloat the
 # merge surface and obscured the statement boundary the PCM paste hid
