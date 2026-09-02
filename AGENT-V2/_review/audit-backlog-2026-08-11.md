@@ -797,3 +797,14 @@ bounds (AMT 4dp, ORDER_SIZE_CHANGE 4dp, all fee cols 6dp). Bars
 1472/206/111. PROBE-DESIGN LESSON: the parent-key stability census
 grouped BY the id, so NULL ids formed one invisible group — the widened
 partition then multiplied them. Probes must census NULL keys too.
+
+## 2026-09-02 — wave-2 PR review: delphyne COALESCE finding (false positive, cleared)
+Bot flagged HIGH: possible ORA-00932 in SUM(COALESCE(DEMAND_QTY,
+LIMIT_VALUE, 0)) if types differ. FACTS: DEMAND_QTY = NUMBER(38,6)
+(recorded desc, base-table-columns.md:727); LIMIT_VALUE provably NUMBER
+by union-alignment (NVL(LIMIT_VALUE,0) has aligned against the DCM
+branch's NUMBER as ORDER_AMOUNT since the first V3 deploy — VARCHAR2
+would have thrown ORA-01790 at CREATE). Finding cannot occur. Cleared
+anyway with explicit no-op CASTs (deal view COALESCE + order view NVL
+sibling preempted) to unblock approval — same PR, no new cycle. Bars
+1472/206/111.
