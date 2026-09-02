@@ -36,7 +36,7 @@ FROM (
     SELECT W.*
     FROM (
         SELECT HO.*,
-               ROW_NUMBER() OVER (PARTITION BY HO.HEDGE_ORDER_ID
+               ROW_NUMBER() OVER (PARTITION BY HO.ROOT_ID, HO.HEDGE_ORDER_ID
                                   ORDER BY HO.PUBLISHED_TS DESC,
                                            HO.ROWID) AS RN_
         FROM DGSTREAM.OB_HEDGE_ORDER HO

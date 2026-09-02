@@ -474,3 +474,34 @@ deploy-proven; ISSUE_NAME newly validated):
 CONFIG ROUND AFTER DEPLOY: expose all of the above; SKILL two-step list
 becomes EMPTY (mechanism stays as fallback for exotic combos); the
 "materiality sample" path then applies only to genuinely exotic asks.
+
+## ADDENDUM 3 — 2026-09-02 latency wave (levers B + C, after index census)
+
+Census facts driving this (screenshots index-1..4, _review/index-review-2026-09-02.md):
+OB_ORDER = 5,001,148 rows / OB_ORDER_SIZE = 4,848,439 — and OB_ORDER already carries
+IX_OB_ORDER_ROOT_PARENT_ORDER (ROOT_ID, PARENT_ID, ORDER_ID) plus (ORDER_ID), (GPID),
+(NAME). Parent-key stability check (census stmt 4): 0 conflicted ids on all five
+tables — the PARTITION BY widening below is semantics-preserving.
+
+**Lever B — dedupe PARTITION BY widened with parent keys** so Oracle can push
+deal/tranche filters inside the window blocks (pushdown only works on partition
+columns) and use the existing indexes:
+- vw_order_detail ECM: PARTITION BY EO.DEAL_ID, EO.TRANCHE_ID, EO.ORDER_ID
+- vw_order_detail DCM: PARTITION BY DO.ROOT_ID, DO.PARENT_ID, DO.ORDER_ID
+  (matches IX_OB_ORDER_ROOT_PARENT_ORDER exactly)
+- vw_trade_detail DCM: PARTITION BY OT.ROOT_ID, OT.ORDER_TRADE_ID
+- vw_hedge_order: PARTITION BY HO.ROOT_ID, HO.HEDGE_ORDER_ID
+- vw_hedge_trade: PARTITION BY HT.ROOT_ID, HT.HEDGE_TRADE_ID
+ORDER BY tiebreaks unchanged; dedupe keeps the same single row per id.
+
+**Lever C — vw_deal_summary DCM order aggregate hoisted.** The OC block
+(OB_ORDER × OB_ORDER_SIZE, both multi-million-row) moved from INSIDE the deal
+derived table D to a top-level LEFT JOIN on OC.ROOT_ID = D.DEAL_ID, mirroring the
+ECM branch's OD shape. Values are identical (OC is unique per ROOT_ID; the old
+MAX(OC.x) over duplicated tranche rows returned the same single value). Gain:
+Oracle can eliminate the unreferenced outer join, so DCM deal questions that don't
+touch order_count/investor_count/total_demand/total_allocation/subscription_ratio
+no longer pay the 5M-row order-book aggregation (measured 401s for a deal_count).
+
+Files re-handed in this wave: vw_deal_summary, vw_order_detail, vw_trade_detail,
+vw_hedge_order, vw_hedge_trade.

@@ -94,8 +94,66 @@ vw_hedge_order, vw_hedge_trade, vw_designation (DEAL_ID+TRANCHE_ID+DESIGNATION_I
 This is a re-handover decision — held for the user's call, contingent on census #4
 returning zeros.
 
+## Measured confirmation (OCP log, 2026-09-02 — see uat-issues-2026-09-02.md U3)
+
+Server-side BQS timings: deal list 29.13s · entity resolution 40.21s · one deal_count
+**401.20s execute (0 rows) + 36.67s enrich**. Entitlement and CyberArk are both
+cache-hitting, so execute time is the whole problem. This also surfaces two levers
+beyond indexes:
+
+**Lever C — vw_deal_summary DCM branch structure.** The ECM branch joins its order
+aggregate (OD) at the top level, where Oracle can eliminate the unreferenced LEFT
+JOIN for questions that don't touch demand/counts. The DCM branch nests its order
+aggregate (OC = OB_ORDER × OB_ORDER_SIZE, both full-scanned) INSIDE the deal derived
+table — so **every** DCM deal question pays the full order-book aggregation even when
+it only wants names/status. Restructure candidate: hoist OC to a top-level LEFT JOIN
+mirroring the ECM shape. Same re-handover batch as lever B if adopted.
+
+**Lever D — vw_entity_search cost.** It stacks vw_order_detail + vw_deal_summary
+(twice), so every entity resolution recomputes both books — measured 40s. Indexes
+don't help a stacked aggregate. The structural answer is a materialized view (or a
+feed-team summary table) refreshed periodically — that is a NEW whitelist-gated
+object, so if wanted it should enter the current whitelist window, not a later one.
+User decision.
+
+## Census results (2026-09-02, index-1..4 screenshots)
+
+**Already indexed (no request needed):** OB_ORDER (ROOT_ID, PARENT_ID, ORDER_ID) +
+(ORDER_ID) + (GPID) + (NAME); OB_ORDER_SIZE (ORDER_ID); OB_ORDER_TRADE
+(ORDER_TRADE_ID); OB_HEDGE_ORDER / OB_HEDGE_TRADE (own id); OB_ORDER_TRADE_SYNDICATE
+(ORDER_TRADE_ID); OB_TRANCHE / OB_TRANCHE_RATING / OB_TRANCHE_SYNDICATE_MEMBER /
+OB_DEAL_ISSUER (DEAL_TRANCHE_ID-leading); OB_ECM_ORDER (DEAL_ID, ORDER_ID);
+OB_ECM_ORDER_IOI (ORDER_ID); OPUS_ECM_TRANSACTION (ECM_TRANSACTION_ID) +
+(DEAL_TRANSACTION_ID); STATUS (ECM_TRANSACTION_ID, STATUS_TYPE); TRANCHE and its
+child tables (ECM_TRANSACTION_ID-leading); designation/investor-trade families
+(rich). FBIs decoded: PRICING_TS desc, UPPER(TYPE) — neither affects us.
+
+**Row counts:** OB_ORDER 5,001,148 · OB_ORDER_SIZE 4,848,439 · OB_ORDER_TRADE
+489,901 · OB_HEDGE_ORDER 388,782 · OB_TRANCHE_SYNDICATE_MEMBER 376,636 ·
+RELATED_PARTIES 361,377 · OB_HEDGE_TRADE 168,826.
+
+**INDEX REQUEST LIST (the actual gaps, to feed/DBA team):**
+1. OB_ORDER_TRADE (ROOT_ID) — 490k rows, deal-scoped trade asks
+2. OB_HEDGE_ORDER (ROOT_ID) — 389k
+3. OB_HEDGE_TRADE (ROOT_ID) — 169k
+4. OPUS_BASE_TRANSACTION_RELATED_PARTIES (TRANSACTION_ID, PARTY_ROLE, PUBLISHED_TS)
+   — 361k rows, NO index at all, joined in six view branches
+5. OPUS_BASE_TRANSACTION (TRANSACTION_ID) — 140k, key only trails a snapshot index
+6. OB_DEAL_TRANCHE (DEAL_ID, TRANCHE_ID) — 74k, existing indexes lead with the
+   concatenated DEAL_TRANCHE_ID column instead
+7. optional: OB_DEAL_ISSUER (GFCID)
+
+**STATS REQUEST:** gather stats on OB_ORDER (last analyzed 24-JUL) and especially
+OB_ORDER_SIZE (**14-APR**, ~5 months stale at 4.8M rows); OB_ORDER_TRADE_SYNDICATE
+last analyzed NOV-2024 (empty, harmless).
+
 ## Status
-- [ ] census run (4 statements) — screenshots to ADK
-- [ ] diff candidates vs existing indexes → final index request list
-- [ ] stats freshness verdict (census #2)
-- [ ] lever B go/no-go (census #4 + user decision on re-handover)
+- [x] census run (4 statements) — screenshots in ADK 2026-09-02
+- [x] diff done → request list above (7 indexes + stats gather)
+- [x] stats freshness verdict: OB_ORDER_SIZE badly stale, OB_ORDER 5 weeks
+- [x] lever B GO (stmt 4 all zeros) — APPLIED to 4 files, 5 dedupe blocks
+- [x] lever C APPLIED (vw_deal_summary DCM OC hoisted to top-level LEFT JOIN)
+- [ ] re-hand wave: vw_deal_summary, vw_order_detail, vw_trade_detail,
+      vw_hedge_order, vw_hedge_trade; then re-pull OCP timings (same 3 shapes)
+- [ ] lever D decision (entity_search materialized view — new whitelist object)
+- [ ] index + stats request submitted to feed/DBA team

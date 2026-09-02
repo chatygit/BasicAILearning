@@ -35,7 +35,7 @@ FROM (
     SELECT W.*
     FROM (
         SELECT HT.*,
-               ROW_NUMBER() OVER (PARTITION BY HT.HEDGE_TRADE_ID
+               ROW_NUMBER() OVER (PARTITION BY HT.ROOT_ID, HT.HEDGE_TRADE_ID
                                   ORDER BY HT.PUBLISHED_TS DESC,
                                            HT.ROWID) AS RN_
         FROM DGSTREAM.OB_HEDGE_TRADE HT

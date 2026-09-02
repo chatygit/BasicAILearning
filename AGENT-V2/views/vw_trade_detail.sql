@@ -34,7 +34,7 @@ FROM (
     SELECT W.*
     FROM (
         SELECT OT.*,
-               ROW_NUMBER() OVER (PARTITION BY OT.ORDER_TRADE_ID
+               ROW_NUMBER() OVER (PARTITION BY OT.ROOT_ID, OT.ORDER_TRADE_ID
                                   ORDER BY OT.PUBLISHED_TS DESC,
                                            OT.ROWID) AS RN_
         FROM DGSTREAM.OB_ORDER_TRADE OT

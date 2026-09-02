@@ -730,3 +730,29 @@ lever-B view change (widen PARTITION BY to include parent keys; census
 statement 4 must return all zeros first; re-handover = user decision).
 GROUP BY blocks (OZ/OC/DN/SYNM) benefit from join-key indexes now.
 Awaiting census screenshots in ADK.
+
+## 2026-09-02 — UAT batch: indication nulls, Travelers deflection, OCP timings
+Three ADK screenshots logged in _review/uat-issues-2026-09-02.md. U1: ECM
+total_demand NULL for all investors (DEMAND_QTY vs IOI LIMIT_VALUE —
+probes in views/_checks/_uat-probes-2026-09-02.sql; possible view
+fallback, decision after probes). U2: issuer-name deal listing deflected
+to "narrow by year" — primary suspect timeout per U3, retest after
+config push. U3: OCP log measures execute 29s/40s/401s(+36.67s enrich
+on 0 rows); entitlement + CyberArk caches confirmed working. RELEASE-
+TRAIN (server, frozen): zero-row enrich probes re-query slow views —
+add probe budget/skip when execute already exceeded a threshold.
+Index review updated with levers C (hoist DCM OC aggregate to top-level
+LEFT JOIN for join elimination) and D (entity_search materialized view —
+new whitelist object, raise inside current window).
+
+## 2026-09-02 — census results in; levers B+C APPLIED (latency wave)
+Census: OB_ORDER=5.0M rows already indexed (ROOT_ID,PARENT_ID,ORDER_ID)/
+(ORDER_ID)/(GPID)/(NAME); OB_ORDER_SIZE=4.8M (ORDER_ID) but stats from
+14-APR. Stability check all zeros → lever B applied (5 dedupe blocks, 4
+files: order_detail both branches, trade_detail DCM, hedge_order,
+hedge_trade) and lever C applied (deal view DCM OC hoisted top-level).
+Bars 1464/206/111. RE-HAND WAVE: vw_deal_summary, vw_order_detail,
+vw_trade_detail, vw_hedge_order, vw_hedge_trade. Index request list (7)
++ stats-gather request recorded in index-review-2026-09-02.md. Open:
+lever D (entity MV, new whitelist object), OCP timing re-pull after
+deploy.
