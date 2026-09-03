@@ -808,3 +808,16 @@ would have thrown ORA-01790 at CREATE). Finding cannot occur. Cleared
 anyway with explicit no-op CASTs (deal view COALESCE + order view NVL
 sibling preempted) to unblock approval — same PR, no new cycle. Bars
 1472/206/111.
+
+## 2026-09-03 — cache design v2: workload-aware merge
+User: "dont be blind... merge that knowledge with Caching design." Doc
+upgraded from generic SQL-keyed memo to workload spec: (1) Tier-E
+in-process entity snapshot — vw_entity_search output is a few MB though
+it costs 40s+ to compute; load per pod, hourly background refresh,
+in-process contains/eq/order/limit evaluation, SQL fallthrough for odd
+shapes — SOLVES LEVER D WITHOUT a whitelist MV; (2) canonical request
+keys (sorted filters/IN-lists, upper LIKE) — we own the builder;
+(3) cost-aware eviction using the execute seconds we already log
+(GreedyDual, not LRU); (4) historical 24h tier by request inspection
+(date range wholly ≥30d past; designation caps win); (5) corpus warmers
+enumerated from real UAT/demo prompts. Entity MV stays fallback only.

@@ -21,6 +21,63 @@ the queried surface is settled/priced history plus post-settlement workflow
 designation/closeout objects, which stay short because they are the one surface
 that moves after settlement.
 
+## Workload-aware design — what the views, the pull patterns, and the prompt corpus dictate
+
+(2026-09-03 revision: the generic SQL-keyed design below is upgraded by what we know
+about OUR workload. This section is the build spec's heart.)
+
+**The pipeline shape.** Every banker ask runs the same BQS pipeline: discover
+(in-memory, nothing to cache) → **entity resolution** (vw_entity_search) → the
+metric query → drill-downs on the SAME ids within the conversation (deal card →
+its orders → its tranches → its trades; the 40-id smaller-side ferry). So cache
+value concentrates in three places: a GLOBAL long-lived entity tier (the same
+BlackRock/Fidelity/JPMorgan resolutions repeat across all users, every day), a
+result tier for metric queries, and canonical keys so drill-down/ferry repeats
+actually hit instead of fragmenting.
+
+**Tier E — the in-process entity snapshot (solves lever D with NO whitelist
+object).** vw_entity_search costs 40s+ to COMPUTE (measured; the user cancelled a
+full pass) but its OUTPUT is tiny: tens of thousands of rows × 7 narrow columns —
+a few MB. So: load the whole entity table into pod memory, refresh hourly in a
+background thread (serve the old snapshot during refresh), and answer entity
+requests in-process — the agent's entity queries are simple shapes (contains-match
+on entity_name, eq on entity_type/product, order by activity, limit) that a
+Python evaluator handles in microseconds over 50k rows. Any request shape the
+evaluator can't handle falls through to SQL unchanged. Staleness: a new entity
+appears on the next refresh — fine under no-live-deals. This kills the single
+worst latency in the product without the Oracle-MV whitelist path; the MV remains
+the fallback if refresh cost or pod memory disappoints.
+
+**Canonical keys — we own the builder, so exploit it.** Before hashing, canonicalize
+the REQUEST: sort ANDed filters by (field, op), sort IN-list values, upper-case
+LIKE values (the generated SQL is UPPER-LIKE-UPPER, so this is semantics-free).
+The corpus is full of repeated ferry shapes and drill-downs where incidental
+filter/IN-list ordering would otherwise fragment identical questions into distinct
+keys. limit/offset/order_by stay in the key (different pages differ).
+
+**Cost-aware eviction — we already measure what every entry cost.** The BQS timing
+line gives execute seconds per query for free; store it on the entry and evict by
+lowest (cost × recency), GreedyDual-style, never pure LRU. A 112s
+top-investors league table must not be evicted to keep fifty 1-second deal cards.
+
+**Historical tier by request inspection (simpler than the settled-deal map).** Any
+request whose date filters bound the ENTIRE range ≥30 days in the past is
+immutable under no-live-deals → 24h TTL regardless of source — except
+designation/trade_syndicate, whose short per-source cap always wins. The filters
+themselves prove historicity; no lookup map needed. The deal-id settled map stays
+a phase-3 option for id-scoped, undated asks.
+
+**What the prompt corpus says about warmers (phase 3).** The repeated demo/UAT
+shapes are enumerable: top investors by allocation/order size (per product/year),
+biggest deals by sector/region/year, subscription-ratio leaders, per-issuer deal
+lists for the marquee names. A dozen canonical requests refreshed off-peak, plus
+the Tier-E snapshot, cover most FIRST-ask latency — the result cache covers every
+repeat.
+
+**Never cache:** error responses; the zen path; and masked-empty results from the
+"Rounding necessary" fetch fallback — until the release-train unmasking fix
+lands, the 60s zero-row cap bounds that damage.
+
 ## Where the cache sits
 
 `domain_query_service.run()`, between `assert_read_only(built.sql)` and
@@ -35,7 +92,9 @@ call on EVERY query (domain_query_service.py:271) — memoise 60s.
 
 ## Cache key and the entitlement invariant
 
-Key = SHA-256 of `(resolved_source, built.sql, canonical params)`.
+Key = SHA-256 of `(resolved_source, built.sql, canonical params)` — built AFTER the
+request canonicalization above (sorted filters, sorted IN-lists, upper-cased LIKE
+values), so semantically identical asks share one key.
 
 **Why this is entitlement-safe:** the gate injects the caller's entitled products as
 a `product` filter into the BQS request BEFORE planning (mcpserver.py), so the
@@ -69,30 +128,28 @@ remain the only staleness source on those objects — 1h is comfortably inside
 what a feed-lagged consumer already tolerates, and phase 2's 24h tier follows
 the same logic further.)
 
-**Phase 2: settlement-aware tiering** (the insight, realized). Classify a request
-"historical" when its filters provably pin the past: a pricing/settlement date range
-ending ≥30 days ago, or every deal_id in its filter present in a small settled-deal
-map (deal_id → settlement_ts, one bounded query on vw_deal_summary, refreshed
-hourly, ~tens of k entries). Historical tier: 24h TTL for order/trade/deal/tranche.
-Designations/closeouts NEVER get the historical tier — their per-source cap wins.
+**Phase 2 — the workload tiers:** the Tier-E entity snapshot (the biggest single
+win), and the request-inspection historical tier (whole date range ≥30 days past
+⇒ 24h TTL; designation/trade_syndicate per-source caps always win). Both specified
+in the workload section above.
 
 **Phase 3 options, in value order:**
-1. **Watermark validation**: background probe of `MAX(PUBLISHED_TS)` (or
+1. Prompt-corpus warmers: the enumerated canonical shapes refreshed off-peak.
+2. **Watermark validation**: background probe of `MAX(PUBLISHED_TS)` (or
    DG_UPDATED_TS) per big table every ~60s; unchanged watermark ⇒ entries for that
    table stay valid regardless of TTL — near-perfect freshness AND long retention.
    Requires descending-key indexes on the watermark columns to make MAX() an
    index-only touch — **add to the feed-team index request** if we go here.
-2. Warm-cache: background refresh of the top canonical shapes (entity activity,
-   league tables) so first asks hit too.
-3. Cross-pod (Redis/OCP service) only if replica count makes per-pod hit rates
+3. The deal-id settled map for id-scoped undated asks (extends the historical tier).
+4. Cross-pod (Redis/OCP service) only if replica count makes per-pod hit rates
    disappointing — per-pod first; no new infra, no security review.
 
 ## Bounds and ops
 
-- LRU: `ECM_DCM_RESULT_CACHE_MAX_ENTRIES` (default 512) and `..._MAX_BYTES`
+- Bounds: `ECM_DCM_RESULT_CACHE_MAX_ENTRIES` (default 512) and `..._MAX_BYTES`
   (default 256MB); skip entries >2MB (row caps from the response-budget work make
-  these rare). Eviction: expired first, then oldest-used — same shape as
-  _PROBE_CACHE but with byte accounting.
+  these rare). Eviction: expired first, then lowest (measured execute cost ×
+  recency) per the workload section — never pure LRU.
 - Kill switches: global TTL env <=0; pod restart clears (OCP rollout = flush).
 - Observability: extend the gated `BQS timing` log line with `cache=hit|miss age=Ns`
   — the [latency] gate pins that line's format, so the gate pins update IN THE SAME
@@ -129,5 +186,8 @@ is proven in DEV.
 - [x] staleness tolerance settled: agent never used for live deals (user,
       2026-09-02) — TTL table updated; only the designation cadence (180s)
       might still warrant a team sanity-check
+- [x] workload merge (2026-09-03): pipeline tiers, Tier-E entity snapshot
+      (lever D without a whitelist object), canonical request keys,
+      cost-aware eviction, request-inspection historical tier, corpus warmers
 - [ ] implementation (release-train work item)
 - [ ] watermark-index request decision (phase 3 #1) — bundle with feed-team asks
