@@ -119,3 +119,33 @@ Retest after fix: the exact chat ask, expect a populated top-10 in one query.
 NEXT VIEW WAVE (single bundled handover, do NOT hand files until assembled):
 U1 demand fallback + U4 ROUND scale bounds (waiting on
 _scale-probes-2026-09-02.sql results).
+
+## U4 validation (data-check.jpg, 2026-09-03) — MASK PROVEN, data exists
+Oracle-direct, same filters as the failed agent ask (USD, pricing 2025-09-03 →
+2026-09-04): ECM 24,554 orders / 1,988 investors / ~$26.4B; DCM 10,480 orders /
+1,513 investors / 8.6E+13 total. The agent's zero-rows on this exact shape is
+conclusively the masked Trino JDBC failure. True top-10 captured (data-check-2)
+as the acceptance answer for the post-wave-2 retest — the agent should reproduce
+it once the ROUND fix deploys.
+
+**DEV data caveat (QA≠PROD):** the top-10 is led by obvious synthetic rows —
+"JPMORGAN CHASE BANK" $50T, "APPLE COMPUTERS (BRAEBURN)" $10T, "GOOGLE",
+"Tesla Motors" as investors. A $50 TRILLION order amount is test data. So in
+DEV, judge the retest on MATCHING the Oracle-direct list (plumbing correctness),
+never on whether the list itself looks sane — the sane list exists only in PROD.
+
+## U4 CORRECTION (2026-09-03): failure PERSISTS after wave-2 deploy
+The USD ask still fails post-ROUND (user confirmed the zero-rows trace is
+post-deploy). Revised root cause: the connector maps by DECLARED TYPE, not
+values — expression-defined view columns publish as unconstrained NUMBER
+(no precision/scale), and ROUND() does not change the declaration. Supporting
+clue: the isolation log listed total_order_amount among "safe varchar/char
+columns" — the metric may reach Trino as VARCHAR (connector fallback for
+unmappable NUMBER). Diagnostics issued (_type-metadata-probe-2026-09-03.sql +
+a Trino-side DESCRIBE). Fix fork, pending those facts:
+(a) CATALOG (preferred — zero view churn, honors the view freeze):
+    oracle.number.default-scale + rounding-mode on bds_dg_oraas (BDS team);
+(b) LAST-RESORT view wave: CAST money columns to NUMBER(38,4)/(38,6) so
+    Oracle publishes real precision/scale — register-queued, NOT applied.
+ROUND wave stays valuable regardless (bounded values are what make either
+mapping safe).
