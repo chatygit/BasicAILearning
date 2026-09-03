@@ -821,3 +821,27 @@ keys (sorted filters/IN-lists, upper LIKE) — we own the builder;
 (GreedyDual, not LRU); (4) historical 24h tier by request inspection
 (date range wholly ≥30d past; designation caps win); (5) corpus warmers
 enumerated from real UAT/demo prompts. Entity MV stays fallback only.
+
+## 2026-09-03 — U4 root cause CONFIRMED: unconstrained NUMBER metadata
+precision-check screenshots: all six VW_ORDER_DETAIL money columns are
+NUMBER/null/null (expression columns publish unconstrained); wave-2
+ROUNDs verified live (AMT_SCALE_GT4=0 over the failing query's 35,034
+rows; 1,051 legitimately carry cents). Values clean + failure persists
+= declaration-driven mapping failure. PRIMARY FIX: BDS catalog ask
+drafted (_review/bds-catalog-request-2026-09-03.md — default-scale=9 +
+HALF_UP; lossless because views bound values at 4/6dp). QUEUED LAST
+RESORT (view register, NOT applied): CAST money columns to
+NUMBER(38,4) / fees NUMBER(38,6) so Oracle publishes real
+precision/scale — only if BDS refuses and user calls a release.
+
+## 2026-09-03 — TYPE-CONTRACT WAVE applied (user chose Option 2)
+User called the release ("option 2"). ~65 numeric columns across all
+NINE views cast to explicit NUMBER(38,s) — counts (38,0), amounts
+(38,4), fees/prices/ratios (38,6), rates/pcts (38,9) — union stubs
+included (one unconstrained branch reverts the column). Two scripted
+batches, EVERY replacement count asserted, zero failures. New gate
+class: bare "AS NUMBER)" banned in views (9 checks; bars 1481/206/111).
+Deploy-check: A0 → nine views; new check 17 (zero NULL-scale cast
+metric columns). _type-wave-validation.sql pre-handover for unmeasured
+columns. This supersedes the BDS catalog ask as the primary U4 fix
+(catalog ask remains optional hardening; PROD checklist items stand).

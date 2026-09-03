@@ -67,3 +67,12 @@ Gate 1 case wherever it can be mechanized.
 4. **Restart the app** (bootstrap-once: pods load definitions at startup —
    un-restarted pods are why "fixed" things appear to regress)
 5. Gate 2 in fresh sessions
+
+## U4 / numeric-mapping items (added 2026-09-03)
+- [ ] PROD Starburst catalog carries oracle.number.default-scale=9 +
+      oracle.number.rounding-mode=HALF_UP (mirror of the UAT ask in
+      AGENT-V2/_review/bds-catalog-request-2026-09-03.md) BEFORE agent go-live
+- [ ] PROD runs the ROUND-bounded view release (wave 2) before relying on the
+      lossless-mapping argument
+- [ ] Re-run AGENT-V2/views/_checks/_scale-probes-2026-09-02.sql against PROD —
+      fresh census; DEV counts are not expectations (QA≠PROD)

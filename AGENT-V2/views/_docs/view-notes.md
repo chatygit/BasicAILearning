@@ -532,3 +532,35 @@ ROUND(MAX(AMT),4); ORDER_SIZE_CHANGE ROUND 4; all tranche fee columns (6 DCM,
 8 ECM incl. GROSS_SPREAD_PER_FEE and DESIGNATION_FEE) ROUND 6. FX_RATE and
 prices measured clean and are untouched. Bounded scale ends the connector's
 DECIMAL read failure at the source.
+
+## ADDENDUM 5 — 2026-09-03 TYPE-CONTRACT WAVE (user-called release; Option 2 for U4)
+
+Root cause being fixed: Oracle publishes expression-defined view columns as
+unconstrained NUMBER (null precision/scale — verified via ALL_TAB_COLUMNS);
+Starburst's Oracle connector must then GUESS a decimal shape and the catalog
+guesses decimal(38,0), so any fractional value fails the JDBC read ("Rounding
+necessary") — the USD top-investors banker query returned masked-empty on
+1,051 fractional rows out of 35,034.
+
+Fix: EVERY numeric output column in ALL NINE views now carries an explicit
+declared type, so Starburst never guesses:
+- counts → NUMBER(38,0) (order/investor/tranche/entity-activity counts)
+- amounts, sizes, quantities, shares, allocations → NUMBER(38,4)
+- fees, prices, ratios, EV → NUMBER(38,6)
+- rates and percentages (FX_RATE, COMMISSION_RATE, PCT_FACE, POT_SPLIT_PERCENTAGE,
+  ADJUSTED_DESIGNATION_PCT) → NUMBER(38,9)
+Union NULL stubs are constrained identically — one unconstrained branch reverts
+the whole view column, so the stubs are load-bearing. All scales chosen from the
+measured scale census (2026-09-02): every measured value fits with headroom;
+FX_RATE at 9dp is lossless per census.
+
+Gate: new [views] class — zero bare "AS NUMBER)" casts allowed in any view file.
+Deploy-check: A0 now lists all nine views; NEW check 17 = zero cast metric
+columns may publish NULL data_scale (the acceptance criterion for this wave).
+Pre-handover validation: _checks/_type-wave-validation.sql covers the few
+columns the census didn't measure (hedge SECURITY_COUPON, designation
+POT_SPLIT/DESIGNABLE_SHARES/UNDERWRITING_FEES/MANAGEMENT_FEES) — run BEFORE
+handover; an error there means that column needs the regexp-guard pattern
+instead of a plain cast.
+
+Files in this handover: ALL NINE view files.

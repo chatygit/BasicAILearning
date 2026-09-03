@@ -32,8 +32,40 @@ SELECT object_name AS view_,
 FROM   all_objects
 WHERE  owner = 'DGSTREAM' AND object_type = 'VIEW'
 AND    object_name IN ('VW_DEAL_SUMMARY','VW_ORDER_DETAIL','VW_TRADE_DETAIL',
-                       'VW_HEDGE_ORDER','VW_HEDGE_TRADE')
+                       'VW_HEDGE_ORDER','VW_HEDGE_TRADE','VW_TRANCHE_SUMMARY',
+                       'VW_DESIGNATION','VW_TRADE_SYNDICATE','VW_ENTITY_SEARCH')
 ORDER BY object_name;
+
+-- A1. TYPE CONTRACT (2026-09-03 wave): every cast metric column must publish
+-- real precision/scale. Any row here = a column Starburst still has to guess
+-- at (maps decimal(38,0); fractional values then fail to read). Expect ZERO.
+SELECT '17. metric columns with NO declared scale (expect none)' AS check_,
+       NVL(TO_CHAR(COUNT(*)), '0') AS actual_,
+       CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS verdict_
+FROM   all_tab_columns
+WHERE  owner = 'DGSTREAM'
+AND    table_name IN ('VW_DEAL_SUMMARY','VW_ORDER_DETAIL','VW_TRADE_DETAIL',
+                      'VW_HEDGE_ORDER','VW_HEDGE_TRADE','VW_TRANCHE_SUMMARY',
+                      'VW_DESIGNATION','VW_TRADE_SYNDICATE','VW_ENTITY_SEARCH')
+AND    data_type = 'NUMBER' AND data_scale IS NULL
+AND    column_name IN ('ORDER_AMOUNT','ORDER_DEMAND_QTY','ORDER_ALLOCATION',
+                       'TRANCHE_SIZE','DEAL_SIZE','ACTIVE_PRICE','ORDER_SIZE_CHANGE',
+                       'TOTAL_DEMAND','TOTAL_ALLOCATION','SUBSCRIPTION_RATIO',
+                       'ORDER_COUNT','INVESTOR_COUNT','TRANCHE_COUNT',
+                       'DEAL_FEE_MM','DEAL_SIZE_MM','BASE_PRICE',
+                       'REOFFER_LOW_PRICE','REOFFER_HIGH_PRICE','FX_RATE','PRICE',
+                       'TOTAL_FEE','UNDERWRITING_FEE','MANAGEMENT_FEES',
+                       'SELLING_CONCESSION_FEE','PRAECIPIUM_FEES','RETAIL_UW_FEE',
+                       'GROSS_SPREAD_PER_FEE','DESIGNATION_FEE',
+                       'OVER_ALLOTMENT_AUTHORIZED_SHARES','OVER_ALLOTMENT_EXERCISED_SHARES',
+                       'TRADE_SIZE','TRADE_ALLOCATION','PRICE_BASIS_VALUE',
+                       'TRADE_PRICE','COMMISSION_RATE','HEDGE_AMOUNT',
+                       'HEDGE_ISN_AMOUNT','HEDGE_PCT_FACE','SECURITY_COUPON',
+                       'QUANTITY','DESIGNABLE_SHARES','POT_SPLIT',
+                       'POT_SPLIT_PERCENTAGE','SELLING_CONCESSION','UNDERWRITING_FEES',
+                       'EV','DESIGNATION_AMT','ADJUSTED_DESIGNATION_AMT',
+                       'ADJUSTED_DESIGNATION_PCT','CARVEOUT_AMT','DISTRIBUTED_CARVEOUT',
+                       'ENTITY_ACTIVITY_COUNT');
 
 -- A. STRUCTURAL — always runs. FAIL here = that view is not this revision.
 SELECT check_, expected_, actual_,

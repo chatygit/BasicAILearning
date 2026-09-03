@@ -2060,6 +2060,21 @@ for _fn, _al, _id in _NULL_GUARD_PINS:
           f"per parent key under the widened PARTITION BY (DEV check-9 "
           f"grain FAIL, 2026-09-02)")
 
+# TYPE-CONTRACT WAVE (2026-09-03, the U4 decimal(38,0) root cause): Oracle
+# publishes expression-defined view columns as unconstrained NUMBER, and the
+# Trino connector then maps them by GUESS (catalog default-scale 0), which
+# throws "Rounding necessary" on any fractional value. Every numeric cast in
+# a view file must therefore carry explicit precision/scale — a bare
+# "AS NUMBER)" anywhere (including union NULL stubs, where ONE unconstrained
+# branch reverts the whole view column) reopens the failure class.
+for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
+    _bare = text(_vf).count("AS NUMBER)")
+    check(_bare == 0,
+          f"[views] {_vf.name}: {_bare} unconstrained 'AS NUMBER)' cast(s) — "
+          f"the type-contract wave requires NUMBER(38,s) everywhere "
+          f"(U4: unconstrained NUMBER maps decimal(38,0) in Trino and "
+          f"fractional values fail to read)")
+
 # COMMENT-FREE VIEW FILES (user doctrine 2026-08-19): the view team
 # transcribes these files into migration scripts — comment blocks bloat the
 # merge surface and obscured the statement boundary the PCM paste hid
