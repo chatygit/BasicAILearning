@@ -400,7 +400,7 @@ TRAPS = [
     ("coupon spacing", TRANCHE, "Fixed to FRN"),
     ("reg category literal", TRANCHE, "SEC Registered(Public)"),
     ("exchange full venue names", TRANCHE, "NEW YORK"),
-    ("identifier casing per product", TRANCHE, "lowercase"),
+    ("identifier casing contract", TRANCHE, "UPPER-normalized"),
     ("common stock label variants", TRANCHE, "%COMMON%"),
 ]
 for label, path, phrase in TRAPS:

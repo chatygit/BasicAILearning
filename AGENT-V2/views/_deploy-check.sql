@@ -258,7 +258,9 @@ WITH agg AS (
                     THEN 1 END) AS dcm_multi_synd,
          COUNT(CASE WHEN PRODUCT = 'ECM' THEN TOTAL_FEE END) AS ecm_fee,
          COUNT(CASE WHEN PRODUCT = 'ECM'
-                    THEN OVER_ALLOTMENT_AUTHORIZED_SHARES END) AS ecm_greenshoe
+                    THEN OVER_ALLOTMENT_AUTHORIZED_SHARES END) AS ecm_greenshoe,
+         COUNT(CASE WHEN IDENTIFIER_TYPE <> UPPER(IDENTIFIER_TYPE)
+                    THEN 1 END) AS lowercase_idtypes
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
@@ -284,6 +286,10 @@ UNION ALL
 SELECT '8. tranche grain (rows = PRODUCT+DEAL+TRANCHE)', 'Y',
        CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
        CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '18. identifier types UPPER-normalized (2026-09-03 wave)', 'Y',
+       CASE WHEN lowercase_idtypes = 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN lowercase_idtypes = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 ORDER BY 1;
 
 -- D. ORDER VIEW — ONE scan. Dies alone if VW_ORDER_DETAIL is old (DEV

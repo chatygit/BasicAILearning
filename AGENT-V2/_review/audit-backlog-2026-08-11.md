@@ -852,3 +852,13 @@ HEDGESECURITY_COUPON: numeric-proven (probes ran), but 5 rows (orders)
 + 7 rows (trades) carry scale >6dp → SECURITY_COUPON bumped to
 NUMBER(38,9) in both hedge views (coupon is a rate; rate tier).
 No cast can throw at deploy. NINE files hand-ready.
+
+## 2026-09-03 — identifier-type UPPER normalization (rides the pending wave)
+User: DCM identifier types are lowercase, uppercase query found no data
+("i told u this before" — it was encoded in the UNDEPLOYED V3 config;
+now fixed at the SOURCE instead). vw_tranche_summary: both branches'
+IDENTIFIER_TYPE LISTAGGs emit UPPER(), both zip LISTAGGs reorder by
+(UPPER(type), value). Doctrine updated (yaml ×3, SKILL trap row, gate
+trap pin → 'UPPER-normalized'). Deploy-check check 18 added. Reminder
+in doc: eq never matches pipe lists — contains recipe still required
+(config push). Bars 1481/206/111.

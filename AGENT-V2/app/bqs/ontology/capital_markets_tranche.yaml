@@ -112,8 +112,10 @@ how_to_use:
      a row missing one side is dropped from that list only, which shifts
      everything after it. Count both lists first; if the counts differ, show
      type and value as two separate lists and say they could not be paired.
-     Match with 'like' and case-insensitively — DCM
-     stores types lowercase ('cusip'), ECM uppercase ('CUSIP'). When displaying,
+     Match with 'like' (they are pipe lists — equality never matches).
+     Types are UPPER-normalized in the view as of 2026-09-03 (source DCM was
+     lowercase 'cusip'; the view now serves 'CUSIP' for both products) — keep
+     case-insensitive matching anyway as belt-and-braces. When displaying,
      ZIP the two lists by position into ONE cell ('CUSIP 123456789 · FIGI
      12345X') and label the row by tranche.
      NEVER SPLIT A PIPE LIST ACROSS TABLE COLUMNS — doing so shifts every later
@@ -292,7 +294,7 @@ dimensions:
   bnd_bank: {column: bnd_bank, description: "RESOLVED bill-and-deliver bank NAME(S). ECM can hold SEVERAL banks in one ' | ' list (co-B&D); DCM is a single bank. NULL = no B&D designated. Use this for ALL B&D asks."}
   deal_sharing_type: {column: deal_sharing_type, description: "'SOLO' = Citi was the ONLY syndicate member (both products). 'SHARED' = everything else, including a tranche solely managed by another bank and a tranche with no syndicate rows. Never render SOLO as a bare 'sole-managed'."}
   # --- identifiers (aligned pipe lists) ---
-  identifier_type: {column: identifier_type, description: "Pipe-delimited identifier types (CUSIP/ISIN/FIGI/RIC/Valoren/'SMCP ID'/'DirectBooks Id'), zip-aligned with identifier_value. Casing differs per product (DCM lowercase, ECM uppercase)."}
+  identifier_type: {column: identifier_type, description: "Pipe-delimited identifier types (CUSIP/ISIN/FIGI/RIC/VALOREN/'SMCP ID'/'DIRECTBOOKS ID'), zip-aligned with identifier_value. UPPER-normalized in the view for both products (2026-09-03)."}
   identifier_value: {column: identifier_value, description: "Pipe-delimited identifier values, zip-aligned with identifier_type. Display ZIPPED with the type list into one cell per tranche. A security identifier is never a deal_id and never an entity."}
   # --- DCM-only ---
   product_class: {column: product_class, products: ["DCM"], description: "DCM. Bond class — a closed 15-value list (Investment Grade, High Yield, SSA, ABS…). Expand IG/HY/EM before filtering."}
@@ -742,10 +744,11 @@ filters:
     operators: [like, is_null, is_not_null]
     case_insensitive: true
     description: >-
-      Pipe list — like '%CUSIP%'. Values: CUSIP, ISIN, FIGI, RIC, Valoren,
-      'SMCP ID', 'DirectBooks Id'. Case differs per product (DCM lowercase, ECM
-      uppercase), so case-insensitive matching is mandatory — a case-sensitive
-      pattern silently misses every DCM row.
+      Pipe list — like '%CUSIP%' (equality never matches a list). Values:
+      CUSIP, ISIN, FIGI, RIC, VALOREN, 'SMCP ID', 'DIRECTBOOKS ID' —
+      UPPER-normalized in the view for both products (source DCM was lowercase;
+      fixed at view level 2026-09-03). Keep case-insensitive matching as
+      belt-and-braces.
   identifier_value:
     column: identifier_value
     operators: [like, is_null, is_not_null]

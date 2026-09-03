@@ -564,3 +564,13 @@ handover; an error there means that column needs the regexp-guard pattern
 instead of a plain cast.
 
 Files in this handover: ALL NINE view files.
+
+### ADDENDUM 5a — identifier-type UPPER normalization (same handover)
+DCM stores identifier types lowercase ('cusip | isin', 'commonCode',
+'DirectBooks Id'); an uppercase match found no data in UAT. Both IDENTIFIER_TYPE
+LISTAGGs (ECM + DCM branches, vw_tranche_summary) now emit UPPER(type), and BOTH
+zip-aligned LISTAGGs order by (UPPER(type), value) so pairing is unchanged.
+Uniform contract: 'CUSIP | ISIN' both products. Casing doctrine updated in
+tranche yaml + SKILL + gate trap pin ('UPPER-normalized'). NOTE: equality still
+never matches a pipe list — contains-match recipe unchanged (config push).
+Deploy-check: new check 18 (zero lowercase identifier types) verifies it landed.

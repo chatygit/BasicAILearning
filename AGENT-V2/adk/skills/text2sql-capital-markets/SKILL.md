@@ -834,7 +834,7 @@ no safety net at all.
 | "US investors" | `in ['United States','US']` — **never `like '%US%'`**: it matches RUSSIA, AUSTRIA, AUSTRALIA |
 | "non-US", any NOT-predicate | negate that same pair, then count the NULL bucket with `is_null` and disclose it — unknown is not non-US |
 | "one-on-one / 1:1" | `meeting_type eq '1:1'`; "One-to-One" matches nothing. "Other than 1x1" excludes ONLY `1:1` — **`No Meeting` IS a meeting type and its orders belong in the answer** (user ruling 2026-08-18); project `meeting_type` so that bucket is visible. Exclude `No Meeting` too only when the words require a meeting to have happened ("investors we MET other than 1x1"), and say so |
-| "CUSIP", any identifier type | case-insensitive `like` always — DCM stores types lowercase, ECM uppercase |
+| "CUSIP", any identifier type | `like` always (pipe list — equality never matches); types UPPER-normalized in the view since 2026-09-03, keep case-insensitive anyway |
 | "10-year" | `tenors like '%10-Y%'` — catches BOTH stored spellings (`10-YEAR`, `10-Y`); `%10-YEAR%` misses the abbreviated rows and `10Y` matches nothing. For a 1-digit tenor `%2-Y%` also matches `12-Y`/`22-Y` and LIKE cannot anchor it: project `tenors` and say which labels you counted |
 | "fixed-to-float", "semi-annual" | `Fixed to FRN`, `Semi Annual` — spaces, not hyphens |
 | "SEC registered", bare "144A" / "Reg S" | `reg_category like '%SEC REGISTERED%'` — a REG CATEGORY, not a delivery type. Only "<x> **delivery**" wording goes to `delivery_type`, where the literal is `RegS` with no space |
