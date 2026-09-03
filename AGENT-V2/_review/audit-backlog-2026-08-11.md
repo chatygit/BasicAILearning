@@ -845,3 +845,10 @@ Deploy-check: A0 → nine views; new check 17 (zero NULL-scale cast
 metric columns). _type-wave-validation.sql pre-handover for unmeasured
 columns. This supersedes the BDS catalog ask as the primary U4 fix
 (catalog ask remains optional hardening; PROD checklist items stand).
+
+## 2026-09-03 — type-wave validation results: GO
+Designation columns all clean (4 zeros) — plain casts safe.
+HEDGESECURITY_COUPON: numeric-proven (probes ran), but 5 rows (orders)
++ 7 rows (trades) carry scale >6dp → SECURITY_COUPON bumped to
+NUMBER(38,9) in both hedge views (coupon is a rate; rate tier).
+No cast can throw at deploy. NINE files hand-ready.
