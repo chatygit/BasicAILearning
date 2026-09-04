@@ -2036,6 +2036,27 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
           f"subquery projection (the OD.TOTAL_DEMAND class): "
           f"{sorted(_missing)[:6]}")
 
+# ENABLED-SOURCES LANDMINE (fired twice: the 2026-08-10 rename, and
+# 2026-09-04 QA-local where the four-source default silently hid the five new
+# objects and the agent refused hedge asks). The promote checklist must carry
+# the full nine-source line so no environment ships without it.
+_CFG = text(ROOT / "app" / "config.py")
+for _src in ["capital_markets_hedge", "capital_markets_hedge_trade",
+             "capital_markets_trade", "capital_markets_designation",
+             "capital_markets_trade_syndicate"]:
+    check(_src in _CFG,
+          f"[deploy] config.py default BQS_ENABLED_SOURCES lost '{_src}' — "
+          f"the default and the ontology set must move together (2026-09-04: "
+          f"the four-source default silently hid the hedge domain)")
+_PC = text(ROOT / "_review" / "PROMOTE-CHECKLIST.md")
+for _src in ["capital_markets_hedge", "capital_markets_hedge_trade",
+             "capital_markets_trade", "capital_markets_designation",
+             "capital_markets_trade_syndicate"]:
+    check(_src in _PC,
+          f"[deploy] PROMOTE-CHECKLIST lost source '{_src}' from the "
+          f"BQS_ENABLED_SOURCES line — an env without it silently hides "
+          f"the object (discovery omits it, agent refuses the domain)")
+
 # GRAIN DEDUPE NULL-GUARDS (2026-09-02, the check-9 DEV grain FAIL): when a
 # grain-defining dedupe block partitions by parent keys + entity id, rows with
 # a NULL id — previously all collapsed into ONE junk row by PARTITION BY id

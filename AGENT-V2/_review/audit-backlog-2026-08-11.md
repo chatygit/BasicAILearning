@@ -942,3 +942,23 @@ PROMOTE-CHECKLIST.md rescued to _review/ first. THE BARS ARE NOW TWO:
 ontology_check (1554) + pytest (111). MRM docs kept (compliance trail);
 SERVER-CONTRACT kept. NOTE: citi-security-quiz.md at repo root looks
 personal/unrelated — left untouched, user's call.
+
+## 2026-09-04 — QA-local hedge refusal: ENABLED-SOURCES landmine (2nd firing)
+Prompt 5b refused ("hedge book not available") with a four-object
+routing index: config.py default enumerates only the original four
+sources; the five new objects loaded and were SILENTLY ignored. Fix for
+local: BQS_ENABLED_SOURCES=* (or the explicit nine). PROMOTE-CHECKLIST
+gained the nine-source line + discovery-shows-nine verification; gate
+now pins all five new source names into the checklist ([deploy] class).
+Every deployed env needs the var with the config push.
+
+## 2026-09-04 — config.py DEFAULT fixed to nine sources (user: "did u forget?")
+Correct challenge: the env-var workaround dodged the real fix — when the
+five new ontology objects were created, the server default should have
+moved in the SAME change. config.py bqs_enabled_sources default now
+enumerates all nine; verified by loading the registry with the default
+(nine sources listed). Gate pins added BOTH sides: checklist must carry
+the nine-source env line AND config.py default must carry the five new
+names ("default and ontology set move together"). Bars 1564/111.
+Server file changed → rides the config-push deploy (local: just restart,
+no env var needed now).

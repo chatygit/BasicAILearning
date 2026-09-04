@@ -22,10 +22,13 @@ import os
 class _Settings:
     @property
     def bqs_enabled_sources(self) -> str:
-        # Restrict the server to the four grain-aligned Capital Markets objects
-        # (deal / tranche / order / entity). The legacy single-view v1 source
-        # ("ecm_dcm") has been removed. Override with a comma-separated
-        # BQS_ENABLED_SOURCES env var (or "*" to serve every ontology on disk).
+        # Restrict the server to the NINE grain-aligned Capital Markets objects
+        # (V3 domain, 2026-09-04 — the four-object default silently hid the
+        # hedge/trade/designation/trade_syndicate objects: they loaded, then
+        # discovery omitted them and the agent refused the whole domain with no
+        # error anywhere). The default and the ontology set must move TOGETHER.
+        # Override with a comma-separated BQS_ENABLED_SOURCES env var (or "*"
+        # to serve every ontology on disk).
         #
         # MIGRATION SHIM (2026-08-10, ecm_dcm -> capital_markets rename): a
         # deployment chart that still lists the OLD source ids would otherwise
@@ -36,7 +39,10 @@ class _Settings:
         raw = os.getenv(
             "BQS_ENABLED_SOURCES",
             "capital_markets_deal,capital_markets_tranche,"
-            "capital_markets_order,capital_markets_entity",
+            "capital_markets_order,capital_markets_entity,"
+            "capital_markets_hedge,capital_markets_hedge_trade,"
+            "capital_markets_trade,capital_markets_designation,"
+            "capital_markets_trade_syndicate",
         )
         return ",".join(
             part.strip().replace("ecm_dcm_", "capital_markets_")

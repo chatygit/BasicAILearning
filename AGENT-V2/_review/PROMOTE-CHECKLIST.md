@@ -76,3 +76,13 @@ Gate 1 case wherever it can be mechanized.
       lossless-mapping argument
 - [ ] Re-run AGENT-V2/views/_checks/_scale-probes-2026-09-02.sql against PROD —
       fresh census; DEV counts are not expectations (QA≠PROD)
+
+## BQS_ENABLED_SOURCES — the nine-object allow-list (added 2026-09-04)
+The server default (config.py) still enumerates the FOUR original objects; any
+environment (and any LOCAL run) without the override silently hides the other
+five — objects load, discovery omits them, the agent honestly refuses hedge/
+trade/designation asks (observed 2026-09-04, QA-local). Before/with every
+config deploy, the environment MUST set:
+- [ ] BQS_ENABLED_SOURCES=capital_markets_deal,capital_markets_tranche,capital_markets_order,capital_markets_entity,capital_markets_hedge,capital_markets_hedge_trade,capital_markets_trade,capital_markets_designation,capital_markets_trade_syndicate
+      (or "*" for local testing only — explicit list in deployed envs, fail-closed)
+- [ ] Verify: discover with no source — the routing index must list NINE objects.
