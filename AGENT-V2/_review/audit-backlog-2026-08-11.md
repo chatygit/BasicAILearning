@@ -927,3 +927,18 @@ away_orders refusal (contradicted order_ownership AWAY since rel 2).
 OPEN QUESTION for team: is the TTW refusal stale too — is "take the
 wall" the same workflow as WALL_CROSSED (exposed since final wave)?
 Bars 1554/206/111.
+
+## 2026-09-04 — REPO CLEANUP + V1 DELETED (user-directed)
+QA test prompts filed (_review/qa-test-prompts-2026-09-04.md). Deleted:
+21 one-shot _checks probes (results all harvested into _review records;
+KEPT _wave-a-name-validation.sql — living validation register — and
+_scale-probes-2026-09-02.sql — PROMOTE-CHECKLIST references it for the
+PROD census); 12 stale _review stubs (REVIEW-01..08, CHANGES-APPLIED,
+mcp_probe, demo-runbook, post-deploy-verification — mostly 0-byte since
+the 2026-08-07 restructure) + empty v1-reference/; all __pycache__/
+.pytest_cache; .gitignore added. V1/ DELETED per user — its 206-check
+suite validated only V1's own retired artifacts (zero AGENT-V2 refs);
+PROMOTE-CHECKLIST.md rescued to _review/ first. THE BARS ARE NOW TWO:
+ontology_check (1554) + pytest (111). MRM docs kept (compliance trail);
+SERVER-CONTRACT kept. NOTE: citi-security-quiz.md at repo root looks
+personal/unrelated — left untouched, user's call.
