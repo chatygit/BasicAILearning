@@ -862,3 +862,46 @@ IDENTIFIER_TYPE LISTAGGs emit UPPER(), both zip LISTAGGs reorder by
 trap pin → 'UPPER-normalized'). Deploy-check check 18 added. Reminder
 in doc: eq never matches pipe lists — contains recipe still required
 (config push). Bars 1481/206/111.
+
+## 2026-09-03 — hedge txn-id/tenor gap (UAT prompts) CLOSED
+Two UAT hedge prompts failed: (1) V2 config has NO hedge objects —
+answerable only after the config push; (2) even V3 lacked
+transaction_id/tenor on hedge — 3-hop ferry with no recipe. Fixed both
+layers: hedge views ferry TRANSACTION_ID (DN join extension) + TENORS
+(new TN join, grain-safe aggregates); both hedge yamls expose them
+(filters + dimensions, forward-populated + like-match doctrine); SKILL
+txn row extended. Also fixed stale "coupon stored as text" description
+(now NUMBER(38,9) post type wave). Bars 1481/206/111. RETEST after
+views + config deploy: both prompts should be ONE query each.
+
+## 2026-09-04 — USABILITY AUDIT: every view column now config-reachable
+User directive: "enabling all view changes we did to be usable, like we
+created Hedges but they were not usable." Scripted audit diffed all nine
+views' output columns vs ontology exposure: 17 gaps found, 16 CLOSED —
+deal: total_demand/total_allocation/subscription_ratio (dims + threshold
+filters); order: deal_region/tranche_region/deal_status/deal_size/
+use_of_proceeds (THE helper-wave ferry killers, finally reachable);
+tranche: offering_type/execution_status; hedge+hedge_trade+trade:
+deal_name (+coupon_type/security_type symmetry on hedge_trade,
+published_ts on trade). SKILL rewired: deal-attribute two-step declared
+DEAD (BlackRock refi = ONE request now; worked example moved to a
+tranche-attribute case so the iron rules survive for coupon/seniority/
+ESG/ratings asks); subscription-ratio stored-column doctrine added.
+EXCEPTION: investor_classification stays behind the gate-pinned census
+hold — census probe issued (_classification-census-2026-09-04.sql);
+flip only after values reviewed. This CLOSES the queued "post-deploy
+config round" backlog item. Bars 1542/206/111 (gate grew +61 with the
+new field surface). ALL of it ships with the config push.
+
+## 2026-09-04 — TOKEN-ECONOMY REVIEW (user: slowness + token complaints)
+Measured: SKILL 87k chars (~22k tok, EVERY turn), agents.yaml ~5k tok,
+catalogs tranche 16.2k/order 12.2k/deal 11.8k tok per fetch (all nine
+58k — routing index prevents); observed 181k prompt tokens explained.
+sql_audit echoes full SQL per response (validation_rules lesson
+recurring). Plan in _review/token-review-2026-09-04.md: Phase 1
+config compression AFTER the push ships (SKILL 87k→45k chars via
+doctrine moved to owning yamls; catalogs halved; targets pinned);
+Phase 2 server sql_audit=summary flag + block caps (release train);
+Phase 3 platform (Gemini context caching ask, token telemetry from
+usageMetadata). Placement rule now in memory: SKILL=pay-every-turn,
+yaml=pay-per-fetch. Supersedes "rewrites ON HOLD".

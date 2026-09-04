@@ -310,7 +310,15 @@ dimensions:
   tranche_status: {column: tranche_status, products: ["DCM"], description: "DCM. Tranche lifecycle status — the SAME source column as deal_status on DCM, so the two are identical there. NULL on every ECM row; for ECM status use deal_status, which is on THIS object."}
 
 # -------------------------------- FILTERS -----------------------------------
+  offering_type: {column: offering_type, description: "ECM offering type ferried at tranche grain (helper wave) — IPO / Follow-On asks per tranche without the deal hop. NULL on DCM."}
+  execution_status: {column: execution_status, description: "ECM status-type label (pairs with deal_status); NULL on DCM."}
 filters:
+  offering_type:
+    column: offering_type
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: ECM only ('IPO', 'Follow-On'...); NULL on every DCM row.
   product:
     column: product
     operators: [eq, in]

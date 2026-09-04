@@ -56,6 +56,8 @@ metrics:
 dimensions:
   product: {column: product, description: "Always 'DCM'."}
   deal_id: {column: deal_id, description: "Deal id — same family as the other objects. TEXT."}
+  transaction_id: {column: transaction_id, description: "DCM origination transaction id, ferried from the deal master 2026-09-03. Forward-populated — NULL on pre-link deals."}
+  tenors: {column: tenors, description: "Tranche tenor label ('5-YEAR' style) ferried from the deal master. Sparse."}
   tranche_id: {column: tranche_id, description: "Tranche id. TEXT."}
   hedge_order_id: {column: hedge_order_id, description: "The hedge ORDER this execution belongs to — joins capital_markets_hedge. TEXT."}
   hedge_trade_id: {column: hedge_trade_id, description: "Unique hedge execution id — the drill-down handle. TEXT."}
@@ -82,7 +84,15 @@ dimensions:
   trade_reference: {column: trade_reference, description: "External execution reference — project beside hedge_trade_id."}
   trade_status: {column: trade_status, description: "open / cancelled (open vocabulary)."}
 
+  security_coupon_type: {column: security_coupon_type, description: "Coupon type of the hedged security (seen: 'fixed')."}
+  security_type: {column: security_type, description: "Hedged security type."}
+  deal_name: {column: deal_name, description: "Deal/issue name ferried from the deal master — name-scoped asks in one request; contains-match, entity-resolve ambiguous names first."}
 filters:
+  deal_name:
+    column: deal_name
+    operators: [like, is_null, is_not_null]
+    case_insensitive: true
+    description: Contains-match on the deal name — never equality; resolve ambiguous names via the entity object first.
   product:
     column: product
     operators: [eq, in]
@@ -90,6 +100,8 @@ filters:
     values: ["DCM"]
     description: Always DCM; the entitlement gate injects/validates this.
   deal_id: {column: deal_id, operators: [eq, in], description: "TEXT ids — quote, max 40 per in-list."}
+  transaction_id: {column: transaction_id, operators: [eq, in], description: "DCM origination transaction id — quote it; forward-populated, on 0 rows offer deal_id (deal-object caveat)."}
+  tenors: {column: tenors, operators: [like, is_null, is_not_null], case_insensitive: true, description: "Tenor label 'VALUE-PERIOD' ('5-YEAR') — like-match ('%5%YEAR%'), never eq."}
   tranche_id: {column: tranche_id, operators: [eq, in], description: TEXT ids.}
   hedge_order_id: {column: hedge_order_id, operators: [eq, in], description: TEXT ids — scope executions to hedge orders.}
   hedge_trade_id: {column: hedge_trade_id, operators: [eq, in], description: TEXT ids.}

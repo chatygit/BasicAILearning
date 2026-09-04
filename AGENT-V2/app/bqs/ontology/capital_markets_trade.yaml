@@ -100,7 +100,14 @@ dimensions:
   commission_rate: {column: commission_rate, products: ["ECM"], description: "ECM (V3). Commission rate (NUMBER)."}
   execution_ts: {column: execution_ts, products: ["ECM"], description: "ECM (V3). Execution timestamp."}
 
+  published_ts: {column: published_ts, description: "Last feed publish timestamp for the trade row — recency, not execution time."}
+  deal_name: {column: deal_name, description: "Deal/issue name ferried from the deal master — name-scoped asks in one request; contains-match, entity-resolve ambiguous names first."}
 filters:
+  deal_name:
+    column: deal_name
+    operators: [like, is_null, is_not_null]
+    case_insensitive: true
+    description: Contains-match on the deal name — never equality; resolve ambiguous names via the entity object first.
   product:
     column: product
     operators: [eq, in]

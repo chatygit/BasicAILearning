@@ -81,6 +81,8 @@ dimensions:
   product: {column: product, description: "Always 'DCM' on this object."}
   deal_id: {column: deal_id, description: "Deal id — SAME id family as the deal/tranche/order objects. TEXT, quote it."}
   tranche_id: {column: tranche_id, description: "Tranche id the hedge attaches to. TEXT."}
+  transaction_id: {column: transaction_id, description: "DCM origination transaction id (the banker's natural deal handle) — ferried from the deal master 2026-09-03. FORWARD-POPULATED: NULL on deals predating the Ipreo link; 0 rows may mean that, say so and offer deal_id."}
+  tenors: {column: tenors, description: "Tranche tenor label ('5-YEAR' style, VALUE-PERIOD) ferried from the deal master — lets '5YR tranche' hedge asks run in ONE query. Sparse where the tranche has no tenor."}
   order_id: {column: order_id, description: "The hedged ORDER's id (the hedge's sibling) — joins capital_markets_order rows. TEXT."}
   hedge_order_id: {column: hedge_order_id, description: "Unique hedge order id — the drill-down handle; project it in listings. TEXT."}
   hedge_type: {column: hedge_type, description: "Hedge type (seen: 'hedge'). Open vocabulary."}
@@ -104,12 +106,18 @@ dimensions:
   security_cusip: {column: security_cusip, description: "Hedged security CUSIP. TEXT."}
   security_name: {column: security_name, description: "Hedged security name (sparse)."}
   security_maturity_ts: {column: security_maturity_ts, description: "Hedged security maturity (timestamp; sparse)."}
-  security_coupon: {column: security_coupon, description: "Hedged security coupon (stored as text)."}
+  security_coupon: {column: security_coupon, description: "Hedged security coupon (NUMBER(38,9) since the 2026-09-03 type wave)."}
   security_coupon_type: {column: security_coupon_type, description: "Coupon type of the hedged security (seen: 'fixed')."}
   security_type: {column: security_type, description: "Hedged security type (seen: 'hedge')."}
   security_issuer: {column: security_issuer, description: "Hedged security issuer (seen: 'UST')."}
 
+  deal_name: {column: deal_name, description: "Deal/issue name ferried from the deal master — name-scoped asks in one request; contains-match, entity-resolve ambiguous names first."}
 filters:
+  deal_name:
+    column: deal_name
+    operators: [like, is_null, is_not_null]
+    case_insensitive: true
+    description: Contains-match on the deal name — never equality; resolve ambiguous names via the entity object first.
   product:
     column: product
     operators: [eq, in]
@@ -124,6 +132,20 @@ filters:
     column: tranche_id
     operators: [eq, in]
     description: TEXT ids.
+  transaction_id:
+    column: transaction_id
+    operators: [eq, in]
+    description: >-
+      DCM origination transaction id — quote it. Forward-populated only:
+      on 0 rows say the deal may predate the transaction link and offer
+      deal_id addressing (same caveat as the deal object).
+  tenors:
+    column: tenors
+    operators: [like, is_null, is_not_null]
+    case_insensitive: true
+    description: >-
+      Tenor label, 'VALUE-PERIOD' ('5-YEAR'). Match like '%5%YEAR%' or
+      '%5-%' — bankers say '5YR'/'5Y'/'5 year'; never eq.
   order_id:
     column: order_id
     operators: [eq, in]

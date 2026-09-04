@@ -357,7 +357,43 @@ dimensions:
   tranche_size: {column: tranche_size, description: "Size of the TRANCHE this order was placed into, as a NUMBER (ECM shares / DCM notional). Deal-level context for an order; do NOT sum it across orders — every order on a tranche repeats the same tranche size."}
 
 # -------------------------------- FILTERS ----------------------------------
+  deal_region: {column: deal_region, description: "Parent deal's region ferried onto orders (helper wave) — 'orders/investors in NAM deals' is ONE request here. Deal-object vocabulary."}
+  tranche_region: {column: tranche_region, description: "Tranche-level region (DCM; NULL on ECM). Prefer deal_region unless the ask names tranches."}
+  deal_status: {column: deal_status, description: "Parent deal status ferried onto orders — status-scoped order asks in one request. Deal-object vocabulary; case variants real."}
+  deal_size: {column: deal_size, description: "Parent deal size ferried onto orders. ECM = share count, DCM = notional — never mix units across products."}
+  use_of_proceeds: {column: use_of_proceeds, description: "Parent deal use-of-proceeds ferried onto orders — 'investor money into refinancing deals' is ONE request. Deal-object vocabulary and traps (refi splits across two values)."}
 filters:
+  deal_region:
+    column: deal_region
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: Deal-region scoping WITHOUT a deal-id ferry — deal-object vocabulary.
+  tranche_region:
+    column: tranche_region
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    case_insensitive: true
+    description: DCM tranche region; NULL on every ECM row.
+  deal_status:
+    column: deal_status
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: Parent-deal status — deal-object vocabulary ('Priced'/'Open' case variants real, match case-insensitively).
+  deal_size:
+    column: deal_size
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    description: >-
+      Threshold on the PARENT deal while querying orders ("investors in
+      deals over 1bn"). Pair with product — units differ per product.
+  use_of_proceeds:
+    column: use_of_proceeds
+    operators: [eq, ne, in, not_in, like]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      Deal purpose on the order grain. Deal-object trap applies: refinancing
+      spans TWO values — like '%efinanc%' plus 'Debt Repayment' in-list.
   product:
     column: product
     operators: [eq, in]

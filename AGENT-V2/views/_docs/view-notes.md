@@ -574,3 +574,17 @@ Uniform contract: 'CUSIP | ISIN' both products. Casing doctrine updated in
 tranche yaml + SKILL + gate trap pin ('UPPER-normalized'). NOTE: equality still
 never matches a pipe list — contains-match recipe unchanged (config push).
 Deploy-check: new check 18 (zero lowercase identifier types) verifies it landed.
+
+### ADDENDUM 5b — hedge views: TRANSACTION_ID + TENORS ferry (same handover)
+UAT prompts "For Transaction ID X how many investors are in the hedge book" /
+"total hedge amount for the 5YR tranche" were unanswerable in one query: hedge
+views carried neither the transaction id (the DCM banker's natural deal handle)
+nor tenor (the natural tranche handle). Both hedge views now ferry them from
+OB_DEAL_TRANCHE: DN join extended with MAX(ORIGINATION_TRANSACTION_ID) AS
+TRANSACTION_ID (deal grain), and a new TN join GROUP BY (DEAL_ID, TRANCHE_ID)
+builds TENORS as VALUE-PERIOD ('5-YEAR'), matching the tranche view's format.
+Both joins aggregate to unique keys — hedge grain unchanged (checks 10b/11b
+still the net). Config: transaction_id (eq/in, forward-populated caveat) and
+tenors (like-match, never eq) exposed on both hedge objects; SKILL txn-id
+doctrine row extended. Columns referenced (TENOR_VALUE/TENOR_PERIOD/
+ORIGINATION_TRANSACTION_ID) are already name-validated on this table.

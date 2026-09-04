@@ -282,7 +282,28 @@ dimensions:
   deal_size_currency: {column: deal_size_currency, products: ["ECM"], description: "ECM (V3). Currency of deal_size_mm."}
 
 # -------------------------------- FILTERS ----------------------------------
+  total_demand: {column: total_demand, description: "Deal-grain total demand (live-order demand; ECM includes the IOI-limit fallback since 2026-09-03). NULL/0 = no orders captured for the deal."}
+  total_allocation: {column: total_allocation, description: "Deal-grain total allocation across the book."}
+  subscription_ratio: {column: subscription_ratio, description: "STORED oversubscription ratio = total_demand / deal_size (2dp, deal grain). Use this column — never recompute from separate queries. NULL = deal size missing/zero: say not computable, never treat as 1x."}
 filters:
+  total_demand:
+    column: total_demand
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    description: >-
+      Deal-grain demand threshold. Pair with product — ECM demand is shares,
+      DCM is notional; never rank across products in one list.
+  total_allocation:
+    column: total_allocation
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    description: >-
+      Deal-grain allocation threshold. Same unit caveat as total_demand.
+  subscription_ratio:
+    column: subscription_ratio
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
+    description: >-
+      Oversubscribed deals = subscription_ratio gt 1 ('2x covered' = gt 2).
+      NULL means not computable (missing deal size) — use is_not_null to
+      restrict rankings to measurable deals and disclose the exclusion.
   product:
     column: product
     operators: [eq, in]
