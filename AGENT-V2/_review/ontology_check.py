@@ -440,7 +440,7 @@ for m in re.finditer(r"classification", before, re.I):
         "population, not an approximate one.",
     )
 check(has(ORDER, "investor_classification"),
-      "[taxonomy] order object lost the investor_classification refusal")
+      "[taxonomy] order object lost the investor_classification distinction")
 
 # ---------------------------------------------------------------------------
 # 7. NULL DISCLOSURE — a rule the ontology states must be executable
@@ -1892,11 +1892,12 @@ check("greenshoe_overallotment" not in text(DEAL)
 check(has(TRANCHE, "over_allotment_exercised_shares:")
       and has(TRANCHE, "total_fee:"),
       "[v3cfg] tranche yaml lost greenshoe/fees")
-check(has(ORDER, "investor_classification")
-      and has(ORDER, "unsupported_intents"),
-      "[v3cfg] the classification HOLD is gone — it must stay a refusal "
-      "until the census (production-incident history); the column exists "
-      "in the VIEW only")
+check(has(ORDER, "censused QA+UAT 2026-09-04")
+      and has(ORDER, "investor_classification: {column: investor_classification"),
+      "[v3cfg] investor_classification exposure lost — the census ran "
+      "2026-09-04 (QA+UAT: real taxonomy; ECM 8 values, DCM tiered head "
+      "with free-text tail) and the hold was consciously lifted; do not "
+      "re-refuse and do not drop the census marker")
 check('values: ["ECM", "DCM"]' in text(
           ROOT / "app" / "bqs" / "ontology" / "capital_markets_trade.yaml"),
       "[v3cfg] trade object re-scoped to one product — the ECM blotter "

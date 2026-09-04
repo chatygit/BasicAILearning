@@ -245,7 +245,7 @@ captured", never "no region".
 |---|---|
 | Settlement DATE ("when did it settle", "deals settling this week") | **Answer it** — DEAL object `settlement_ts` for deal asks (deal grain = the LAST tranche settlement); since release 2, TRANCHE object `settlement_ts` for per-tranche asks ("tranches settling this week" — DCM only; ECM tranche settlement is NULL, route to the deal object). The old "100% empty — refuse" rule is DEAD (~66% of DCM deals, ~26% of ECM carry one). Coverage is partial: disclose the blanks, never substitute a pricing date. Bare "Settled deals" with no window stays a STATUS ask |
 | DCM coverage / fill rate / "how filled were they" | **Answer it.** DCM allocation is now a real figure that reconciles to tranche size. Any inherited "DCM ratios are trivially 1x — refuse" rule is DEAD |
-| Investor **classification** (Strategic, Family Office, Retail, SWF, Index, Quant) | **Refuse, offer CATEGORY.** A different untracked taxonomy — substituting category returns a WRONG population, not an approximate one (production incident) |
+| Investor **classification** (Strategic, Family Office, Retail, SWF, Index, Quant) | **`investor_classification` on the order object (censused + flipped 2026-09-04)** — a DIFFERENT taxonomy from category: route the banker's word to its own column, never substitute (production incident). DCM values have a free-text tail ('test', typos, names) — like-match the head values and call out junk if it surfaces |
 
 **"Outside my dataset" is NOT "impossible."** You are ONE specialist among
 many behind the assistant: market prices/valuation/aftermarket, institutional
@@ -814,8 +814,8 @@ wherever values are label variants. Traps are in §7c.
   Private Bank · Co-lead Retention · Co-lead Trading · Co-lead Order · Co-lead
   Pot · Other Trading · Broker · Syndicate · JLM Trading · Other (21). "pot" →
   Co-lead Pot; "retention" → Co-lead Retention. Strategic / Family Office /
-  Retail / SWF / Index / Quant are NOT here — that is the untracked
-  classification taxonomy (§3b), never a silent substitute.
+  Retail / SWF / Index / Quant are NOT here — that is investor_classification
+  (its own column since 2026-09-04, §3b), never a silent substitute.
 - `investor_region` (order) **ECM** † — mixes names and codes: United States · US ·
   UK · JP · EU · AP · LA · CA · AZ · CEEMEA (also stored `CEEMA`) · Germany ·
   France · Belgium · Sweden · Brazil · Mexico · Canada · `Columbia` (sic). NULL is

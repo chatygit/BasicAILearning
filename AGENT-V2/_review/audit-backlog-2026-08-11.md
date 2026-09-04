@@ -905,3 +905,25 @@ Phase 2 server sql_audit=summary flag + block caps (release train);
 Phase 3 platform (Gemini context caching ask, token telemetry from
 usageMetadata). Placement rule now in memory: SKILL=pay-every-turn,
 yaml=pay-per-fetch. Supersedes "rewrites ON HOLD".
+
+## 2026-09-04 — TENORS pairing fix + CLASSIFICATION HOLD LIFTED
+(1) PR bot flagged TENORS in BOTH hedge views (independent MAXes can
+pair value/period from different feed rows AND diverge from the tranche
+view's tenor). CONFIRMED real; fixed STRONGER than suggested: TN now
+ROW_NUMBER-dedupes per (DEAL_ID,TRANCHE_ID) by ROWID — the same row the
+tranche view picks, bit-identical TENORS across views. Re-push both
+hedge files to the PR.
+(2) Classification census (QA + UAT — user's new both-env discipline):
+REAL taxonomy, not the feed label. ECM: clean 8 values (Strategic,
+Hedge Fund, Long Only, Family Office, SWF/Pension, Retail, Index/Quant,
+DSP). DCM: tiered head (Co-lead Order 1230 / Trading 1197 / Other
+Trading 1173, Tier 2 variants, Client Network) + FREE-TEXT tail
+('test'/'rajat'/'honda'/'Cuba'/typos/literal 'null'); QA vocab differs
+from UAT → never a complete enum. HOLD LIFTED CONSCIOUSLY:
+investor_classification exposed (dim + filter, census-honest doctrine),
+refusal deleted, gate hold-pin reworked into exposure pin (census
+marker pinned), SKILL trap row flipped. Also deleted the STALE
+away_orders refusal (contradicted order_ownership AWAY since rel 2).
+OPEN QUESTION for team: is the TTW refusal stale too — is "take the
+wall" the same workflow as WALL_CROSSED (exposed since final wave)?
+Bars 1554/206/111.

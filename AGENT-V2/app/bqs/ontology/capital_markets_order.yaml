@@ -174,8 +174,9 @@ how_to_use:
      project meeting_type so the No Meeting bucket is visible. Exclude No
      Meeting only when the words require a meeting to have HAPPENED ('investors
      we MET other than 1x1'), and say so. investor_category
-     is a CATEGORY — 'classification' is a different, untracked taxonomy whose
-     values do not overlap it; see unsupported_intents."
+     is a CATEGORY — investor_classification is a different, also-REAL
+     taxonomy (own column, censused QA+UAT 2026-09-04); route the banker's
+     word to its matching column, never substitute one for the other."
 
 # ------------------------------- METRICS -----------------------------------
 # UNITS GUARD: every metric over a per-product-unit column declares
@@ -306,7 +307,8 @@ dimensions:
   investor_name: {column: investor_name, description: "Investor/account name (display). NOT unique — several ids can share a name, and one investor is spelled several ways."}
   investor_id: {column: investor_gp_id, description: "Investor GP id (investor-side key). TEXT — quote it, leading zeros matter. NULLABLE at source: grouping by it silently drops those orders."}
   investor_region: {column: investor_region, description: "Investor's own geography — never the deal's target region. BOTH products since release 3: ECM mixes full names and codes ('United States' and 'US'); DCM is country NAMES (~95% populated). NULL = not recorded."}
-  investor_category: {column: investor_category, description: "Investor category, BOTH products since release 3. ECM vocabulary: Long Only, Hedge Fund, Asset Manager… DCM vocabulary: Asset managers, Banks, Insurers, Hedge funds, Corporates, Pension funds, Others (~67% populated, CASE VARIANTS real — match case-insensitively). This is CATEGORY — 'classification' is a different, untracked taxonomy; see unsupported_intents."}
+  investor_category: {column: investor_category, description: "Investor category, BOTH products since release 3. ECM vocabulary: Long Only, Hedge Fund, Asset Manager… DCM vocabulary: Asset managers, Banks, Insurers, Hedge funds, Corporates, Pension funds, Others (~67% populated, CASE VARIANTS real — match case-insensitively). This is CATEGORY — investor_classification is a different, also-real taxonomy with its own column; never substitute."}
+  investor_classification: {column: investor_classification, description: "Investor CLASSIFICATION — different taxonomy from investor_category, censused QA+UAT 2026-09-04. ECM: Strategic, Hedge Fund, Long Only, Family Office, SWF/Pension, Retail, Index/Quant, DSP. DCM: tiered desk taxonomy (Asset Manager, Bank Treasury, Co-lead Order/Trading/Pot, Client Network, Tier 2 variants) with a REAL free-text tail ('test', names, typos, literal 'null') — values observed, never complete."}
   investor_category_key: {column: investor_category_key, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Coded investor category key (LONG_ONLY, HEDGE_FUND, OUTRIGHT…). Display uses investor_category, not this."}
   meeting_type: {column: meeting_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Investor/issuer meeting type. USER WORDS MAP TO THE STORED VALUE: '1x1', '1-1', 'one-on-one', 'one to one', 'One-to-One' ALL mean the stored literal '1:1' (with a COLON) — sending the user's spelling verbatim returns zero rows. PREFER meeting_type_key for filtering ('ONE_TO_ONE'): it has no punctuation to get wrong. The stored literal is '1:1' (not 'One-to-One'); 'No Meeting' is also a value. There is no stored 'roadshow' value — reading 'roadshow'/'met the issuer' as 'anything but No Meeting' is an INTERPRETATION, so say so in the answer."}
   meeting_type_key: {column: meeting_type_key, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Coded meeting type (NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING). 'One-to-One' exists ONLY here — the displayed value is '1:1'."}
@@ -363,6 +365,7 @@ dimensions:
   deal_size: {column: deal_size, description: "Parent deal size ferried onto orders. ECM = share count, DCM = notional — never mix units across products."}
   use_of_proceeds: {column: use_of_proceeds, description: "Parent deal use-of-proceeds ferried onto orders — 'investor money into refinancing deals' is ONE request. Deal-object vocabulary and traps (refi splits across two values)."}
 filters:
+  investor_classification: {column: investor_classification, operators: [eq, ne, in, not_in, like, is_null, is_not_null], suggestable: true, case_insensitive: true, description: "Different taxonomy from investor_category (own column). Like-match head values; DCM tail holds free-text junk — if a value looks like test data say so; QA/UAT vocabularies differ, never claim completeness."}
   deal_region:
     column: deal_region
     operators: [eq, ne, in, not_in, like]
@@ -486,7 +489,7 @@ filters:
       'retention' → Co-lead Retention; 'sovereign'/'official' → Official
       Institution; 'pension' → Insurance/Pension. 'Broker' and 'Syndicate' here
       are investor categories, not the syndicate fields on the tranche object.
-      This is CATEGORY — 'classification' is a different, untracked taxonomy
+      This is CATEGORY — investor_classification is a different, also-real taxonomy (own column)
       (Strategic, Family Office, Retail, SWF, DSP, Index, Quant never appear
       here); see unsupported_intents.
   investor_category_key:
@@ -764,12 +767,6 @@ unsupported_intents:
     user_message: >-
       Matched-order status isn't available here. I can filter by deal status or
       investor category instead.
-  away_orders:
-    patterns: ["away orders", "orders from other banks"]
-    reason: No away-order flag / originating-bank attribution exists.
-    user_message: >-
-      Away orders (placed by other syndicate banks) aren't captured. I can show
-      all orders for a deal, or filter the syndicate on the tranche object.
   ttw_orders:
     patterns: ["TTW", "selected as TTW", "take the wall", "take-the-wall"]
     reason: No take-the-wall flag is exposed on the order view.
@@ -798,20 +795,6 @@ unsupported_intents:
       Per-bank allocation attribution isn't available — I can't say how much each
       syndicate bank allocated. I can show total allocation per investor for the
       deal, or which banks were in the syndicate.
-  investor_classification:
-    patterns: ["investor classification", "investor classifications",
-               "classification of investor", "classification of investors",
-               "classify investors", "investor class"]
-    reason: >-
-      'Classification' is a different, untracked taxonomy from investor_category.
-      Its values (Strategic, Family Office, Retail, SWF, DSP, Index, Quant) do
-      not appear in investor_category at all, so substituting one for the other
-      returns a WRONG population, not an approximate one.
-    user_message: >-
-      Investor "classification" isn't tracked as a separate taxonomy. I can group
-      or filter by investor_category (Long Only, Hedge Fund, Asset Manager…) —
-      would that work?
-
 usage_notes:
   - "Always set a product filter. One row per order — no deduplication."
   - "REJECTED WITHOUT A 'product' FILTER (the server raises
