@@ -962,3 +962,11 @@ the nine-source env line AND config.py default must carry the five new
 names ("default and ontology set move together"). Bars 1564/111.
 Server file changed → rides the config-push deploy (local: just restart,
 no env var needed now).
+
+## 2026-09-04 — column-alignment ruling (stakeholder: "bankers catch that")
+Top-10 tranche table showed deal/tranche NAMES right-aligned. SKILL
+presentation rule added (next to the unit-parenthetical ruling): text
+and mixed values ':---' left, pure numerics '---:' right; gate [present]
+pin added. NOTE: if the chat UI overrides markdown alignment colons with
+its own CSS, this becomes a front-end ticket — verify on the next local
+run; the screenshot's uniform right-alignment could be either layer.

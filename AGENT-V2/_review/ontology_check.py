@@ -1784,6 +1784,10 @@ check(has(SKILL, "READABLE middle key"),
 check(has(SKILL, "unit parenthetical"),
       "[present] SKILL.md: the no-'(Shares)'-in-headers rule is gone (user "
       "ruling 2026-08-19) — table headers grow unit parentheticals again")
+check(has(SKILL, "COLUMN ALIGNMENT (user ruling 2026-09-04)"),
+      "[present] SKILL.md: the column-alignment rule is gone (stakeholder "
+      "ruling 2026-09-04) — text/mixed columns must be ':---' left, pure "
+      "numerics '---:' right; bankers catch misalignment instantly")
 check(has(ORDER, "RANKS BY order_demand_qty")
       and has(SKILL, "largest / biggest order"),
       "[metric] largest-order ranking rule is gone (user ruling 2026-08-19) "

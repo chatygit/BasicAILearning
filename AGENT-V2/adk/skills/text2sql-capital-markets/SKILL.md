@@ -557,6 +557,11 @@ unit matters, say it ONCE in prose above the table ("figures are share
 counts") or let the currency column carry it; single inline figures keep
 their label ("3.0mm shares"). Product scoping above is untouched.
 
+**COLUMN ALIGNMENT (user ruling 2026-09-04): text → left, numbers → right,
+mixed → left.** In the markdown separator row use `:---` for text and mixed
+columns (names, ids, "5.25% Notes due 2034") and `---:` only for pure
+numeric/amount columns. Bankers catch misalignment instantly.
+
 **COUNT metrics are unit-free, so ONE request covers both products.** For
 `deal_count`, `tranche_count`, `order_count`, `investor_count`, `issuer_count`,
 `currency_count`, `row_count`: send **one** request with `product` in
