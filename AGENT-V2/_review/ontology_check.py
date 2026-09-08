@@ -1663,8 +1663,9 @@ _PRODUCT_PINS = [
     ("capital_markets_deal.yaml", "issuer_country", "ECM"),
     ("capital_markets_deal.yaml", "issuer_domicile", "ECM"),
     ("capital_markets_deal.yaml", "offering_format", "ECM"),
-    ("capital_markets_deal.yaml", "deal_fee_mm", "ECM"),
-    ("capital_markets_deal.yaml", "deal_size_mm", "ECM"),
+    # (deal, deal_fee_mm/deal_size_mm, ECM) RETIRED 2026-09-04: OPUS_BASE
+    # removal NULLed both columns on BOTH products — the products key was
+    # deleted ON PURPOSE; the retirement pins below guard the redirect text.
     ("capital_markets_tranche.yaml", "coupon", "DCM"),
     ("capital_markets_tranche.yaml", "yield", "DCM"),
     ("capital_markets_tranche.yaml", "price", "DCM"),
@@ -1884,6 +1885,16 @@ for _f, _need, _why in [
 ]:
     check(has(ROOT / "app" / "bqs" / "ontology" / _f, _need),
           f"[v3cfg] {_f}: {_why}")
+check(has(DEAL, "NULL on BOTH products since 2026-09-04")
+      and has(DEAL, "SUM the tranche object's total_fee"),
+      "[v3cfg] deal yaml lost the OPUS_BASE retirement redirect — "
+      "deal_fee_mm/deal_size_mm are NULL everywhere since 2026-09-04 and "
+      "must steer to tranche total_fee, never present as ECM-populated")
+check(has(DEAL, "DCM ONLY since 2026-09-04")
+      and has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_order.yaml",
+              "DCM ONLY since 2026-09-04"),
+      "[v3cfg] deal_region OPUS_BASE retirement note lost (deal or order "
+      "yaml) — ECM rows are NULL; ECM region asks go to issuer_country")
 check(has(DEAL, "reoffer_low_price:") and has(DEAL, "issuer_domicile:")
       and has(DEAL, "deal_fee_mm:") and has(DEAL, "first_announced:"),
       "[v3cfg] deal yaml lost a final-wave field — price range/domicile/"
@@ -2027,8 +2038,11 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
     _missing = []
     for _ref in set(_re2.findall(r"\b([A-Z][A-Z0-9_]{0,5})\.([A-Z][A-Z0-9_]+)", _txt)):
         _alias, _col = _ref
-        if _alias in ("DGSTREAM",) or _alias not in _blocks \
-                or _alias in _table_aliases:
+        if _alias in ("DGSTREAM",) or _alias in _table_aliases:
+            continue
+        if _alias not in _blocks:
+            _missing.append(f"{_alias}.{_col} (alias has NO subquery block "
+                            f"— dangling reference to a deleted join?)")
             continue
         _bodies = _blocks[_alias]
         if any(".*" in _b for _b in _bodies):

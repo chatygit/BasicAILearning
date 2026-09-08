@@ -588,3 +588,22 @@ still the net). Config: transaction_id (eq/in, forward-populated caveat) and
 tenors (like-match, never eq) exposed on both hedge objects; SKILL txn-id
 doctrine row extended. Columns referenced (TENOR_VALUE/TENOR_PERIOD/
 ORIGINATION_TRANSACTION_ID) are already name-validated on this table.
+
+## ADDENDUM 6 — 2026-09-04 OPUS_BASE removal (user-called release)
+Constraint: we must move away from OPUS_BASE tables. Both OPUS_BASE_TRANSACTION
+(OBT) and OPUS_BASE_TRANSACTION_RELATED_PARTIES (PCM) removed from
+vw_deal_summary, vw_tranche_summary, vw_order_detail (the other six views never
+used them). Effects:
+- ISSUER_NAME/GFCID/TICKER lose the Primary-Client canonicalization layer; the
+  existing fallbacks stand (ECM: OB_DEAL_ISSUER-by-GFCID then source name;
+  DCM: OB_DEAL_ISSUER). Expect more name variants; entity token-matching covers.
+- ECM DEAL_REGION is now NULL (no non-OPUS_BASE source exists) — deal, order
+  helper, and tranche views; TRANCHE_REGION (ECM) = TT.REGION only. ECM region
+  asks route to issuer_country (config updated).
+- DEAL_FEE_MM/DEAL_FEE_CURRENCY/DEAL_SIZE_MM/DEAL_SIZE_CURRENCY are NULL stubs
+  on BOTH products; deal-fee asks = SUM tranche total_fee (config updated).
+Gate: projection check extended with the undefined-alias class (a dangling ref
+to a deleted join now fails locally — the 4th ORA-00904 class closed for good);
+retirement pins replace the two ECM product pins. Index request to DB team
+revised to FOUR indexes (OPUS_BASE items withdrawn).
+Files to hand: vw_deal_summary, vw_tranche_summary, vw_order_detail.

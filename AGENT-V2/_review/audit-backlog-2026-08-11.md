@@ -970,3 +970,14 @@ and mixed values ':---' left, pure numerics '---:' right; gate [present]
 pin added. NOTE: if the chat UI overrides markdown alignment colons with
 its own CSS, this becomes a front-end ticket — verify on the next local
 run; the screenshot's uniform right-alignment could be either layer.
+
+## 2026-09-04 — OPUS_BASE REMOVAL WAVE (user-confirmed constraint)
+Three views purged of OPUS_BASE_TRANSACTION + RELATED_PARTIES (zero
+residual refs, asserted). Config: deal_region DCM-only doctrine (ECM →
+issuer_country), deal_fee/size_MM retired to tranche-fee redirect;
+SKILL fee row updated; index request cut to four (OPUS_BASE items
+withdrawn). Gate: undefined-alias class added to projection check;
+2 product pins → retirement pins. Bars 1565/111. OPEN: usability audit
+re-run once this settles (order.yaml showed helper fields the audit
+called missing — verify audit script vs current files); ECM deal_region
+banker impact to disclose at next demo.
