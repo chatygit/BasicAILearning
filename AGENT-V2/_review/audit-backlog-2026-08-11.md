@@ -1087,3 +1087,31 @@ DEMAND_UNIT column**; per-order asks answer in the order's own unit;
 deal-grain TOTAL_DEMAND scopes to SHARES only and discloses excluded
 orders — mirroring the book's own unit-scoped presentation. Ties to the
 existing release-train item "units-mixing planner guard".
+
+## 2026-09-14 — DEMAND_QTY DECODED: it is the SHARE-EQUIVALENT normalization
+Per-unit cross-validation (QA, orders holding BOTH values) is decisive:
+  SHARES  3,598 orders — DEMAND_QTY = top IOI_QTY in 3,584 (99.6%)
+  BOND      264 orders — 264 (100%)
+  CURRENCY 2,751 orders — 1 (0.04%)
+  PERCENT     66 orders — 1
+  FACE         5 orders — 0
+So DEMAND_QTY is NOT a different measure: it EQUALS the IOI quantity when
+the IOI is already share-denominated, and DIFFERS when the source had to
+CONVERT (currency/percent/face). DEMAND_QTY = the source's normalized
+share-equivalent demand. Multi-point orders (73 with demand):
+EQ_SUM = 0 (definitively NOT a sum), EQ_MAX 46, EQ_TOP(lowest price) 32 —
+MAX is the better scalar; TOP is distorted because NULL-limit (market)
+points sort first.
+Live-book shape: 71,003 live ECM orders across 2,963 deals; 61.4% are
+SHARES. Unit MIXING WITHIN A DEAL IS COMMON (deals observed with 4-6
+distinct units, e.g. 85AA5479 = 1,004 orders across 4 units).
+EVIDENCE-BACKED DESIGN (pending the 14c confirmation + desk sign-off):
+ - ORDER_DEMAND_QTY = NVL(DEMAND_QTY, <MAX IOI_QTY where IOI_UNIT IN
+   ('SHARES','BOND')>) — a SAME-UNIT fill proven to reproduce the source's
+   own value 99.6-100% of the time (contrast the reverted LIMIT_VALUE
+   fallback, which was a different quantity entirely).
+ - ORDER_DEMAND_UNIT (= IOI_UNIT) exposed beside it; CURRENCY/PERCENT/FACE
+   orders keep a blank share-equivalent + their as-submitted quantity, and
+   the agent says the indication was submitted in another unit.
+ - Deal TOTAL_DEMAND sums share-equivalents ONLY and discloses the excluded
+   orders — mirroring the book's own "Indication (Common Shares)" column.
