@@ -1061,3 +1061,29 @@ the sentinel range, AND cross-validates the scalar definition on the 6,683
 orders that have BOTH: does DEMAND_QTY equal the top (lowest-price) point, the
 SUM of points, or the MAX? That lets the SOURCE define 'demand' instead of us
 guessing (the exact failure mode of the reverted fallback).
+
+## 2026-09-14 — IOI_QTY unit census: DEMAND IS NOT ALWAYS SHARES
+OB_ECM_ORDER carries IOI_TYPE + **IOI_UNIT** (plus IOI_STATUS/ACK_BY/
+ACT_DATE_TIME, LAST_DEMAND_MODIFY_*). IOI_QTY is 100% populated
+(108,414 of 108,414 rows) — but its UNIT varies by order (QA census):
+SHARES ~56.8k orders (~59%), PERCENT ~20.2k, CURRENCY ~15.6k,
+BOND ~14.9k, FACE 615, DEALSIZEPERCENT 76, CONVPREF/CONVCURRENCY ~80.
+21,062 orders have points summing to exactly 100 (the PERCENT families —
+confirms the percentage reading). Sentinels: 337 rows >= 1e9 (1e13
+'unlimited' marker); 8,772 fractional quantities.
+=> SUMMING IOI_QTY ACROSS ORDERS IS INVALID unless scoped to ONE unit.
+The source front-end does exactly that: its column is literally
+"Indication (Common Shares)".
+PROBE DESIGN FLAW (mine): the top/sum/max cross-validation ran over ALL
+orders, where single-point orders make the three definitions identical
+(3,850 / 3,818 / 3,864 of 6,684 — indistinguishable). Rewritten to
+MULTI-POINT orders only, split by unit, in
+_checks/_ioi-scalar-probe-2026-09-14b.sql. Also note only ~58% of
+orders holding BOTH values have DEMAND_QTY matching any IOI aggregate —
+likely unit mismatch; the per-unit split will show it.
+PROPOSED DESIGN (for user/desk confirmation, NOT implemented):
+order view gains ORDER_DEMAND_QTY = top-of-curve IOI_QTY **plus a
+DEMAND_UNIT column**; per-order asks answer in the order's own unit;
+deal-grain TOTAL_DEMAND scopes to SHARES only and discloses excluded
+orders — mirroring the book's own unit-scoped presentation. Ties to the
+existing release-train item "units-mixing planner guard".
