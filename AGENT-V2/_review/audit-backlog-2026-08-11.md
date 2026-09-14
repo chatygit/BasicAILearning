@@ -1037,3 +1037,27 @@ columns + the ALKEON order + DEMAND_QTY vs LIMIT_VALUE magnitude check) —
 the book HAS 4,444,444, so a quantity source exists somewhere.
 IMPACT: wave 2 is DEPLOYED, so QA/UAT currently serve wrong ECM
 indications and deal totals — the revert must ride the pending handover.
+
+## 2026-09-14 — INDICATION SOURCE FOUND: OB_ECM_ORDER_IOI.IOI_QTY (QA probe)
+Columns: UUID, ORDER_ID, **IOI_QTY NUMBER(38,6)**, LIMIT_VALUE NUMBER(38,2),
+LIMIT_TYPE, LIMIT_COUPON, LIMIT_PREMIUM, LIMIT_CURRENCY. IOI_QTY is the
+indication quantity per price point; LIMIT_VALUE is the price (confirmed).
+COVERAGE (QA): 96,931 of 96,933 ECM orders have IOI rows; **90,248 have IOI
+ONLY (no DEMAND_QTY)** — DEMAND_QTY's 6,683 (6.9%) is the exception, not the
+rule. So IOI_QTY is THE demand source and would take ECM indication coverage
+from ~7% to ~100%.
+SHAPE: 90,915 orders have exactly 1 IOI point; ~6,016 are true multi-point
+curves (2-6 points, plus 50 orders with 15) — a scalar is well defined for 94%.
+THREE TRAPS BEFORE ANY VIEW SQL:
+ (a) UNIT VARIES — order 6370325672584 has points 41.5918 + 58.4082 = exactly
+     100.0000: that order's IOI_QTY is a PERCENTAGE, not shares. Must read the
+     order's IOI_TYPE/UNIT before treating IOI_QTY as a share count.
+ (b) SENTINELS — MAX LIMIT_VALUE 999999999999999 and MAX DEMAND_QTY 1e13 are
+     'unlimited' markers, not values; check IOI_QTY for the same.
+ (c) LIMIT_VALUE present on only 34,364 of 108,413 IOI rows (32%) — most points
+     carry no price limit; further proof LIMIT_VALUE is not demand.
+NEXT: _checks/_ioi-qty-unit-probe-2026-09-14.sql — resolves the unit question,
+the sentinel range, AND cross-validates the scalar definition on the 6,683
+orders that have BOTH: does DEMAND_QTY equal the top (lowest-price) point, the
+SUM of points, or the MAX? That lets the SOURCE define 'demand' instead of us
+guessing (the exact failure mode of the reverted fallback).

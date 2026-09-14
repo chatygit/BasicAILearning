@@ -77,6 +77,20 @@ Gate 1 case wherever it can be mechanized.
 - [ ] Re-run AGENT-V2/views/_checks/_scale-probes-2026-09-02.sql against PROD —
       fresh census; DEV counts are not expectations (QA≠PROD)
 
+## PROD ACCESS: WE HAVE NONE (2026-09-14)
+This team cannot query, probe, or verify PROD. Every PROD-side item above is a
+REQUEST to an access holder (release/DBA/support), never a task we can tick
+ourselves, and its result comes back as a screenshot or written confirmation.
+Consequences to respect:
+- Never state PROD data facts (counts, fill rates, "PROD looks fine"). PROD
+  behaviour is INFERRED from the release record — which view/config version is
+  deployed — not observed.
+- A defect found in QA/UAT is a PROD SUSPICION until the release record says
+  whether the carrying release reached PROD. Ask that question FIRST; it is
+  answerable from release records without DB access.
+- PROD-only verification (deploy-check, probes, timings) must ship WITH the
+  release as instructions for whoever runs it, or it will not happen at all.
+
 ## BQS_ENABLED_SOURCES — the nine-object allow-list (added 2026-09-04)
 The server default (config.py) still enumerates the FOUR original objects; any
 environment (and any LOCAL run) without the override silently hides the other
