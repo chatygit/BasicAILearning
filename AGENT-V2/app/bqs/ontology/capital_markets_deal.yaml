@@ -282,7 +282,7 @@ dimensions:
   deal_size_currency: {column: deal_size_currency, products: ["ECM"], description: "ECM (V3). Currency of deal_size_mm."}
 
 # -------------------------------- FILTERS ----------------------------------
-  total_demand: {column: total_demand, description: "Deal-grain total demand (live-order demand, stated quantities only). ECM demand is SPARSE, so a deal total covers only the orders that carry a quantity — disclose that rather than reading it as the full book. NULL/0 = no demand captured."}
+  total_demand: {column: total_demand, description: "Deal-grain total demand. ECM sums SHARE-EQUIVALENTS only (2026-09-14): orders submitted in currency/percent/face are EXCLUDED because adding units is meaningless — the source book does the same (its column is 'Indication (Common Shares)'). Disclose that a deal total covers the share-denominated part of the book, never present it as the whole book. NULL/0 = none captured."}
   total_allocation: {column: total_allocation, description: "Deal-grain total allocation across the book."}
   subscription_ratio: {column: subscription_ratio, description: "STORED oversubscription ratio = total_demand / deal_size (2dp, deal grain). Use this column — never recompute from separate queries. NULL = deal size missing/zero: say not computable, never treat as 1x."}
 filters:

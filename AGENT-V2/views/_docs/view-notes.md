@@ -616,3 +616,26 @@ restored). New standing rule: EXISTING OPUS_BASE dependencies are frozen — do
 not add new ones ([opusbase] gate checks pin the table set and per-view counts).
 Addendum 6 is retained as the removal recipe should it ever be ordered again
 (full wave: git commit 78b3c4c).
+
+## ADDENDUM 7 — 2026-09-14 ECM indication rebuilt on IOI_QTY (evidence-backed)
+Replaces the reverted LIMIT_VALUE fallback (that was a PRICE; see ADDENDUM 4 and
+the 2026-09-14 backlog entries).
+Proof (QA census, orders holding BOTH values): MAX(IOI_QTY) per order EQUALS the
+desk's DEMAND_QTY for 3,598/3,598 SHARES orders and 264/264 BOND orders — 100%,
+including all 46 multi-point curves; it is NEVER the SUM of curve points (0/73).
+For CURRENCY/PERCENT/FACE the two differ because the desk CONVERTED, so no fill
+is possible there.
+vw_order_detail (ECM): OI subquery gains MAX(IOI_QTY); ORDER_DEMAND_QTY =
+NVL(DEMAND_QTY, IOI_QTY when IOI_UNIT IN ('SHARES','BOND')); NEW columns
+DEMAND_UNIT (= IOI_UNIT) and DEMAND_AS_SUBMITTED (= MAX IOI_QTY, any unit).
+DCM branch aligned: DEMAND_UNIT = 'CURRENCY', DEMAND_AS_SUBMITTED = the amount.
+vw_deal_summary (ECM OD subquery): new IQ join; TOTAL_DEMAND sums share-
+equivalents ONLY — currency/percent/face orders excluded by design (the source
+book totals "Indication (Common Shares)" the same way).
+Coverage: live ECM orders with a usable indication 6,240 -> 51,334 of 71,003
+(8.8% -> 72.3%).
+KNOWN QUIRK (unresolved): both DEMAND_QTY and IOI_QTY carry implausible
+sentinels (1e13; 337 IOI rows >= 1e9). We inherit source behaviour rather than
+invent a cutoff — flagged for the desk.
+BEFORE HANDOVER: rerun _checks/_ioi-final-confirm-2026-09-14c.sql on UAT — the
+identity above is measured on QA and QA != UAT/PROD.

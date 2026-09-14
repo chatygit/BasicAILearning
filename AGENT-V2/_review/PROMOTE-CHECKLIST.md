@@ -100,3 +100,11 @@ config deploy, the environment MUST set:
 - [ ] BQS_ENABLED_SOURCES=capital_markets_deal,capital_markets_tranche,capital_markets_order,capital_markets_entity,capital_markets_hedge,capital_markets_hedge_trade,capital_markets_trade,capital_markets_designation,capital_markets_trade_syndicate
       (or "*" for local testing only — explicit list in deployed envs, fail-closed)
 - [ ] Verify: discover with no source — the routing index must list NINE objects.
+
+## ECM indication rebuild (2026-09-14)
+- [ ] Rerun views/_checks/_ioi-final-confirm-2026-09-14c.sql on UAT BEFORE the
+      handover: DEMAND_EQ_MAX must equal ORDERS_WITH_BOTH for SHARES and BOND
+      (it is 100% on QA). A mismatch means the same-unit fill does not hold in
+      that environment — do NOT ship it there.
+- [ ] Desk sign-off that deal-level ECM totals may cover the share-denominated
+      book only, with the exclusion disclosed.
