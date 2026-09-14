@@ -313,9 +313,9 @@ dimensions:
   meeting_type: {column: meeting_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Investor/issuer meeting type. USER WORDS MAP TO THE STORED VALUE: '1x1', '1-1', 'one-on-one', 'one to one', 'One-to-One' ALL mean the stored literal '1:1' (with a COLON) — sending the user's spelling verbatim returns zero rows. PREFER meeting_type_key for filtering ('ONE_TO_ONE'): it has no punctuation to get wrong. The stored literal is '1:1' (not 'One-to-One'); 'No Meeting' is also a value. There is no stored 'roadshow' value — reading 'roadshow'/'met the issuer' as 'anything but No Meeting' is an INTERPRETATION, so say so in the answer."}
   meeting_type_key: {column: meeting_type_key, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Coded meeting type (NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING). 'One-to-One' exists ONLY here — the displayed value is '1:1'."}
   order_type: {column: order_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Order HANDLING type (OTT/Regular). LIMIT/MARKET/SCALED are ioi_type values, not these."}
-  ioi_type: {column: ioi_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Indication-of-interest type (LIMIT/MARKET/SCALED — the confirmed subset, not an exhaustive list). 'Scaled back' in a sentence about allocation is NOT this field — that is demand minus allocation."}
+  ioi_type: {column: ioi_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Indication-of-interest type (LIMIT/MARKET/SCALED — the confirmed subset, not an exhaustive list). SCALED means the order's demand is a price/quantity CURVE — several indications, one per limit price (measured 2026-09-14: one investor held 6 points, 264,011 shares at 135.00 down to 229,701 at 163.00) — and this view carries no curve, so on a SCALED order with blank demand say the indication is a curve not surfaced here and offer the limit price as context. 'Scaled back' in a sentence about allocation is NOT this field — that is demand minus allocation."}
   order_allocation: {column: order_allocation, description: "Allocation on this order (ECM shares / DCM money) — project it in order listings. 0 means 'allocated nothing' OR 'nothing recorded'; the two are indistinguishable."}
-  order_demand_qty: {column: order_demand_qty, description: "Demand on this order (ECM shares / DCM money) — project it in order listings. THE ranking key for 'largest/biggest order' asks (never order_amount). On DCM it is the same stored number as order_amount."}
+  order_demand_qty: {column: order_demand_qty, description: "THE indication/demand field (ECM shares / DCM money) — project it in order listings. THE ranking key for 'largest/biggest order' asks (never order_amount). ECM = stated demand quantity ONLY; sparse (~6% of orders) — a blank usually means the order is SCALED — its demand lives as an IOI CURVE (a quantity at each price limit) that this view does not yet surface, so say 'not shown here', NEVER 'no demand recorded', and NEVER substitute order_amount (that is a LIMIT PRICE, not a size: PROD 2026-09-14 showed a 135.00 USD limit rendered as '135 shares' against a true 4,444,444-share indication). On DCM it is the same stored number as order_amount."}
   billed_by: {column: billed_by, description: "The bank that billed/settled THIS order (B&D), on BOTH products — full bank names on both (the ECM source column is misleadingly named BILLEDBY_BROKER_CODE but holds names). Order-level truth: it VARIES within a tranche (measured on half of DCM tranches), so it can legitimately disagree with the tranche object's BND_BANK designation list — for 'billed by' asks, THIS column wins. NULL = no billing bank recorded (~10% ECM, ~26% DCM)."}
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Deal-level offering type denormalized to order grain — only 'IPO' and 'FO' stored. Makes 'investors in IPOs' ONE request on this object (no deal-id ferry). NULL on DCM."}
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS denormalized to order grain (release 2) — 'investor X in convertibles' is ONE request here now. Same values/rules as the deal object's equity_type; match class words with like. NULL on DCM."}
@@ -346,7 +346,7 @@ dimensions:
   existing_holder: {column: existing_holder, products: ["ECM"], description: "ECM (V3). Existing-holder value (population unmeasured)."}
   active_price: {column: active_price, products: ["ECM"], description: "ECM (V3). Active book price at order level (NUMBER)."}
   book_status: {column: book_status, products: ["ECM"], description: "ECM (V3). Order-book status (e.g. NEVER_OPENED; open vocabulary) — 'is the book open' asks land here."}
-  order_amount: {column: order_amount, description: "Order/indication amount. DCM: the order amount (money). ECM: the HIGHEST limit point on that order's IOI curve — label it 'highest IOI limit', never 'order size'."}
+  order_amount: {column: order_amount, description: "Order amount. DCM: the order amount (money). ECM: the IOI LIMIT PRICE (highest point on the order's limit curve, USD per share) — label it 'IOI limit price', NEVER 'order size'/'indication'/shares; it is a price, so never sum it, never compare it with a share count, never use it to fill a blank indication. For 'indication' asks use order_demand_qty/total_demand."}
   currency: {column: currency, description: "Pricing currency (scalar). Required alongside any DCM money figure. Can be NULL on ECM when the order's tranche id matches no tranche."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field). NULL on ECM orders whose tranche id matches no tranche — those rows drop out of every date-bounded query."}
   # --- DENORMALISED from the deal/tranche grain (added 2026-08-11). These do
@@ -359,7 +359,7 @@ dimensions:
   tranche_size: {column: tranche_size, description: "Size of the TRANCHE this order was placed into, as a NUMBER (ECM shares / DCM notional). Deal-level context for an order; do NOT sum it across orders — every order on a tranche repeats the same tranche size."}
 
 # -------------------------------- FILTERS ----------------------------------
-  deal_region: {column: deal_region, description: "Parent deal's region ferried onto orders (helper wave) — DCM ONLY since 2026-09-04 (ECM rows NULL, source retired). 'orders in NAM deals' is ONE request for DCM; ECM region asks are not order-scopable."}
+  deal_region: {column: deal_region, description: "Parent deal's region ferried onto orders (helper wave) — 'orders/investors in NAM deals' is ONE request here. Deal-object vocabulary."}
   tranche_region: {column: tranche_region, description: "Tranche-level region (DCM; NULL on ECM). Prefer deal_region unless the ask names tranches."}
   deal_status: {column: deal_status, description: "Parent deal status ferried onto orders — status-scoped order asks in one request. Deal-object vocabulary; case variants real."}
   deal_size: {column: deal_size, description: "Parent deal size ferried onto orders. ECM = share count, DCM = notional — never mix units across products."}
@@ -371,7 +371,7 @@ filters:
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
-    description: Deal-region scoping WITHOUT a deal-id ferry — DCM only since 2026-09-04 (ECM rows NULL).
+    description: Deal-region scoping WITHOUT a deal-id ferry — deal-object vocabulary.
   tranche_region:
     column: tranche_region
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]

@@ -607,3 +607,12 @@ to a deleted join now fails locally — the 4th ORA-00904 class closed for good)
 retirement pins replace the two ECM product pins. Index request to DB team
 revised to FOUR indexes (OPUS_BASE items withdrawn).
 Files to hand: vw_deal_summary, vw_tranche_summary, vw_order_detail.
+
+### ADDENDUM 6 — ROLLED BACK 2026-09-14
+The OPUS_BASE removal described above was REVERSED by the user before it ever
+deployed: the tables stay, and the views are back to their pre-removal state
+(ECM DEAL_REGION, deal fee/size MM, and the Primary-Client issuer overlay all
+restored). New standing rule: EXISTING OPUS_BASE dependencies are frozen — do
+not add new ones ([opusbase] gate checks pin the table set and per-view counts).
+Addendum 6 is retained as the removal recipe should it ever be ordered again
+(full wave: git commit 78b3c4c).

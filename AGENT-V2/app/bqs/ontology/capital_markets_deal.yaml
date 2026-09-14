@@ -257,7 +257,7 @@ dimensions:
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Offering type — only 'IPO' and 'FO' (follow-on) are stored. 'Rights' is a tranche product_type, 'Convertible' is an equity_type, 'Block' is not stored at all. NULL on DCM."}
   deal_status: {column: deal_status, description: "Deal lifecycle status. CASE VARIANTS ARE REAL — 'priced'/'Priced' and 'announced'/'Announced' are distinct stored values on DCM (Q17), so match case-insensitively and merge the variants before reporting a breakdown or the buckets will not sum. On DCM this is MAX() across the deal's tranche statuses and can disagree with the tranche object."}
   execution_status: {column: execution_status, products: ["ECM"], description: "DEAD COLUMN — carries no information and has no filter. The view fills it from a subquery already restricted to one status type, so every ECM row reads the same literal and every DCM row is NULL. Any 'execution status' ask is a deal_status ask. Kept only because an exposed column is never removed (diagnostics scope rule 2, which also withdrew the request for a real execution status). Do not project it."}
-  deal_region: {column: deal_region, description: "Deal-level region (NAM/EMEA/APAC, rare JAPAN/LATAM). DCM ONLY since 2026-09-04 — the ECM source table was retired, every ECM row is NULL; ECM region asks: use issuer_country. Sparse — blanks mean 'not captured', never 'no region'."}
+  deal_region: {column: deal_region, description: "Deal-level region (NAM/EMEA/APAC, rare JAPAN/LATAM). On BOTH products since the 2026-08-18 view batch (DCM was a NULL placeholder before). Sparse — blanks mean 'not captured', never 'no region'."}
   settlement_currency: {column: settlement_currency, description: "Settlement currency — the currency a TRANCHE settles in (same concept as capital_markets_tranche.settlement_currency), distinct from the pricing currencies in 'currencies'. At DEAL grain it is a MAX() collapse, so a deal whose tranches settle in two currencies shows ONE of them, not both — go to the tranche object when the settlement currency has to be right per tranche. Population UNVERIFIED (see the filter)."}
   tranche_count: {column: tranche_count, description: "Pre-computed tranche count for the deal. Filterable — 'deals with more than one tranche' is answered here with no hop. Can be NULL on ECM when no tranche rows joined."}
   order_count: {column: order_count, description: "Pre-computed order count for the deal. Filterable. NULL (not 0) when the deal has no orders. Counts a wider population than capital_markets_order — see total_order_count."}
@@ -276,13 +276,13 @@ dimensions:
   issuer_country: {column: issuer_country, products: ["ECM"], description: "ECM (V3). Issuer's country. NULL on DCM."}
   issuer_domicile: {column: issuer_domicile, products: ["ECM"], description: "ECM (V3). Issuer's DOMICILE country — 'incorporated in / domiciled in' asks land HERE; the old domicile refusal is DEAD for ECM (DCM: still not tracked)."}
   offering_format: {column: offering_format, products: ["ECM"], description: "ECM (V3). Offering format (open vocabulary; population unmeasured)."}
-  deal_fee_mm: {column: deal_fee_mm, description: "NULL on BOTH products since 2026-09-04 (source table retired). ALL deal-fee asks: SUM the tranche object's total_fee (+components, both products)."}
-  deal_fee_currency: {column: deal_fee_currency, description: "NULL since 2026-09-04 (source retired) — see deal_fee_mm."}
-  deal_size_mm: {column: deal_size_mm, description: "NULL on BOTH products since 2026-09-04 (source retired). deal_size remains (ECM = SHARES) — for ECM money size use tranche_size/currency at the tranche object."}
-  deal_size_currency: {column: deal_size_currency, description: "NULL since 2026-09-04 (source retired) — see deal_size_mm."}
+  deal_fee_mm: {column: deal_fee_mm, products: ["ECM"], description: "ECM (V3). Deal-level FEE in millions, paired with deal_fee_currency — the deal-fees refusal is DEAD for ECM. DCM deal-level fee = SUM the tranche object's total_fee instead."}
+  deal_fee_currency: {column: deal_fee_currency, products: ["ECM"], description: "ECM (V3). Currency of deal_fee_mm — always present it with the fee figure."}
+  deal_size_mm: {column: deal_size_mm, products: ["ECM"], description: "ECM (V3). Deal MONEY size in millions (paired with deal_size_currency) — ends the shares-vs-money ambiguity: deal_size is SHARES on ECM, THIS is the money figure."}
+  deal_size_currency: {column: deal_size_currency, products: ["ECM"], description: "ECM (V3). Currency of deal_size_mm."}
 
 # -------------------------------- FILTERS ----------------------------------
-  total_demand: {column: total_demand, description: "Deal-grain total demand (live-order demand; ECM includes the IOI-limit fallback since 2026-09-03). NULL/0 = no orders captured for the deal."}
+  total_demand: {column: total_demand, description: "Deal-grain total demand (live-order demand, stated quantities only). ECM demand is SPARSE, so a deal total covers only the orders that carry a quantity — disclose that rather than reading it as the full book. NULL/0 = no demand captured."}
   total_allocation: {column: total_allocation, description: "Deal-grain total allocation across the book."}
   subscription_ratio: {column: subscription_ratio, description: "STORED oversubscription ratio = total_demand / deal_size (2dp, deal grain). Use this column — never recompute from separate queries. NULL = deal size missing/zero: say not computable, never treat as 1x."}
 filters:
@@ -489,9 +489,10 @@ filters:
     case_insensitive: true
     description: >-
       Deal-level region — NAM, EMEA, APAC, plus rare JAPAN and LATAM (there is
-      no 'AMER'). DCM ONLY since 2026-09-04: the ECM source table was retired,
-      every ECM row is NULL — never filter ECM deals here; ECM region asks go
-      to issuer_country. COVERAGE IS PARTIAL (QA 2026-08-18: ~5% of ECM deals — the region-rich source rows
+      no 'AMER'). Wired on BOTH products since the 2026-08-18 view batch (DCM
+      was a NULL placeholder before — a 0-row DCM result on an older deploy
+      means the batch has not landed, not 'no such deals'). COVERAGE IS
+      PARTIAL (QA 2026-08-18: ~5% of ECM deals — the region-rich source rows
       belong to OTHER business lines — and ~18% of DCM deals; PROD may
       differ): a region-filtered answer reads only the slice that carries a
       region, so blanks mean 'not captured', never 'no region' — disclose the
@@ -654,16 +655,19 @@ filters:
     description: ECM issuer country (headquarters side; domicile is the legal one).
   deal_fee_mm:
     column: deal_fee_mm
+    products: ["ECM"]
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
     description: >-
-      NULL since 2026-09-04 (source retired). ALL deal-fee asks: SUM the
-      tranche object's total_fee (+components, both products).
+      ECM deal fee in millions — ALWAYS present with deal_fee_currency.
+      Population unmeasured; blanks = not captured. DCM: SUM the tranche
+      object's total_fee.
   deal_size_mm:
     column: deal_size_mm
+    products: ["ECM"]
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
     description: >-
-      NULL since 2026-09-04 (source retired). deal_size stays the ECM share
-      count; money-size comparisons go to the tranche object.
+      ECM deal MONEY size in millions (with deal_size_currency) — use for
+      money-size comparisons; deal_size stays the share count.
 
 usage_notes:
   - Always set a product filter ('ECM' for equity, 'DCM' for debt). Count metrics

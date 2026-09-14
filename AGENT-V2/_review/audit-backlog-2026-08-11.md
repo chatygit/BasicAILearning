@@ -981,3 +981,59 @@ withdrawn). Gate: undefined-alias class added to projection check;
 re-run once this settles (order.yaml showed helper fields the audit
 called missing — verify audit script vs current files); ECM deal_region
 banker impact to disclose at next demo.
+
+## 2026-09-09 — RELATED_PARTIES (PCM) removal: impact analysis
+Question: which asks stop working? Answer: NONE outright — PCM was an
+ENRICHMENT OVERLAY (every branch had NVL(PCM.x, fallback)), unlike OBT
+which was a sole source. Three DEGRADATIONS instead:
+(1) issuer-name canonicalization gone → more spelling variants per
+    issuer; hurts per-issuer grouping/league tables most (the
+    six-spellings-of-Travelers problem). Mitigated by entity
+    token-matching + disambiguation.
+(2) GFCID coverage holes where source GFCID was NULL and only PCM had
+    it → those deals drop out of gfcid-eq queries + GFCID grouping.
+(3) ticker addressing ("deals for TRV") loses the same slice.
+DCM impact structurally capped: the DCM PCM join went via
+ORIGINATION_TRANSACTION_ID (forward-populated, ~950 deals).
+Never supported anyway: other party ROLES (guarantor etc.) — we only
+ever read 'Primary Client'.
+MEASURE BEFORE DOCTRINE: views/_checks/_pcm-loss-probe-2026-09-09.sql
+quantifies (1)-(3) on QA+UAT while the OLD views are still deployed.
+Config doctrine (issuer-variant / GFCID-coverage notes) is DEFERRED
+until those numbers exist — if GFCID_LOST ~0 no doctrine is needed at
+all, and the token budget says don't write prose we can't justify.
+
+## 2026-09-14 — OPUS_BASE removal ROLLED BACK (user reversal)
+User: "we are not removing OPUS_BASE... but we do not add new OPUS_BASE
+ones." Commit 78b3c4c ("views V12") reverse-applied for the 8 CODE
+files (3 views + deal/order yaml + SKILL fee row + gate pins + index
+request); the backlog/view-notes records were KEPT as history. Today's
+SKILL work (entity-recovery, re-ask, checkpoint) verified intact.
+Deploy-check rows 19/19b (which asserted ECM deal_region IS NULL) were
+reverted — they would now FAIL. NEW [opusbase] gate class pins the
+approved table set AND per-view reference counts (3/3/3): a new
+OPUS_BASE dependency now fails the gate by design. Removal recipe
+preserved in git + memory (opus-base-dependency) in case the org
+reverses again. Index request: the two OPUS_BASE index items are LIVE
+again (restored by the reverse-apply). Bars 1585 / pytest.
+
+## 2026-09-14 — U1 "demand fallback" was WRONG: an IOI limit is a PRICE
+Book screen vs agent, ALKEON CAPITAL (GPNum 48326), SpaceX IPO:
+book shows Indication (Common Shares) 4,444,444 and Limit USD 135.00;
+the agent answered "Indication: 135.0 shares". ROOT CAUSE = my 2026-09-03
+U1 fix: ORDER_DEMAND_QTY = NVL(DEMAND_QTY, IOI LIMIT_VALUE). LIMIT_VALUE
+is a LIMIT PRICE (USD/share; the IOI block carries a UNIT column), not a
+size — so the fallback rendered prices as share counts (~5 orders of
+magnitude wrong) and polluted deal-grain TOTAL_DEMAND (mixed prices into
+a share sum) and SUBSCRIPTION_RATIO derived from it. THE CONTRADICTION I
+MISSED: order_amount's own description already said "the HIGHEST limit
+point on that order's IOI curve — never 'order size'"; I then reused that
+exact column as a size. REVERTED in both views (blank demand stays blank —
+honest NULL beats a wrong number); config corrected (order_amount = IOI
+LIMIT PRICE, never summed/compared with shares); [semantic] gate class
+bans the fallback's return. OPEN: _checks/_indication-source-probe-
+2026-09-14.sql finds where the true indication quantity lives (IOI table
+columns + the ALKEON order + DEMAND_QTY vs LIMIT_VALUE magnitude check) —
+the book HAS 4,444,444, so a quantity source exists somewhere.
+IMPACT: wave 2 is DEPLOYED, so QA/UAT currently serve wrong ECM
+indications and deal totals — the revert must ride the pending handover.

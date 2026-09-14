@@ -1663,9 +1663,8 @@ _PRODUCT_PINS = [
     ("capital_markets_deal.yaml", "issuer_country", "ECM"),
     ("capital_markets_deal.yaml", "issuer_domicile", "ECM"),
     ("capital_markets_deal.yaml", "offering_format", "ECM"),
-    # (deal, deal_fee_mm/deal_size_mm, ECM) RETIRED 2026-09-04: OPUS_BASE
-    # removal NULLed both columns on BOTH products — the products key was
-    # deleted ON PURPOSE; the retirement pins below guard the redirect text.
+    ("capital_markets_deal.yaml", "deal_fee_mm", "ECM"),
+    ("capital_markets_deal.yaml", "deal_size_mm", "ECM"),
     ("capital_markets_tranche.yaml", "coupon", "DCM"),
     ("capital_markets_tranche.yaml", "yield", "DCM"),
     ("capital_markets_tranche.yaml", "price", "DCM"),
@@ -1785,6 +1784,14 @@ check(has(SKILL, "READABLE middle key"),
 check(has(SKILL, "unit parenthetical"),
       "[present] SKILL.md: the no-'(Shares)'-in-headers rule is gone (user "
       "ruling 2026-08-19) — table headers grow unit parentheticals again")
+check(has(SKILL, "Zero rows is never the answer to a NAME")
+      and has(SKILL, "re-asked question gets a NEW strategy"),
+      "[entity] SKILL lost the colloquial-name recovery rule — PROD "
+      "2026-09-14: '%SPACEX%' missed SPACE EXPLORATION TECHNOLOGIES and the "
+      "agent refused, then REPEATED the refusal on re-ask")
+check(has(SKILL, "CHECKPOINT before a long answer (user ruling 2026-09-14)"),
+      "[present] SKILL lost the progress-checkpoint rule — long silent waits "
+      "read as broken; one business-language checkpoint, never plumbing")
 check(has(SKILL, "COLUMN ALIGNMENT (user ruling 2026-09-04)"),
       "[present] SKILL.md: the column-alignment rule is gone (stakeholder "
       "ruling 2026-09-04) — text/mixed columns must be ':---' left, pure "
@@ -1885,16 +1892,6 @@ for _f, _need, _why in [
 ]:
     check(has(ROOT / "app" / "bqs" / "ontology" / _f, _need),
           f"[v3cfg] {_f}: {_why}")
-check(has(DEAL, "NULL on BOTH products since 2026-09-04")
-      and has(DEAL, "SUM the tranche object's total_fee"),
-      "[v3cfg] deal yaml lost the OPUS_BASE retirement redirect — "
-      "deal_fee_mm/deal_size_mm are NULL everywhere since 2026-09-04 and "
-      "must steer to tranche total_fee, never present as ECM-populated")
-check(has(DEAL, "DCM ONLY since 2026-09-04")
-      and has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_order.yaml",
-              "DCM ONLY since 2026-09-04"),
-      "[v3cfg] deal_region OPUS_BASE retirement note lost (deal or order "
-      "yaml) — ECM rows are NULL; ECM region asks go to issuer_country")
 check(has(DEAL, "reoffer_low_price:") and has(DEAL, "issuer_domicile:")
       and has(DEAL, "deal_fee_mm:") and has(DEAL, "first_announced:"),
       "[v3cfg] deal yaml lost a final-wave field — price range/domicile/"
@@ -2038,11 +2035,8 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
     _missing = []
     for _ref in set(_re2.findall(r"\b([A-Z][A-Z0-9_]{0,5})\.([A-Z][A-Z0-9_]+)", _txt)):
         _alias, _col = _ref
-        if _alias in ("DGSTREAM",) or _alias in _table_aliases:
-            continue
-        if _alias not in _blocks:
-            _missing.append(f"{_alias}.{_col} (alias has NO subquery block "
-                            f"— dangling reference to a deleted join?)")
+        if _alias in ("DGSTREAM",) or _alias not in _blocks \
+                or _alias in _table_aliases:
             continue
         _bodies = _blocks[_alias]
         if any(".*" in _b for _b in _bodies):
@@ -2058,6 +2052,40 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
 # 2026-09-04 QA-local where the four-source default silently hid the five new
 # objects and the agent refused hedge asks). The promote checklist must carry
 # the full nine-source line so no environment ships without it.
+# IOI-LIMIT-IS-A-PRICE (PROD 2026-09-14). An IOI limit is USD per share; it was
+# briefly used to fill blank ECM demand, which rendered a 135.00 limit as
+# "135 shares" against a true 4,444,444-share indication and polluted deal-grain
+# TOTAL_DEMAND/SUBSCRIPTION_RATIO. The fallback is banned in BOTH views until a
+# real quantity column is identified (_checks/_indication-source-probe-2026-09-14).
+for _vf, _expr in [("vw_order_detail.sql", "LIMIT_VALUE) AS NUMBER(38,4)) AS ORDER_DEMAND_QTY"),
+                   ("vw_deal_summary.sql", "LIMIT_VALUE")]:
+    check(_expr not in text(ROOT / "views" / _vf),
+          f"[semantic] {_vf}: an IOI LIMIT (a PRICE, USD/share) is being used "
+          f"as a demand QUANTITY — banned 2026-09-14; a blank indication stays "
+          f"blank until a real quantity source is found")
+
+# OPUS_BASE FREEZE (user ruling 2026-09-14, reversing the 2026-09-04 removal):
+# the EXISTING OPUS_BASE dependencies stay, but NO NEW ones may be added. Pin
+# both the approved table set and the per-view reference counts so a new
+# dependency fails here and becomes a conscious decision, not a drift.
+_OPUS_BASE_OK = {"OPUS_BASE_TRANSACTION", "OPUS_BASE_TRANSACTION_RELATED_PARTIES"}
+_OPUS_BASE_COUNTS = {"vw_deal_summary.sql": 3, "vw_tranche_summary.sql": 3,
+                     "vw_order_detail.sql": 3}
+for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
+    _t = text(_vf)
+    _tables = set(_re2.findall(r"DGSTREAM\.(OPUS_BASE_\w+)", _t))
+    check(_tables <= _OPUS_BASE_OK,
+          f"[opusbase] {_vf.name}: NEW OPUS_BASE table(s) "
+          f"{sorted(_tables - _OPUS_BASE_OK)} — the 2026-09-14 freeze allows "
+          f"the existing two only; adding one needs an explicit decision "
+          f"(removal recipe: git commit 78b3c4c 'views V12')")
+    _n = _t.count("OPUS_BASE")
+    _want = _OPUS_BASE_COUNTS.get(_vf.name, 0)
+    check(_n == _want,
+          f"[opusbase] {_vf.name}: OPUS_BASE reference count {_n}, frozen at "
+          f"{_want} (2026-09-14) — a new dependency must be a conscious "
+          f"decision; if you REMOVED one, update the pin with the reason")
+
 _CFG = text(ROOT / "app" / "config.py")
 for _src in ["capital_markets_hedge", "capital_markets_hedge_trade",
              "capital_markets_trade", "capital_markets_designation",
