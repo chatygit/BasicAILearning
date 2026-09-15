@@ -146,6 +146,12 @@ FROM (
   WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
   AND    column_name IN ('DEMAND_UNIT','DEMAND_AS_SUBMITTED','TENORS','PRODUCT_CLASS')
   UNION ALL
+  SELECT '1z. tranche view has the three ALLOWED_ORDER_* columns (E7, 2026-09-15)', '3',
+         TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
+  AND    column_name IN ('ALLOWED_ORDER_SPREAD','ALLOWED_ORDER_YIELD','ALLOWED_ORDER_MAX_PRICE')
+  UNION ALL
   SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
          'NUMBER,NUMBER',
          LISTAGG(data_type, ',') WITHIN GROUP (ORDER BY table_name)

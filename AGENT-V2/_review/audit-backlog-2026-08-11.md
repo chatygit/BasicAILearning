@@ -1194,3 +1194,10 @@ DCM 85% vs MRM min 80% (ECM 94%). Jira map in uat-dcm-feedback-2026-09-15.md.
 NEW E7 (C176173F-35783, allowed order types per tranche) — probe written;
 no source column known. GOVERNANCE: PO is holding DCM results from MRM
 pending agent updates — time the push with the MRM submission.
+
+## 2026-09-15 — E7 allowed order types: ferried (view), census pending (config)
+Three OB_DEAL_TRANCHE columns (TRANCHE_ALLOWED_ORDER_SPREAD/_YIELD/
+_MAX_PRICE) → tranche view ALLOWED_ORDER_*; ECM NULL; validation file +
+deploy-check 1z. Config exposure waits on the value census (flags vs
+thresholds). Tranche-family coverage opportunity registered (OB_DEAL_TRANCHE
+214 cols, 10+ child tables never explored) for a planned release.

@@ -242,3 +242,23 @@ PRICE_TYPE/BASIS, then sample the txn's tranches and the distinct
 PRICE_BASIS_CODE values its trades used. If a source column exists → ferry to
 the tranche view (handover); if not → honest "not tracked" refusal in the
 tranche object, and tell the PO it is out of scope.
+
+## E7 VERDICT — TRUE FAIL, source exists (probe 2026-09-15)
+OB_DEAL_TRANCHE carries TRANCHE_ALLOWED_ORDER_SPREAD / _YIELD / _MAX_PRICE
+(VARCHAR2) — the "allowed order types" the PO asked for. Never projected
+(the table has 214 columns; the view ~40). Ferried onto vw_tranche_summary
+DCM branch as ALLOWED_ORDER_SPREAD / _YIELD / _MAX_PRICE (ECM NULL) — rides
+the handover; names registered in _wave-a-name-validation.sql; deploy-check
+row 1z. CONFIG EXPOSURE PENDING the value census
+(_checks/_allowed-order-values-probe-2026-09-15.sql): flags ('true'/'false')
+vs thresholds decide the description and operators. Do NOT push config
+without it. Txn 75043505 = deal I-260831-113859365632 (the NACN US$ 3NC2
+Fxd-to-FRN / FRN pair, SOFR). Side note: trade PRICE_BASIS_CODE is a
+different thing (the basis a TRADE printed on: IP 491,703 / IP-Total Fees
+8,962 / Custom / IP-SC / IP-fractions) — not the allowed-order set.
+COVERAGE OPPORTUNITY (register only, view freeze): the OB_ tranche family
+we never explored — OB_TRANCHE_PRICING (15 cols), _CALL_SCHEDULE (16),
+_GUARANTOR (+_RATING), _SELLING_RESTRICTION (9), _COMPARABLE_SECURITY (22),
+_REFERENCE (27), _ISSUER (16), _HEDGE_SECURITY (22), _DOCUMENT, _COMMENT —
+plus ~170 unprojected OB_DEAL_TRANCHE columns. A future planned view
+release should census these against the prompt corpus.
