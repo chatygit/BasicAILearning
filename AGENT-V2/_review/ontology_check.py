@@ -1803,8 +1803,9 @@ check(has(ORDER, "ORDERBOOK MATRIX (banker ruling 2026-09-15)")
       "pricing date, tranche currency, keep zero rows, partition_by tranche)")
 check(has(TRANCHE, "IDENTIFIER RESOLVES TO MORE THAN ONE TRANCHE"),
       "[present] tranche object lost the multi-tranche identifier doctrine — "
-      "one CUSIP resolving to several tranches is diagnosed, never reported "
-      "as some tranches having 'no demand' (UAT 2026-09-15)")
+      "show every match (test/placeholder duplicates named as such), answer "
+      "for the tranche carrying the book, never silently pick one (UAT "
+      "2026-09-15, CUSIP 63307A3T0 on three deals)")
 check(has(ORDER, "CONFIRMED 2026-09-14: it IS the")
       and "unconfirmed (it may be a limit PRICE" not in text(ORDER),
       "[semantic] order object regressed to calling ORDER_AMOUNT's meaning "

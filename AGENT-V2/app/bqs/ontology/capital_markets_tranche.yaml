@@ -122,13 +122,13 @@ how_to_use:
      column and made DEAL_ID display an ISIN in production.
      If a cell ends in '...(N)' the list was TRUNCATED at
      the storage limit: say so, and do not treat the two lists as complete."
-  - "IDENTIFIER RESOLVES TO MORE THAN ONE TRANCHE = a resolution problem to
-     diagnose, never a fact to report. Re-match the 9-char CUSIP as an exact
-     pipe element (a loose contains also hits ISINs and longer ids), then check
-     whether the source repeats a deal-level identifier on every tranche. Present
-     EVERY matched tranche with its own identifiers and figures — never summarise
-     one and declare the others 'no demand' (UAT 2026-09-15, CUSIP 63307A3T0
-     returned three tranches)."
+  - "IDENTIFIER RESOLVES TO MORE THAN ONE TRANCHE: say so, and show ALL matches
+     with deal name, tranche name, tenor and currency, then answer for the one
+     that carries the book. Measured (UAT 2026-09-15): CUSIP 63307A3T0 sits on
+     three tranches in three DEALS — two are test entries ('SMC test', 'tr1')
+     reusing a real identifier — and 1,578 CUSIPs repeat across tranches there.
+     So duplicates usually mean placeholder/test rows: name them as such rather
+     than treating the ask as ambiguous, and never silently pick one."
   - "PER-PRODUCT APPLICABILITY. DCM-ONLY (NULL on ECM): product_class,
      seniority, reg_category, esg_bond, coupon_type, coupon_freq, tenors,
      delivery_type, issuer_ratings, securities_maturity, tranche_status.

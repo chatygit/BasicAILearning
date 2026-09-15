@@ -118,3 +118,47 @@ E4 "List top 5 investors by allocation across ALL Investment Grade deals in
    sample, no cap. Same pass ferried TENORS (E1/TC4). [VIEW — rides the
    pending handover; config exposed]
    (57.8bn "BlackRock London" allocation in that answer = UAT test data, not ours.)
+
+## E2 VERDICT (probe 2026-09-15) + E5 new defect
+E2: the agent's resolution was CORRECT. CUSIP 63307A3T0 (with ISIN
+US63307A3T08) genuinely sits on three tranches in three different deals —
+two are UAT test entries ("SMC test", 15-Y EUR; "tr1", tenor-less USD) and
+one is the real book ("NACN US$ 3NC2 Fxd-to-FRN", 3-Y USD, 5 orders,
+26.75M demand). The other two have ZERO order rows, so "no demand" was
+true. Wider: 1,578 CUSIPs repeat across tranches in UAT (23,413 tranche
+rows; 32,786 distinct CUSIPs on 49,142 tranches) — consistent with
+placeholder/test identifiers, NOT a source-model property. QA≠PROD: a PROD
+re-census belongs to the access holder before any PROD claim. Doctrine
+refined: show all matches, name test/placeholder duplicates, answer for the
+tranche carrying the book — the earlier "never declare no demand" wording
+was wrong and is replaced.
+E5 [NEW DEFECT — retest with trace]: the geography split reported United
+States 12.0M + France 2.0M + South Korea 750k = "Total Demand USD 14.75M",
+but the tranche's order book sums to 26,750,000 — 12M (45%) missing.
+Hypothesis: orders with NULL investor_region were dropped by the GROUP BY
+(or a region is_not_null filter) and the NULL bucket was NOT disclosed —
+the Incomplete Data duty in the order object's null-disclosure doctrine.
+Retest: re-ask the same prompt post-push; the answer must either carry a
+"(region not recorded)" row or state the excluded demand explicitly, and
+the total must reconcile to the book.
+
+## E6 — Citi SOLO deals returned nothing (DCM original requirement)
+Business prompt: "List all Citi solo deals/tranches in the year 2024". PO
+restructure: pricing date 2026-09-14, deals with ONE dealer = Citigroup,
+ALL Citi legal entities, DCM only. Agent: "no deals". PO: at least deal
+I-260914-233059921862 exists.
+Suspects, all in the VIEW's DCM DEAL_SHARING_TYPE rule
+(vw_tranche_summary DST block: MIN(DEALER)=MAX(DEALER) AND MIN(DEALER)
+LIKE '%Citigroup Global%', else SHARED; NVL(...,'SHARED') when no rows):
+ (1) case-sensitive LIKE — 'CITIGROUP GLOBAL MARKETS INC' never matches;
+ (2) MIN=MAX rejects a deal run by TWO Citi legal entities (the PO says
+     count all entities as one);
+ (3) sole-led tranches with NO syndicate rows default to SHARED.
+Also possible: agent-side date handling (eq on a timestamp for
+"pricing date September 14"). Probe: _checks/_solo-deal-probe-2026-09-15.sql
+(the PO's deal end-to-end; DEALER spellings containing CITI; tranches with no
+syndicate rows and a Citi BD bank; SOLO counts under today's rule vs an
+all-Citi-entities case-insensitive rule, all-time and 2024). If (1)-(3)
+confirm, it is a view fix on vw_tranche_summary — rides the open handover;
+SKILL Citi-entity list (%CITIGROUP GLOBAL MARKETS% x5) may need widening
+to whatever spellings the census shows.
