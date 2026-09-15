@@ -86,3 +86,6 @@ Needs BOTH the nine views AND the config push in QA (+ BQS_ENABLED_SOURCES / new
 - [ ] 24. "What is the indication for <an ECM investor on an ECM deal>" — PASS:
       a share-equivalent figure (not a price), or the as-submitted amount with
       its unit when the investor bid in currency/percent; never "135 shares".
+- [ ] 25. "For Origination Transaction ID 75043505, what are the allowed order
+      types for each tranche?" — PASS: per tranche, "Spread, Yield (Max Price
+      not allowed)" for both NACN US$ 3NC2 tranches; never "not found".

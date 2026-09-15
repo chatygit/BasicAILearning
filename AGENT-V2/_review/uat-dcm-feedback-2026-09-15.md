@@ -262,3 +262,9 @@ _GUARANTOR (+_RATING), _SELLING_RESTRICTION (9), _COMPARABLE_SECURITY (22),
 _REFERENCE (27), _ISSUER (16), _HEDGE_SECURITY (22), _DOCUMENT, _COMMENT —
 plus ~170 unprojected OB_DEAL_TRANCHE columns. A future planned view
 release should census these against the prompt corpus.
+E7 CENSUS + CONFIG (2026-09-15): flags are Y/N; NULL on 53,525 tranches
+(~72%, older feed rows); Spread Y 14,473 / N 6,847; Yield Y 14,454 / N 6,866;
+Max Price Y 2,619 / N 18,701. Txn 75043505: both tranches Y/Y/N. Exposed on
+the tranche object (3 dims + filters with values Y/N, how_to_use answer
+shape), SKILL routing row, gate pin. QA prompt 25 added. E7 CLOSED pending
+deploy.

@@ -1201,3 +1201,7 @@ _MAX_PRICE) → tranche view ALLOWED_ORDER_*; ECM NULL; validation file +
 deploy-check 1z. Config exposure waits on the value census (flags vs
 thresholds). Tranche-family coverage opportunity registered (OB_DEAL_TRANCHE
 214 cols, 10+ child tables never explored) for a planned release.
+
+## 2026-09-15 — E7 CLOSED: allowed-order flags exposed (Y/N census)
+Config: tranche dims/filters/how_to_use + SKILL routing row + pin. Answer
+shape: list the Y flags per tranche; NULL = not recorded. Prompt 25.

@@ -1317,7 +1317,10 @@ if ONTOLOGY.exists():
 # can only emit HOME/AWAY/NULL — closed like deal_sharing_type, not a
 # QA-measured list.
 KNOWN_COMPLETE_ENUMS = {"product", "entity_type", "deal_sharing_type",
-                        "order_ownership"}
+                        "order_ownership",
+    # E7 (2026-09-15 census): Y/N flags — only Y, N and NULL exist
+    "allowed_order_spread", "allowed_order_yield", "allowed_order_max_price",
+}
 for path in OBJECTS:
     for name, body in blocks(path, "filters"):
         if "values:" in body:
@@ -1797,6 +1800,11 @@ check(has(SKILL, "LIMIT IS NOT DEMAND (PROD ticket 2026-09-15)"),
       "[semantic] SKILL lost the limit-vs-demand rule — the PROD ticket "
       "(limit value returned as Demand/Order/Indication) regresses; the SKILL "
       "is the only layer shippable under the PROD freeze")
+check(has(TRANCHE, "allowed_order_spread:") and has(TRANCHE, "ALLOWED ORDER TYPES (E7")
+      and has(SKILL, '"allowed order types"'),
+      "[v3cfg] E7 allowed-order-type flags lost (tranche dims/filters/note or "
+      "SKILL routing) — 'allowed order types per tranche' regresses to 'not "
+      "found' (PO Jira C176173F-35783)")
 check(has(SKILL, "CONSTRAINT COLUMNS (banker ruling 2026-09-15)"),
       "[present] SKILL lost the constraint-columns rule — filters must echo "
       "as columns (pricing_ts DESC for time windows, currency, class); DCM "

@@ -129,6 +129,11 @@ how_to_use:
      reusing a real identifier — and 1,578 CUSIPs repeat across tranches there.
      So duplicates usually mean placeholder/test rows: name them as such rather
      than treating the ask as ambiguous, and never silently pick one."
+  - "ALLOWED ORDER TYPES (E7, 2026-09-15): project all three flags per tranche and
+     answer as a list of the Y ones — 'Spread, Yield (Max Price not allowed)'.
+     All three NULL = 'order types not recorded for this tranche', never 'none
+     allowed'. These are the order PRICE BASES a tranche accepts; a trade's
+     price_basis_code (trade object) is what a trade actually printed on."
   - "PER-PRODUCT APPLICABILITY. DCM-ONLY (NULL on ECM): product_class,
      seniority, reg_category, esg_bond, coupon_type, coupon_freq, tenors,
      delivery_type, issuer_ratings, securities_maturity, tranche_status.
@@ -305,6 +310,9 @@ dimensions:
   identifier_value: {column: identifier_value, description: "Pipe-delimited identifier values, zip-aligned with identifier_type. Display ZIPPED with the type list into one cell per tranche. A security identifier is never a deal_id and never an entity."}
   # --- DCM-only ---
   product_class: {column: product_class, products: ["DCM"], description: "DCM. Bond class — a closed 15-value list (Investment Grade, High Yield, SSA, ABS…). Expand IG/HY/EM before filtering."}
+  allowed_order_spread: {column: allowed_order_spread, products: ["DCM"], description: "DCM tranche flag Y/N — may investors place SPREAD-based orders on this tranche. NULL = not recorded (~72% of UAT tranches, older feed rows), never 'not allowed'."}
+  allowed_order_yield: {column: allowed_order_yield, products: ["DCM"], description: "DCM tranche flag Y/N — YIELD-based orders allowed. NULL = not recorded."}
+  allowed_order_max_price: {column: allowed_order_max_price, products: ["DCM"], description: "DCM tranche flag Y/N — MAX-PRICE orders allowed (rarer: Y on ~12% of recorded tranches). NULL = not recorded."}
   coupon_type: {column: coupon_type, products: ["DCM"], description: "DCM. Coupon STRUCTURE (Fixed, FRN, Zero Coupon, Fixed to FRN, Step Coupon…) — SPACES, not hyphens. It is not a rate; never present 'Fixed' as 'the coupon'."}
   coupon_freq: {column: coupon_freq, products: ["DCM"], description: "DCM. Annual, Semi Annual, Quarterly, Monthly, Weekly, Zero, At Maturity, Daily."}
   tenors: {column: tenors, products: ["DCM"], description: "DCM. Scalar tenor label built as '<value>-<PERIOD>' — the hyphen is always there, so never '10Y'. The PERIOD spelling drifts ('10-YEAR' and '10-Y' both occur; 'M' is months), so match the short token '%10-Y%'. NULL when no tenor was recorded (a large, real population). No longer a pipe list and no longer aligned with securities_maturity."}
@@ -772,6 +780,9 @@ filters:
       Pipe list — like '%<id>%'. An ISIN embeds the CUSIP (country code + CUSIP
       + check digit), so a contains match on a CUSIP finds the ISIN too. Values
       can be UUIDs (DirectBooks).
+  allowed_order_spread: {column: allowed_order_spread, products: ["DCM"], operators: [eq, in, is_null, is_not_null], case_insensitive: true, values: ["Y", "N"], description: "Y/N flag. 'tranches that allow spread orders' → eq Y."}
+  allowed_order_yield: {column: allowed_order_yield, products: ["DCM"], operators: [eq, in, is_null, is_not_null], case_insensitive: true, values: ["Y", "N"], description: "Y/N flag."}
+  allowed_order_max_price: {column: allowed_order_max_price, products: ["DCM"], operators: [eq, in, is_null, is_not_null], case_insensitive: true, values: ["Y", "N"], description: "Y/N flag."}
   product_class:
     column: product_class
     products: ["DCM"]
