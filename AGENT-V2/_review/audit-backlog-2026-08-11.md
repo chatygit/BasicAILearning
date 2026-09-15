@@ -1160,3 +1160,11 @@ DCM+ECM DST blocks and DCM BND_BROKER; SOLO now = no non-Citi dealer.
 SKILL Citi-label doctrine rewritten with the Citizens/CITIC warning.
 Two [semantic] gate pins. Rides the open handover after the UAT verify
 probe confirms (regex compiles, PO's deal → SOLO, 2024 count).
+
+## 2026-09-15 — E6 Citi SOLO rule VERIFIED on UAT; cleared for handover
+Regex compiles on UAT Oracle; label split exact (Citizens/CITIC excluded,
+all Citi entities included); PO's deal → SOLO; all-time SOLO 14,250 vs
+4,025 old rule. Probe bug: the 2024 statement grouped at the outer level
+(one row per tranche) — corrected to a count row. Lesson filed with the
+earlier probe-design flaw: an aggregate probe must return ONE row, or
+its answer is the row count and gets misread.

@@ -140,6 +140,12 @@ FROM (
       OR (table_name = 'VW_DEAL_SUMMARY' AND column_name IN
             ('REOFFER_LOW_PRICE','ISSUER_DOMICILE')))
   UNION ALL
+  SELECT '1y. order view has demand_unit/demand_as_submitted/tenors/product_class (2026-09-14/15)', '4',
+         TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
+  AND    column_name IN ('DEMAND_UNIT','DEMAND_AS_SUBMITTED','TENORS','PRODUCT_CLASS')
+  UNION ALL
   SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
          'NUMBER,NUMBER',
          LISTAGG(data_type, ',') WITHIN GROUP (ORDER BY table_name)
@@ -260,7 +266,9 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'ECM'
                     THEN OVER_ALLOTMENT_AUTHORIZED_SHARES END) AS ecm_greenshoe,
          COUNT(CASE WHEN IDENTIFIER_TYPE <> UPPER(IDENTIFIER_TYPE)
-                    THEN 1 END) AS lowercase_idtypes
+                    THEN 1 END) AS lowercase_idtypes,
+         COUNT(CASE WHEN PRODUCT = 'DCM' AND DEAL_SHARING_TYPE = 'SOLO'
+                    THEN 1 END) AS dcm_solo
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
@@ -290,6 +298,13 @@ UNION ALL
 SELECT '18. identifier types UPPER-normalized (2026-09-03 wave)', 'Y',
        CASE WHEN lowercase_idtypes = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN lowercase_idtypes = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '20. DCM SOLO tranches (INFO — Citi rule 2026-09-15; UAT old 4,025 / new 14,250)',
+       '(info)', TO_CHAR(dcm_solo), 'INFO' FROM agg
+UNION ALL
+SELECT '20b. SOLO rule landed (plain Citigroup counted)', 'Y',
+       CASE WHEN dcm_solo > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_solo > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 ORDER BY 1;
 
 -- D. ORDER VIEW — ONE scan. Dies alone if VW_ORDER_DETAIL is old (DEV
@@ -304,7 +319,10 @@ WITH agg AS (
          COUNT(CASE WHEN ORDER_OWNERSHIP = 'HOME' THEN 1 END) AS home_,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN INVESTOR_REGION END) AS dcm_geo,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN INVESTOR_CATEGORY END) AS dcm_cat,
-         COUNT(SALES_PERSON) AS sales_
+         COUNT(SALES_PERSON) AS sales_,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN ORDER_DEMAND_QTY END) AS ecm_demand,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_rows,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN PRODUCT_CLASS END) AS dcm_class
   FROM DGSTREAM.VW_ORDER_DETAIL
 )
 SELECT '1d. orders with billed_by (INFO, ~90/74% UAT)' AS check_,
@@ -326,6 +344,13 @@ SELECT '1s. DCM orders w/ investor type (INFO, ~67% source — rel 3)',
 UNION ALL
 SELECT '1t. orders with SALES_PERSON (INFO, ~30% of DCM — rel 3)',
        '(info)', TO_CHAR(sales_), 'INFO' FROM agg
+UNION ALL
+SELECT '21. ECM orders with a share-equivalent indication (INFO — IOI rebuild 2026-09-14; QA ~72% of live)',
+       '(info)', TO_CHAR(ecm_demand) || ' of ' || TO_CHAR(ecm_rows), 'INFO' FROM agg
+UNION ALL
+SELECT '21b. DCM orders carry product_class (ferry 2026-09-15)', 'Y',
+       CASE WHEN dcm_class > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_class > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
 SELECT '6. DCM allocation non-zero', 'Y',
        CASE WHEN dcm_alloc > 0 THEN 'Y' ELSE 'N' END,

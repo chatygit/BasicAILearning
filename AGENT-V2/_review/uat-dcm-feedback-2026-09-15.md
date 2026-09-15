@@ -176,3 +176,8 @@ ALSO FOR THE PO: the deal PRICED 18-SEP-2026 (tranche rows), not 14-SEP —
 the restructured prompt's "pricing date September 14" is the deal id's
 creation date; the agent's "no deals" on that date may have been literally
 right. Verify probe + 2024 solo count: _checks/_solo-rule-verify-2026-09-15.sql.
+E6 VERIFIED (UAT 2026-09-15): regex compiles; split exact; PO's deal → SOLO
+(both tranches); all-time SOLO 14,250 vs 4,025. 2024 count: my verify
+statement returned one row per tranche (outer GROUP BY) — the ROW COUNT is
+the answer (≥30 on screen); statement corrected to a single count row
+(tranches + distinct deals). View fix cleared for the handover.

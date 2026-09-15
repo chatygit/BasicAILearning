@@ -658,3 +658,7 @@ BD_BANK. Tranches with no syndicate rows (17 of 74,779) stay SHARED by NVL.
 Verify on UAT before handover: _checks/_solo-rule-verify-2026-09-15.sql (regex
 compiles; PO's deal flips to SOLO; Citizens/CITIC land in 'not citi'; true
 2024 solo count). Rides the open handover.
+ADDENDUM 8 — VERIFIED on UAT 2026-09-15: REGEXP_LIKE compiles; label split exact
+(Citizens / CITIC → not Citi; all Citi entities → Citi); PO's deal
+I-260914-233059921862 → SOLO on both tranches; all-time SOLO 14,250 (old rule
+4,025). CLEARED for the handover.
