@@ -280,21 +280,20 @@ wrong even though the query succeeded. Say what actually varied, or say the
 ranking does not separate beyond rank N.
 
 **A SUPERLATIVE ask ("the biggest X", "who has the max", "the top investor")
-NEVER uses `limit 1`** — one row cannot reveal a tie, and "THE investor with
-max allocation" is wrong the moment two share the value. Fetch `limit 3` with
-the metric desc: row 2 ties row 1 → CO-WINNERS, name them both ("two investors
-tie at 33,361"); all three tie → ONE follow-up request (`having` the metric
-`eq` the tied value, default limit) and answer BY THE TIE COUNT:
-- **≤5 tie** → name them all as co-winners.
-- **more tie** → the finding is no longer "a top investor" — it is that the
-  value is UNIFORM at the top: "38 investors share the maximum allocation
-  of 33,361 — there is no single top investor on this deal", plus 2-3 names
-  explicitly labelled as examples, never as winners. If the tie set comes
-  back `truncated`, say "at least 50". State the pattern only ("every one
-  of this deal's orders carries the same allocation"), never a cause
-  (pro-rata policy, syndicate decision…) — causes are not in the data.
-Present only the winner(s) or the tie finding — the extra fetched rows are
-tie detection, not the answer.
+= VALUE FIRST, THEN MEMBERS (user ruling 2026-09-15). Never `limit 1` and never
+a `limit 3` tie-guess.** Request 1: the aggregate under the ask's scope
+(`max_allocation`, `max_demand`, …) → the value V. Request 2: the listing with
+the ROW-LEVEL field `eq V` (`order_allocation eq V`), default limit → the EXACT
+set holding the maximum. Answer BY THE TIE COUNT (the size of that set): 1 →
+the winner; ≤5 →
+co-winners, all named ("two investors tie at 33,361"); more → the finding is
+that the value is UNIFORM at the top — "38 investors share the maximum
+allocation of 33,361; there is no single top investor on this deal" — plus 2-3
+names labelled as examples, never as winners; `truncated` → "at least 50".
+State the pattern only, never a cause (pro-rata policy, syndicate decision…) —
+causes are not in the data. DCM: scope ONE tranche/currency before the max —
+a maximum across currencies is meaningless. Present only the winner(s) or the
+tie finding.
 
 **Never substitute a lookalike field.** If the object you routed to has no
 field for the ask's CONCEPT (syndicates, meetings, ratings…), the routing was
@@ -484,7 +483,7 @@ and `investor_count` undercounts — say so on a headcount.
 | wall-crossed investors | order · `wall_crossed` (ECM, V3; population unmeasured) |
 | "investors NEVER allocated despite placing orders" | ONE request: `total_allocation` grouped by `[investor_name, investor_id]` + your scope filters + **`having` total_allocation `eq` 0**. Grouping over order rows = they placed orders by construction; a row-level `order_allocation eq 0` FILTER is the WRONG shape (finds investors with ANY zero order, not zero-in-total). Phrase it "no allocation recorded in this scope" (0 = nothing OR unrecorded, indistinguishable) and expect a HUGE DCM list — lead with the truncation |
 | "top investors by ORDER SIZE" across products | NEVER `total_order_amount` with `product in [ECM,DCM]` — that SUMs the forbidden ECM IOI limit AND mixes shares with money. Either scope DCM (`total_order_amount`) — "USD-denominated" is bond language — or use `total_demand` with `product` in dimensions so units stay apart |
-| "largest / biggest order" in a deal | order · LISTING ranked `order_demand_qty` desc (+ `order_id` asc tiebreak), limit 3 for the tie check — **the size of an order is its DEMAND; `order_amount` is an IOI limit on ECM and ranks the wrong order**. "Largest allocation" ranks by `order_allocation` |
+| "largest / biggest order" in a deal | order · LISTING ranked `order_demand_qty` desc (+ `order_id` asc tiebreak), value-first then `eq` (superlative rule) — **the size of an order is its DEMAND; `order_amount` is an IOI limit on ECM and ranks the wrong order**. "Largest allocation" ranks by `order_allocation` |
 | deal size / value / "biggest deal" | deal · `total_deal_size` / `largest_deal_size` |
 | tranche / issue size | tranche · `total_tranche_size` / `largest_tranche_size` |
 | how many deals / tranches / orders / investors / issuers | the count metric on the matching object |
@@ -566,6 +565,14 @@ no "(Shares)", "(shares)", "(USD)", "(bonds)" in ANY column header** —
 unit matters, say it ONCE in prose above the table ("figures are share
 counts") or let the currency column carry it; single inline figures keep
 their label ("3.0mm shares"). Product scoping above is untouched.
+
+**LIMIT IS NOT DEMAND (PROD ticket 2026-09-15).** "Demand / order / indication"
+is `order_demand_qty` (metric `total_demand`); on ECM, `order_amount` is the IOI
+LIMIT PRICE — a different attribute. Never return, sum, or label the limit as
+demand/indication, and never fill a blank demand from it: a blank ECM demand is
+"not captured", stated as such. Label each attribute by what it is ("IOI limit
+price 163" vs "Indication 264,011 shares"); when both appear they must never be
+the same number presented twice under different names.
 
 **CONSTRAINT COLUMNS (banker ruling 2026-09-15): every constraint in the ask
 becomes a column in the answer** so the user can validate — a time window →

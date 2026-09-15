@@ -309,9 +309,10 @@ class OntologySpec(BaseModel):
             "To rank/sort, use 'order': [{\"field\", \"direction\"}] where "
             "'field' is the metric or a selected dimension, and set 'limit' for "
             "'top N' questions (e.g. order desc by the metric, limit 10). For "
-            "a SUPERLATIVE ('the single biggest/max X') use limit 3, never 1: "
-            "if the top rows tie on the metric they are CO-WINNERS — name them "
-            "all, present only the winner(s).",
+            "a SUPERLATIVE ('the single biggest/max X') go VALUE FIRST: request the "
+            "max_ metric alone, then list rows whose row-level field is eq that "
+            "value — the exact set of CO-WINNERS, never a limit-1/limit-3 guess; "
+            "name them all, present only the winner(s).",
             "TOP-N-PER-GROUP ('the biggest X in EACH Y', 'top 3 investors per "
             "deal'): set 'partition_by' to the grouping dimension(s) — a "
             "subset of 'dimensions' — and 'per_partition_limit' to N (default "

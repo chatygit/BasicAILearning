@@ -519,14 +519,15 @@ check(has(SKILL, "stale_relative_window"),
       "stale-window refusal")
 # SUPERLATIVE TIES (QA 2026-08-18): "the investor with max allocation" ran
 # LIMIT 1 — one row cannot reveal a tie, so co-winners get silently dropped
-# and the singular answer is wrong. Superlatives fetch limit 3 as tie
-# detection; ties are co-winners, named together.
-check(has(SKILL, "NEVER uses `limit 1`"),
+# and the singular answer is wrong. Superlatives go VALUE FIRST (user ruling
+# 2026-09-15): fetch the max_ metric, then eq that value — the exact tie set.
+check(has(SKILL, "VALUE FIRST, THEN MEMBERS (user ruling 2026-09-15)"),
       "[trap] SKILL.md: the superlative-tie rule is gone — 'who has the max' "
       "runs limit 1 again and silently drops co-winners")
-check("CO-WINNERS" in text(ROOT / "app" / "bqs" / "ontology.py"),
+check("VALUE FIRST" in text(ROOT / "app" / "bqs" / "ontology.py")
+      and "CO-WINNERS" in text(ROOT / "app" / "bqs" / "ontology.py"),
       "[trap] ontology.py: discovery's how_to_use no longer teaches the "
-      "limit-3 superlative recipe")
+      "value-first superlative recipe (max_ metric, then eq that value)")
 # EMPTY TURN AFTER TOOL RESULT + REFUSED NUMBER REPLY (QA 2026-08-17): page 2
 # (44 rows) came back and the model emitted an EMPTY message — the rows the
 # user paid a round-trip for were thrown away. And a bare "1" reply was
@@ -1792,6 +1793,10 @@ check(has(SKILL, "Zero rows is never the answer to a NAME")
 check(has(SKILL, "CHECKPOINT before a long answer (user ruling 2026-09-14)"),
       "[present] SKILL lost the progress-checkpoint rule — long silent waits "
       "read as broken; one business-language checkpoint, never plumbing")
+check(has(SKILL, "LIMIT IS NOT DEMAND (PROD ticket 2026-09-15)"),
+      "[semantic] SKILL lost the limit-vs-demand rule — the PROD ticket "
+      "(limit value returned as Demand/Order/Indication) regresses; the SKILL "
+      "is the only layer shippable under the PROD freeze")
 check(has(SKILL, "CONSTRAINT COLUMNS (banker ruling 2026-09-15)"),
       "[present] SKILL lost the constraint-columns rule — filters must echo "
       "as columns (pricing_ts DESC for time windows, currency, class); DCM "

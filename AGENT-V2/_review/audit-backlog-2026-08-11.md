@@ -1168,3 +1168,23 @@ all Citi entities included); PO's deal → SOLO; all-time SOLO 14,250 vs
 (one row per tranche) — corrected to a count row. Lesson filed with the
 earlier probe-design flaw: an aggregate probe must return ONE row, or
 its answer is the row count and gets misread.
+
+## 2026-09-15 — SUPERLATIVES: value-first, then eq (user ruling)
+"Give me the MAX allocation" with many tied investors: replaced the
+limit-3 tie-guess with VALUE FIRST, THEN MEMBERS — request 1 the max_
+metric under the ask's scope, request 2 the listing with the row-level
+field eq that value → the exact tie set, answered by tie count (1 winner /
+≤5 co-winners / uniform-at-the-top finding with examples). SKILL block +
+routing row rewritten; server discovery hint (app/bqs/ontology.py) updated
+to match — SERVER FILE, rides the release train with config.py; gate pins
+re-targeted. RELEASE-TRAIN IDEA: sql_builder's partition_by uses
+ROW_NUMBER (ties broken arbitrarily) — DENSE_RANK <= N would return tied
+rows natively for top-N-per-group asks.
+
+## 2026-09-15 — PROD ticket: Limit returned as Demand (confirms PROD exposure)
+Formal ticket with www. (PROD) chat links = the IOI-limit-as-demand bug is
+LIVE IN PROD. Code fixes complete (view revert + IOI_QTY rebuild; ontology
+relabel; new SKILL "LIMIT IS NOT DEMAND" rule, gate-pinned). Nothing
+deployed. ESCALATE: SKILL rule can ship to PROD immediately under the
+freeze (labelling half); the view fix must be expedited on the release
+train (value half). AC map in uat-dcm-feedback-2026-09-15.md.

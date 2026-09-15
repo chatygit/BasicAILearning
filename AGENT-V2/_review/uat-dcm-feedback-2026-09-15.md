@@ -181,3 +181,31 @@ E6 VERIFIED (UAT 2026-09-15): regex compiles; split exact; PO's deal → SOLO
 statement returned one row per tranche (outer GROUP BY) — the ROW COUNT is
 the answer (≥30 on screen); statement corrected to a single count row
 (tranches + distinct deals). View fix cleared for the handover.
+
+## PROD TICKET — "Limit returned as Demand/Order/Indication" (chat links are www., i.e. PRODUCTION)
+Status per acceptance criterion (2026-09-15):
+AC1 Demand/Indication returns the demand attribute — FIXED IN CODE: the
+    2026-09-03 view fallback (demand := IOI LIMIT_VALUE) reverted; ECM demand
+    rebuilt on OB_ECM_ORDER_IOI.IOI_QTY (share-equivalent; identity with the
+    desk's DEMAND_QTY proven 3,862/3,862 on QA); config: order_demand_qty =
+    THE indication field. NOT DEPLOYED.
+AC2 Limit returns the limit, distinct — FIXED IN CODE: order_amount documented
+    as the IOI LIMIT PRICE, never sum/compare/fill. NOT DEPLOYED.
+AC3 Accurate labelling — FIXED IN CODE: SKILL "LIMIT IS NOT DEMAND" rule
+    (label 'IOI limit price' vs 'Indication'); demand_unit column beside demand.
+AC4 No regression on Price/Size/Allocation — deploy-check rows 2/6/15b/17 +
+    QA prompt list cover; to be evidenced by the QA run.
+AC5 Validated on a known sample — YES: BANQUE PRIVEE (GP 59271) book = demand
+    264,011@135 … 229,701@163, limit 163 → fixed view yields demand 264,011,
+    limit price 163; ALKEON 4,444,444@135. Plus the QA identity census.
+    UAT rerun of _ioi-final-confirm-2026-09-14c.sql is the pre-handover step.
+AC6 QA sign-off in a lower env — OUTSTANDING: needs the nine views + config in
+    QA, deploy-check (rows 21/21b), prompts 2 and 24.
+DEPLOYMENT PATHS: (a) views (IOI rebuild + fallback revert) — handover, then
+release train to PROD; (b) ontology (order_amount/order_demand_qty
+descriptions) — release train; (c) SKILL rule — shippable to PROD NOW under
+the freeze (agents.yaml + SKILL.md only). Which PROD mechanism is live
+(wave-2 view fallback vs V2-config mislabeling of order_amount as
+"Order/indication amount") is unknowable without PROD access — the release
+record answers it; the SKILL rule mitigates the labelling half either way,
+the view fix is required for the value half.
