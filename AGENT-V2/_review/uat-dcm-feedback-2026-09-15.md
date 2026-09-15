@@ -209,3 +209,36 @@ the freeze (agents.yaml + SKILL.md only). Which PROD mechanism is live
 "Order/indication amount") is unknowable without PROD access — the release
 record answers it; the SKILL rule mitigates the labelling half either way,
 the view fix is required for the value half.
+
+## PO SUMMARY EMAIL (2026-09-15) — Jira map + status
+UAT results as of 9/15: 30 PO + 41 business test cases; DCM at 85% (MRM
+minimum 80%; ECM was 94%). Sheet: ECM_DCM_MRM_Testing_Results_Final.xlsx.
+DCM results NOT yet sent to MRM "in the event we start updating the agent" —
+i.e. the baseline is being held; coordinate the config/view push timing with
+the MRM submission (a mid-cycle change invalidates the 85% sample).
+Positive findings (doctrine working): Fidelity family disambiguation asked
+which entity; syndicate members answered per tranche; follow-up suggestions
+useful; vague NAM prompt with no product answered for both; named-deal detail
+asks (pricing date, CUSIP) succeed when the field is in scope.
+Failed cases → Jira → our status:
+| Jira | Prompt theme | Register item | Status |
+|---|---|---|---|
+| C176173F-35768 | Fidelity indications/allocations across DCM deals — columns/arrange/sort | A (matrix reqs 1-7) | DONE config (matrix template) |
+| C176173F-35774 | USD deals/tranches by issuer, 12 months — constraint columns | C / E1 | DONE config (constraint-columns rule) |
+| C176173F-35781 | one-dealer Citigroup, all Citi entities, DCM — no results | E6 | DONE view (Citi regex, verified UAT) + PO date note (priced 18-Sep) |
+| C176173F-35773 | top 5 investors in txn 75043505 — incomplete | TC1 | DONE config (per-tranche top-N) |
+| C176173F-35776 | demand split by geography, CUSIP 63307A3T0 — inaccurate summary | E2 / E5 | E2 DONE config (multi-tranche identifiers); E5 retest (12M missing = NULL-region disclosure) |
+| C176173F-35777 | top 5 by allocation across ALL IG deals 2024 — sampled 40 | E4 | DONE view (product_class ferried) + config |
+| C176173F-35783 | allowed order types for each tranche of txn 75043505 — not found | E7 (NEW) | PROBE — is the attribute in any source? |
+
+## E7 — "allowed order types for each tranche" (C176173F-35783)
+PO unsure whether a true fail or out of scope. Order "type" here = the price
+basis an order may be placed on (spread / yield / price), a DCM tranche
+attribute. Not on any view today: tranche view has coupon_type, price_guidance,
+frn_coupon_index; trade view has price_basis_code/value (per TRADE, not the
+allowed set). Probe: _checks/_allowed-order-types-probe-2026-09-15.sql — search
+OB_DEAL_TRANCHE / OB_TRANCHE / OB_ORDER column names for ALLOW/ORDER_TYPE/
+PRICE_TYPE/BASIS, then sample the txn's tranches and the distinct
+PRICE_BASIS_CODE values its trades used. If a source column exists → ferry to
+the tranche view (handover); if not → honest "not tracked" refusal in the
+tranche object, and tell the PO it is out of scope.

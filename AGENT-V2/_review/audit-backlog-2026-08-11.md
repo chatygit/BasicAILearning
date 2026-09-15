@@ -1188,3 +1188,9 @@ relabel; new SKILL "LIMIT IS NOT DEMAND" rule, gate-pinned). Nothing
 deployed. ESCALATE: SKILL rule can ship to PROD immediately under the
 freeze (labelling half); the view fix must be expedited on the release
 train (value half). AC map in uat-dcm-feedback-2026-09-15.md.
+
+## 2026-09-15 — PO UAT summary: 6 of 7 Jiras already addressed; E7 probe
+DCM 85% vs MRM min 80% (ECM 94%). Jira map in uat-dcm-feedback-2026-09-15.md.
+NEW E7 (C176173F-35783, allowed order types per tranche) — probe written;
+no source column known. GOVERNANCE: PO is holding DCM results from MRM
+pending agent updates — time the push with the MRM submission.
