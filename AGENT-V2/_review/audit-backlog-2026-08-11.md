@@ -1151,3 +1151,12 @@ pricing_ts DESC for time windows, tenors+tranche_name, never assumed
 2026-09-15.sql (E2: why 63307A3T0 → 3 tranches; are CUSIPs repeated
 across tranches at source; demand per tranche). Still [PUSH]: TC2/TC3
 tokens, classification splits.
+
+## 2026-09-15 — E6 Citi SOLO rule fixed (view + SKILL), verify probe pending
+Narrow '%Citigroup Global%' missed plain 'Citigroup' (most common label,
+46.6k tranches): SOLO under-counted ~3.6x. Replaced by anchored regex
+'^CITI(GROUP|BANK)?([ _]|$)' (case-insensitive) in vw_tranche_summary's
+DCM+ECM DST blocks and DCM BND_BROKER; SOLO now = no non-Citi dealer.
+SKILL Citi-label doctrine rewritten with the Citizens/CITIC warning.
+Two [semantic] gate pins. Rides the open handover after the UAT verify
+probe confirms (regex compiles, PO's deal → SOLO, 2024 count).

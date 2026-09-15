@@ -2082,6 +2082,27 @@ for _vf, _expr in [("vw_order_detail.sql", "LIMIT_VALUE) AS NUMBER(38,4)) AS ORD
           f"as a demand QUANTITY — banned 2026-09-14; a blank indication stays "
           f"blank until a real quantity source is found")
 
+# CITI ENTITY RULE (UAT 2026-09-15): the SOLO / B&D tests used LIKE
+# '%Citigroup Global%', which misses the single most common dealer label —
+# plain 'Citigroup' (46.6k tranches) — and hid solo deals wholesale (4,025 vs
+# ~14k). A bare '%CITI%' is wrong the other way (Citizens, CITIC). The anchored
+# regex is the contract for every Citi test in the views and the SKILL.
+_CITI_RX = "'^CITI(GROUP|BANK)?([ _]|$)', 'i'"
+_tv = text(ROOT / "views" / "vw_tranche_summary.sql")
+check(_tv.count(_CITI_RX) >= 3 and "Citigroup Global%" not in _tv,
+      "[semantic] vw_tranche_summary: a Citi test regressed from the anchored "
+      "regex to a narrow/contains LIKE — plain 'Citigroup' (46.6k tranches) "
+      "would drop out of SOLO/B&D again, or Citizens/CITIC would count as Citi")
+check(has(SKILL, "CITIDEV CITIUSA CITIAUS CITIASIA CITIUKE CITGMCA")
+      and has(SKILL, "JPMSEC JPMORSEC") and has(SKILL, "JEFFLLC"),
+      "[capability] SKILL lost the broker-code table (Citi ECM B&D codes + "
+      "other banks) — dropped once by a bullet rewrite on 2026-09-15")
+check(has(SKILL, "Citi's own labels (measured UAT 2026-09-15")
+      and has(SKILL, "Citizens"),
+      "[semantic] SKILL lost the Citi-label doctrine — agents fall back to "
+      "'%CITIGROUP GLOBAL MARKETS%' (misses plain Citigroup) or '%citi%' "
+      "(catches Citizens/CITIC)")
+
 # OPUS_BASE FREEZE (user ruling 2026-09-14, reversing the 2026-09-04 removal):
 # the EXISTING OPUS_BASE dependencies stay, but NO NEW ones may be added. Pin
 # both the approved table set and the per-view reference counts so a new

@@ -633,11 +633,7 @@ requests where one would do wastes a ~10 s round-trip.
   asks stay ECM-only (DCM roles are NULL — members come without role
   attribution, say so). An **ECM league table is impossible** (members are
   one list per tranche, unsplittable per bank); offer a named bank's participation.
-- **Citi = five subsidiaries**: `%CITIGROUP GLOBAL MARKETS%` (Inc./Ltd./Australia/
-  Asia/Canada), codes `CITIDEV CITIUSA CITIAUS CITIASIA CITIUKE CITGMCA`. A name
-  merely containing "Citi" (CITIBANK, test entities) is NOT Citi for B&D. Others:
-  JPMorgan `JPMSEC JPMORSEC` · Goldman `GSCO` · Morgan Stanley `MSCO` · Barclays
-  `BARCAP` · BofA `BAMLS` · Jefferies `JEFFLLC`.
+- **Citi's own labels (measured UAT 2026-09-15, 59 spellings): plain `Citigroup` is the MOST common dealer label (46.6k tranches), then `Citigroup Global Markets Inc./Inc/Limited/Australia/Europe/Asia/Singapore/Japan`, `Citi Group GMG`, `Citibank …`.** Match with `like 'Citigroup%'`, `like 'Citi %'`, `like 'Citibank%'` — NEVER a bare contains `%citi%`: it also matches **Citizens** (Financial / Capital Markets / Securities) and **CITIC** (China CITIC Bank, CITIC Securities), real competitor banks. SOLO counts EVERY Citi legal entity (a deal run by two of them is still SOLO — PO ruling); the view's SOLO and DCM B&D flags use that anchored rule. ECM B&D goes by broker CODE, not name: Citi = `CITIDEV CITIUSA CITIAUS CITIASIA CITIUKE CITGMCA`; a test label or a bank entity is not the B&D broker. Other banks' codes: JPMorgan `JPMSEC JPMORSEC` · Goldman `GSCO` · Morgan Stanley `MSCO` · Barclays `BARCAP` · BofA `BAMLS` · Jefferies `JEFFLLC`.
 
 - A `syndicate_member_name` token can carry an inline `(true)`/`(false)` suffix
   duplicating the B&D flag. **Never filter on it, and strip it before display.**

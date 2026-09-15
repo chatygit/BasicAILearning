@@ -639,3 +639,22 @@ sentinels (1e13; 337 IOI rows >= 1e9). We inherit source behaviour rather than
 invent a cutoff — flagged for the desk.
 BEFORE HANDOVER: rerun _checks/_ioi-final-confirm-2026-09-14c.sql on UAT — the
 identity above is measured on QA and QA != UAT/PROD.
+
+## ADDENDUM 8 — 2026-09-15 Citi entity rule (SOLO / B&D) fixed
+UAT probe on the PO's deal I-260914-233059921862: its only syndicate dealer is
+the plain label "Citigroup", which LIKE '%Citigroup Global%' never matched, so
+the view called it SHARED. Census: "Citigroup" is the MOST common dealer label
+(46,603 tranches); today's rule found 4,025 SOLO tranches, a Citi-inclusive
+rule ~14,680. Bare '%CITI%' is wrong the other way — it matches Citizens
+(Financial / Capital Markets / Securities) and CITIC (China CITIC Bank, CITIC
+Securities). Also: a deal run by two Citi legal entities must be SOLO (PO
+ruling), which MIN(DEALER)=MAX(DEALER) rejected. New rule in
+vw_tranche_summary, all three Citi tests: REGEXP_LIKE(x, '^CITI(GROUP|BANK)?
+([ _]|$)', 'i') — matches Citigroup / Citigroup Global Markets * / Citi Group
+GMG / Citibank * / Citi_* test labels; rejects Citizens and CITIC. SOLO =
+at least one dealer AND no non-Citi dealer (DCM: OB_TRANCHE_SYNDICATE_MEMBER;
+ECM: OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE); BND_BROKER (DCM) same regex on
+BD_BANK. Tranches with no syndicate rows (17 of 74,779) stay SHARED by NVL.
+Verify on UAT before handover: _checks/_solo-rule-verify-2026-09-15.sql (regex
+compiles; PO's deal flips to SOLO; Citizens/CITIC land in 'not citi'; true
+2024 solo count). Rides the open handover.

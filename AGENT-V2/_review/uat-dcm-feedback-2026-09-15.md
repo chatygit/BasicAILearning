@@ -162,3 +162,17 @@ all-Citi-entities case-insensitive rule, all-time and 2024). If (1)-(3)
 confirm, it is a view fix on vw_tranche_summary — rides the open handover;
 SKILL Citi-entity list (%CITIGROUP GLOBAL MARKETS% x5) may need widening
 to whatever spellings the census shows.
+
+## E6 VERDICT (probe 2026-09-15) — view rule fixed
+Confirmed suspect (1) in a sharper form: the deal's only dealer is plain
+"Citigroup"; LIKE '%Citigroup Global%' misses it → SHARED. Census: 59
+dealer spellings contain CITI; plain "Citigroup" tops the book (46,603
+tranches); '%CITI%' would also catch Citizens + CITIC (competitors).
+Suspect (3) negligible (17 tranches without syndicate rows, none with a
+Citi B&D). Fixed in vw_tranche_summary (ADDENDUM 8): anchored regex, SOLO =
+no non-Citi dealer (multi-entity Citi = SOLO per PO). SKILL Citi-label
+doctrine rewritten (never bare %citi%). Gate: 2 [semantic] pins.
+ALSO FOR THE PO: the deal PRICED 18-SEP-2026 (tranche rows), not 14-SEP —
+the restructured prompt's "pricing date September 14" is the deal id's
+creation date; the agent's "no deals" on that date may have been literally
+right. Verify probe + 2024 solo count: _checks/_solo-rule-verify-2026-09-15.sql.

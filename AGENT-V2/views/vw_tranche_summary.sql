@@ -179,8 +179,9 @@ LEFT JOIN (
         S.ECM_TRANSACTION_ID,
         S.ECM_TRANSACTION_TRANCHE_ID,
         CASE
-            WHEN COUNT(DISTINCT S.SYNDICATE_MEMBER_NAME) = 1
-                AND MAX(S.SYNDICATE_MEMBER_NAME) LIKE '%Citigroup Global%'
+            WHEN COUNT(S.SYNDICATE_MEMBER_NAME) > 0
+                AND SUM(CASE WHEN REGEXP_LIKE(S.SYNDICATE_MEMBER_NAME, '^CITI(GROUP|BANK)?([ _]|$)', 'i')
+                             THEN 0 ELSE 1 END) = 0
             THEN 'SOLO'
             ELSE 'SHARED'
         END AS DEAL_SHARING_TYPE
@@ -250,7 +251,7 @@ SELECT
     CAST(NULL AS VARCHAR2(4000)) AS SYNDICATE_ROLE,
     CAST(NULL AS VARCHAR2(4000)) AS BROKER_CODE,
     CASE
-        WHEN ODT.BD_BANK LIKE '%Citigroup Global%'
+        WHEN REGEXP_LIKE(ODT.BD_BANK, '^CITI(GROUP|BANK)?([ _]|$)', 'i')
         THEN 'true'
         ELSE 'false'
     END AS BND_BROKER,
@@ -351,8 +352,9 @@ LEFT JOIN (
     SELECT
         S.DEAL_TRANCHE_ID,
         CASE
-            WHEN MIN(S.DEALER) = MAX(S.DEALER)
-                AND MIN(S.DEALER) LIKE '%Citigroup Global%'
+            WHEN COUNT(S.DEALER) > 0
+                AND SUM(CASE WHEN REGEXP_LIKE(S.DEALER, '^CITI(GROUP|BANK)?([ _]|$)', 'i')
+                             THEN 0 ELSE 1 END) = 0
             THEN 'SOLO'
             ELSE 'SHARED'
         END AS DEAL_SHARING_TYPE
