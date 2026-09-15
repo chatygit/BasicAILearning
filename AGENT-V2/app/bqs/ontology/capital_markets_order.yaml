@@ -117,10 +117,27 @@ how_to_use:
   - "Metric routing: demand/indication → total_demand; allocation/'got shares' →
      total_allocation; DCM order size/amount → total_order_amount; ECM order size
      → total_allocation (NOT total_order_amount — see the next note)."
+  - "ORDERBOOK MATRIX (banker ruling 2026-09-15). Any indications/allocations
+     listing, investor-given OR issuer-given, projects: investor_name ·
+     issuer_name · pricing_ts · deal_name · tenors · tranche_name ·
+     order_demand_qty · order_allocation · currency (issuer-given puts
+     issuer_name, pricing_ts, deal_name first, then investor_name). ONE ROW PER
+     TRANCHE — DCM deals are multi-tranche; never collapse to deal grain. Sort:
+     investor-given → issuer_name asc; issuer-given → investor_name asc; top-N →
+     order_demand_qty desc, then name asc. KEEP zero-indication and
+     zero-allocation rows: the book stores explicit 0 orders and bankers expect
+     them — never add a gt-0 filter to these matrices. Figures are AS STORED in
+     the tranche currency: label the currency column, never assume USD, never
+     FX-convert."
+  - "TOP-N INVESTORS ON A MULTI-TRANCHE DEAL = top N PER TRANCHE: partition_by
+     tranche_name (or tenors) with per_partition_limit N, ordered
+     order_demand_qty desc. A flat limit N across the deal mixes tranches and
+     under-counts (UAT 2026-09-15: 'top 5' returned 4 investors out of ~100
+     indications over 2 tranches)."
   - "ORDER_AMOUNT IS NOT AN ORDER SIZE ON ECM. It is the HIGHEST limit point on
      that order's IOI curve, and 14,341 ECM orders carry several points, so the
-     figure is one reading of a curve, not a total. Its business meaning is
-     unconfirmed (it may be a limit PRICE rather than an amount). Never SUM it
+     figure is one reading of a curve, not a total. CONFIRMED 2026-09-14: it IS the
+     IOI limit PRICE (USD per share), not an amount. Never SUM it
      on ECM and never call it 'the order size' there: use total_allocation or
      total_demand. Showing it row-by-row beside allocation is fine if you label
      it 'highest IOI limit'. On DCM it is a plain order amount and totals
@@ -318,6 +335,8 @@ dimensions:
   order_demand_qty: {column: order_demand_qty, description: "THE indication/demand field (ECM shares / DCM money) — project it in order listings. THE ranking key for 'largest/biggest order' asks (never order_amount). ECM = stated demand quantity ONLY; sparse (~6% of orders) — share-equivalent, ~72% of live orders (was 9%): the desk's normalised quantity where it exists, else the order's own IOI quantity when that was already submitted in SHARES/BOND — a same-unit fill measured to reproduce the desk value EXACTLY (3,862/3,862 orders, QA 2026-09-14). BLANK means the indication was submitted in CURRENCY/PERCENT/FACE and no share conversion exists: say that, quote demand_as_submitted with demand_unit, NEVER convert it yourself, NEVER say 'no demand recorded', and NEVER substitute order_amount (that is a LIMIT PRICE, not a size: PROD 2026-09-14 showed a 135.00 USD limit rendered as '135 shares' against a true 4,444,444-share indication). On DCM it is the same stored number as order_amount."}
   demand_unit: {column: demand_unit, description: "Unit the investor SUBMITTED the indication in — ECM: SHARES, BOND, CURRENCY, PERCENT, FACE, DEALSIZEPERCENT, CONVPREF, CONVCURRENCY (QA mix: ~61% SHARES); DCM: always CURRENCY. ALWAYS show it beside a demand figure, and NEVER sum demand across different units — one deal routinely carries 4-6 of them."}
   demand_as_submitted: {column: demand_as_submitted, description: "The indication AS THE INVESTOR SUBMITTED IT, in demand_unit — populated even where the share-equivalent (order_demand_qty) is blank. Per-order answers only: never aggregate it, never compare it across units."}
+  tenors: {column: tenors, products: ["DCM"], description: "DCM tranche tenor ferried onto orders ('5-YEAR' style, VALUE-PERIOD) — 'the 5year tranche' orderbook asks are ONE request here; like-match, never eq. Show BOTH tenors and tranche_name in DCM matrices (banker ruling 2026-09-15). NULL on ECM."}
+  product_class: {column: product_class, products: ["DCM"], description: "DCM bond class ferried onto orders — same closed list as the tranche object (Investment Grade, High Yield, SSA…; expand IG/HY/EM first). 'Top investors across ALL Investment Grade deals' is ONE request here — never a sampled deal-id ferry. NULL on ECM."}
   billed_by: {column: billed_by, description: "The bank that billed/settled THIS order (B&D), on BOTH products — full bank names on both (the ECM source column is misleadingly named BILLEDBY_BROKER_CODE but holds names). Order-level truth: it VARIES within a tranche (measured on half of DCM tranches), so it can legitimately disagree with the tranche object's BND_BANK designation list — for 'billed by' asks, THIS column wins. NULL = no billing bank recorded (~10% ECM, ~26% DCM)."}
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Deal-level offering type denormalized to order grain — only 'IPO' and 'FO' stored. Makes 'investors in IPOs' ONE request on this object (no deal-id ferry). NULL on DCM."}
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS denormalized to order grain (release 2) — 'investor X in convertibles' is ONE request here now. Same values/rules as the deal object's equity_type; match class words with like. NULL on DCM."}
@@ -367,6 +386,8 @@ dimensions:
   deal_size: {column: deal_size, description: "Parent deal size ferried onto orders. ECM = share count, DCM = notional — never mix units across products."}
   use_of_proceeds: {column: use_of_proceeds, description: "Parent deal use-of-proceeds ferried onto orders — 'investor money into refinancing deals' is ONE request. Deal-object vocabulary and traps (refi splits across two values)."}
 filters:
+  tenors: {column: tenors, products: ["DCM"], operators: [like, is_null, is_not_null], case_insensitive: true, description: "Tenor label 'VALUE-PERIOD' ('5-YEAR') — like '%5%YEAR%'; bankers say 5YR/5Y/5 year; never eq."}
+  product_class: {column: product_class, products: ["DCM"], operators: [eq, ne, in, not_in, like], case_insensitive: true, suggestable: true, description: "Bond class (Investment Grade, High Yield, SSA, ABS…). Expand IG/HY/EM to the stored label before filtering."}
   investor_classification: {column: investor_classification, operators: [eq, ne, in, not_in, like, is_null, is_not_null], suggestable: true, case_insensitive: true, description: "Different taxonomy from investor_category (own column). Like-match head values; DCM tail holds free-text junk — if a value looks like test data say so; QA/UAT vocabularies differ, never claim completeness."}
   deal_region:
     column: deal_region

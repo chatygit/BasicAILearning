@@ -1115,3 +1115,39 @@ EVIDENCE-BACKED DESIGN (pending the 14c confirmation + desk sign-off):
    the agent says the indication was submitted in another unit.
  - Deal TOTAL_DEMAND sums share-equivalents ONLY and discloses the excluded
    orders — mirroring the book's own "Indication (Common Shares)" column.
+
+## 2026-09-15 — NEW ENHANCEMENTS register opened (UAT DCM banker feedback)
+Full transcription + triage: _review/uat-dcm-feedback-2026-09-15.md
+(7 matrix requirements, TC1–TC4, constraint-columns rule). User: "write
+these somewhere, dont ask me again, tag as new enhancements" — batch
+still arriving; implement as ONE config round when complete. Decisions
+pre-taken to avoid re-asking: DCM figures presented as stored in tranche
+currency (never FX-convert); TENORS ferried onto the order view DCM
+branch via the hedge views' TN join (pending handover). Already-fixed-
+pending-push: TC2 (short-name token), TC3 (Travelers spellings).
+
+## 2026-09-15 — NEW ENHANCEMENTS batch 2: TENORS + PRODUCT_CLASS ferried to orders
+"All IG deals" degraded to a 40-deal sample because product_class lived
+only on the tranche object (tranche→order ferry under the 40-id cap).
+Ferried PRODUCT_CLASS + TENORS onto vw_order_detail DCM branch (ODT
+already joined — passthrough + the tranche view's TENORS CASE; ECM NULL
+stubs) and exposed both on the order object. Kills the ferry for IG/HY
+investor league tables and makes "5year tranche" orderbook asks one
+query. Register: _review/uat-dcm-feedback-2026-09-15.md §D (E1–E4).
+SKILL doctrine (matrix template, sort, constraint echo, currency label,
+CUSIP-uniqueness) still HELD for the single config round at batch end.
+
+## 2026-09-15 — NEW ENHANCEMENTS config round APPLIED (user: "start probing and fixing")
+Order object (pay-per-fetch): ORDERBOOK MATRIX template (column order for
+investor-given / issuer-given, row per tranche, sorts, keep-zero-rows,
+as-stored tranche currency) + TOP-N PER TRANCHE recipe (partition_by
+tranche, per_partition_limit N). ORDER_AMOUNT note upgraded from
+"unconfirmed" to CONFIRMED IOI limit price. Tranche object: identifier
+resolving to >1 tranche = diagnose (exact pipe-element re-match,
+deal-level repetition), present all, never declare 'no demand'. SKILL
+(cross-object): CONSTRAINT COLUMNS rule — echo filters as columns,
+pricing_ts DESC for time windows, tenors+tranche_name, never assumed
+(USD). 4 gate pins. PROBE OPEN: _checks/_cusip-resolution-probe-
+2026-09-15.sql (E2: why 63307A3T0 → 3 tranches; are CUSIPs repeated
+across tranches at source; demand per tranche). Still [PUSH]: TC2/TC3
+tokens, classification splits.

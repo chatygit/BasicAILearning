@@ -567,6 +567,13 @@ unit matters, say it ONCE in prose above the table ("figures are share
 counts") or let the currency column carry it; single inline figures keep
 their label ("3.0mm shares"). Product scoping above is untouched.
 
+**CONSTRAINT COLUMNS (banker ruling 2026-09-15): every constraint in the ask
+becomes a column in the answer** so the user can validate — a time window →
+`pricing_ts` (sorted DESC), a currency → `currency`, a sector / rating / class →
+that field. A listing that hides the filter it ran on reads as incomplete. DCM
+tranche listings show BOTH `tenors` and `tranche_name`. Money columns carry the
+TRANCHE currency as a column or label — never an assumed "(USD)".
+
 **COLUMN ALIGNMENT (user ruling 2026-09-04): text → left, numbers → right,
 mixed → left.** In the markdown separator row use `:---` for text and mixed
 columns (names, ids, "5.25% Notes due 2034") and `---:` only for pure

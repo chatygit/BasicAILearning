@@ -1792,6 +1792,23 @@ check(has(SKILL, "Zero rows is never the answer to a NAME")
 check(has(SKILL, "CHECKPOINT before a long answer (user ruling 2026-09-14)"),
       "[present] SKILL lost the progress-checkpoint rule — long silent waits "
       "read as broken; one business-language checkpoint, never plumbing")
+check(has(SKILL, "CONSTRAINT COLUMNS (banker ruling 2026-09-15)"),
+      "[present] SKILL lost the constraint-columns rule — filters must echo "
+      "as columns (pricing_ts DESC for time windows, currency, class); DCM "
+      "tranche listings show tenors AND tranche_name; never assume (USD)")
+check(has(ORDER, "ORDERBOOK MATRIX (banker ruling 2026-09-15)")
+      and has(ORDER, "TOP-N INVESTORS ON A MULTI-TRANCHE DEAL"),
+      "[present] order object lost the orderbook matrix template / per-tranche "
+      "top-N recipe (banker rulings 2026-09-15: row per tranche, issuer name, "
+      "pricing date, tranche currency, keep zero rows, partition_by tranche)")
+check(has(TRANCHE, "IDENTIFIER RESOLVES TO MORE THAN ONE TRANCHE"),
+      "[present] tranche object lost the multi-tranche identifier doctrine — "
+      "one CUSIP resolving to several tranches is diagnosed, never reported "
+      "as some tranches having 'no demand' (UAT 2026-09-15)")
+check(has(ORDER, "CONFIRMED 2026-09-14: it IS the")
+      and "unconfirmed (it may be a limit PRICE" not in text(ORDER),
+      "[semantic] order object regressed to calling ORDER_AMOUNT's meaning "
+      "unconfirmed — it is the IOI limit PRICE, confirmed against the book")
 check(has(SKILL, "COLUMN ALIGNMENT (user ruling 2026-09-04)"),
       "[present] SKILL.md: the column-alignment rule is gone (stakeholder "
       "ruling 2026-09-04) — text/mixed columns must be ':---' left, pure "
