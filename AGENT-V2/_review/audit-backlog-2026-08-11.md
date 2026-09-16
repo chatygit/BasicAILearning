@@ -1205,3 +1205,15 @@ thresholds). Tranche-family coverage opportunity registered (OB_DEAL_TRANCHE
 ## 2026-09-15 — E7 CLOSED: allowed-order flags exposed (Y/N census)
 Config: tranche dims/filters/how_to_use + SKILL routing row + pin. Answer
 shape: list the Y flags per tranche; NULL = not recorded. Prompt 25.
+
+## 2026-09-15 — PR bot round 3: MAX-mixing (false positive) + inner CAST (taken)
+(1) "Independent MAX(LIMIT_VALUE)/MAX(IOI_QTY) mix rows": NOT a defect —
+both columns are curve-level summaries BY DEFINITION (order_amount = highest
+limit on the curve, documented; demand = MAX(IOI_QTY), proven identical to
+the desk's DEMAND_QTY 3,862/3,862 incl. all multi-point orders). The bot's
+ROW_NUMBER fix (one row, e.g. highest limit) would return the WRONG demand
+(BANQUE: 229,701 instead of 264,011). Declined; presentational nuance taken
+into order_amount's description (limit is not the price of the demand
+figure). (2) Inner CAST on the deal view's TOTAL_DEMAND SUM: outer CAST
+already publishes NUMBER(38,4) (deploy-check 17 guards it) so metadata was
+never at risk, but added for consistency with the order view — harmless.
