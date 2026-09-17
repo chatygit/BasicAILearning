@@ -12,7 +12,7 @@ in original order. The [views] gate rejects any `--` line in vw_*.sql.
 
 VW_DEAL_SUMMARY — grain: one row per PRODUCT + DEAL_ID
 
-FIXES IN THIS REVISION (evidence: views/_docs/_diagnostics-results.md)
+FIXES IN THIS REVISION (evidence: git history: views/_docs/_diagnostics-results.md (retired 2026-09-17))
   1. Q9/Q9b: 43,415 rows for 39,467 deals, and the gap is ENTIRELY ECM
      (22,347 rows / 18,399 deals; DCM was already exactly 1:1).
      Q10 found the cause: OPUS_ECM_TRANSACTION holds 44,829 rows /
@@ -71,7 +71,7 @@ currency before its first mapped row); the agent renders those as
 ISSUER NAME FIX (2026-08-18): the old ECM source column is 100% dead
 in QA (0 of 21,195 deals named). OB_DEAL_ISSUER maps GFCID -> NAME
 (99.8% of its 74k rows named; 96% of GFCID-carrying ECM deals resolve
-— A1-A3, views/_checks/_issuer-name-check.sql). Grouped per GFCID so the join
+— A1-A3, git history: views/_checks/_issuer-name-check.sql (retired 2026-09-17)). Grouped per GFCID so the join
 cannot fan out the grain. Old column kept as PROD fallback via NVL.
 ISSUER IDENTITY MASTER (tech end-state, Dumitru + Samir 2026-08-18):
 PARTY_NAME/PARTY_GFCID/PARTY_TICKER at PARTY_ROLE='Primary Client'.
@@ -99,7 +99,7 @@ structure on every view file.
 
 VW_TRANCHE_SUMMARY — grain: one row per PRODUCT + DEAL_ID + TRANCHE_ID
 
-FIXES IN THIS REVISION (evidence: views/_docs/_diagnostics-results.md)
+FIXES IN THIS REVISION (evidence: git history: views/_docs/_diagnostics-results.md (retired 2026-09-17))
   1. TRANCHE_SIZE deployed as VARCHAR2(480) (Q1), so "top N by tranche
      size" sorted lexically — '900' beat '1000000'.
      BOTH branches were character, not just ECM. V8 proved it: comparing
@@ -168,7 +168,7 @@ mostly single-tranche, so the deal region IS the tranche's market).
 ISSUER NAME FIX (2026-08-18): the old ECM source column is 100% dead
 in QA (0 of 21,195 deals named). OB_DEAL_ISSUER maps GFCID -> NAME
 (99.8% of its 74k rows named; 96% of GFCID-carrying ECM deals resolve
-— A1-A3, views/_checks/_issuer-name-check.sql). Grouped per GFCID so the join
+— A1-A3, git history: views/_checks/_issuer-name-check.sql (retired 2026-09-17)). Grouped per GFCID so the join
 cannot fan out the grain. Old column kept as PROD fallback via NVL.
 ISSUER IDENTITY MASTER (tech end-state, Dumitru + Samir 2026-08-18):
 PARTY_NAME/PARTY_GFCID/PARTY_TICKER at PARTY_ROLE='Primary Client'.
@@ -191,7 +191,7 @@ caught by the DEV migration failure). Moved inside the statement.
 
 VW_ORDER_DETAIL — grain: one row per PRODUCT + ORDER_ID
 
-FIXES IN THIS REVISION (evidence: views/_docs/_diagnostics-results.md)
+FIXES IN THIS REVISION (evidence: git history: views/_docs/_diagnostics-results.md (retired 2026-09-17))
   1. DCM ORDER_ALLOCATION was sourced from OB_ORDER_MATCH_GROUP joined on
      (ROOT_ID, PARENT_ID) — deal+tranche, never the order. Q37: only 0.47%
      of orders are reachable that way; Q8: the table has NO rows for the
@@ -238,7 +238,7 @@ apply ONLY after this view deploys.
 ISSUER NAME FIX (2026-08-18): the old ECM source column is 100% dead
 in QA (0 of 21,195 deals named). OB_DEAL_ISSUER maps GFCID -> NAME
 (99.8% of its 74k rows named; 96% of GFCID-carrying ECM deals resolve
-— A1-A3, views/_checks/_issuer-name-check.sql). Grouped per GFCID so the join
+— A1-A3, git history: views/_checks/_issuer-name-check.sql (retired 2026-09-17)). Grouped per GFCID so the join
 cannot fan out the grain. Old column kept as PROD fallback via NVL.
 ISSUER IDENTITY MASTER (tech end-state, Dumitru + Samir 2026-08-18):
 PARTY_NAME/PARTY_GFCID/PARTY_TICKER at PARTY_ROLE='Primary Client'.
@@ -405,9 +405,9 @@ rounds, incremental, no view change needed.
   (VARCHAR2 at source), RETENTION, RATIONALE(+TYPE), FX_CURRENCY,
   OBO_NAME, OBO_LEGAL_ENTITY_ID (firm-account candidates), ESG_TAG,
   ORDER_SIZE_CHANGE, IS_AFFILIATED, ONE_OFF_INVESTOR, SALES_SOEID.
-PRE-HANDOVER: run _checks/_wave-a-name-validation.sql (WHERE 1=0 compile
+PRE-HANDOVER: run _checks/db-asks.sql (S1 name validation) (WHERE 1=0 compile
 check on every new source name — instant ORA-00904 on any transcription
-typo). WAVE B (needs descs): _checks/_wave-b-desc-requests.sql — unlocks
+typo). WAVE B (needs descs): git history: _checks/_wave-b-desc-requests.sql (retired 2026-09-17) — unlocks
 ECM order riches, ECM trade branch, hedge-trades + trade-syndicate views,
 firm accounts, salesperson reference.
 
@@ -440,7 +440,7 @@ NOT built (recorded): MOGA splits (70 rows — doctrine footnote, not a
 view), match-group split (thin), OB_INVESTOR_SALES (contact-email
 routing — not analytics), OB_TRANCHE_HEDGE_SECURITY (already
 denormalized on hedge rows), VG accounts (out of domain).
-PRE-HANDOVER: _checks/_wave-a-name-validation.sql (now 12 statements)
+PRE-HANDOVER: _checks/db-asks.sql (S1 name validation) (now 12 statements)
 must ALL return "no rows selected". CONFIG ROUNDS AFTER WHITELIST:
 hedge_trade/designation/trade_syndicate objects, ECM trade branch
 de-scoping, new-column exposure, refusal flips (greenshoe, domicile,
@@ -477,7 +477,7 @@ becomes EMPTY (mechanism stays as fallback for exotic combos); the
 
 ## ADDENDUM 3 — 2026-09-02 latency wave (levers B + C, after index census)
 
-Census facts driving this (screenshots index-1..4, _review/index-review-2026-09-02.md):
+Census facts driving this (screenshots index-1..4, _review/ASKS-external.md §2 (index request; review retired to git 2026-09-17)):
 OB_ORDER = 5,001,148 rows / OB_ORDER_SIZE = 4,848,439 — and OB_ORDER already carries
 IX_OB_ORDER_ROOT_PARENT_ORDER (ROOT_ID, PARENT_ID, ORDER_ID) plus (ORDER_ID), (GPID),
 (NAME). Parent-key stability check (census stmt 4): 0 conflicted ids on all five
@@ -557,7 +557,7 @@ FX_RATE at 9dp is lossless per census.
 Gate: new [views] class — zero bare "AS NUMBER)" casts allowed in any view file.
 Deploy-check: A0 now lists all nine views; NEW check 17 = zero cast metric
 columns may publish NULL data_scale (the acceptance criterion for this wave).
-Pre-handover validation: _checks/_type-wave-validation.sql covers the few
+Pre-handover validation: git history: _checks/_type-wave-validation.sql (retired 2026-09-17) covers the few
 columns the census didn't measure (hedge SECURITY_COUPON, designation
 POT_SPLIT/DESIGNABLE_SHARES/UNDERWRITING_FEES/MANAGEMENT_FEES) — run BEFORE
 handover; an error there means that column needs the regexp-guard pattern
@@ -637,7 +637,7 @@ Coverage: live ECM orders with a usable indication 6,240 -> 51,334 of 71,003
 KNOWN QUIRK (unresolved): both DEMAND_QTY and IOI_QTY carry implausible
 sentinels (1e13; 337 IOI rows >= 1e9). We inherit source behaviour rather than
 invent a cutoff — flagged for the desk.
-BEFORE HANDOVER: rerun _checks/_ioi-final-confirm-2026-09-14c.sql on UAT — the
+BEFORE HANDOVER: rerun _checks/db-asks.sql (section D) on UAT — the
 identity above is measured on QA and QA != UAT/PROD.
 
 ## ADDENDUM 8 — 2026-09-15 Citi entity rule (SOLO / B&D) fixed
@@ -655,7 +655,7 @@ GMG / Citibank * / Citi_* test labels; rejects Citizens and CITIC. SOLO =
 at least one dealer AND no non-Citi dealer (DCM: OB_TRANCHE_SYNDICATE_MEMBER;
 ECM: OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE); BND_BROKER (DCM) same regex on
 BD_BANK. Tranches with no syndicate rows (17 of 74,779) stay SHARED by NVL.
-Verify on UAT before handover: _checks/_solo-rule-verify-2026-09-15.sql (regex
+Verify on UAT before handover: git history: _checks/_solo-rule-verify-2026-09-15.sql (retired 2026-09-17) (regex
 compiles; PO's deal flips to SOLO; Citizens/CITIC land in 'not citi'; true
 2024 solo count). Rides the open handover.
 ADDENDUM 8 — VERIFIED on UAT 2026-09-15: REGEXP_LIKE compiles; label split exact

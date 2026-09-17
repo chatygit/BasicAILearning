@@ -2,7 +2,7 @@
 # COLUMN NAMES VERIFIED against the deployed view, not assumed. All 20 physical
 # columns of DGSTREAM.VW_ORDER_DETAIL are modelled below; there is nothing on
 # the view this file does not name, and nothing here the view does not carry.
-# Evidence: views/vw_order_detail.sql + views/_docs/_diagnostics-results.md (2026-08-10).
+# Evidence: views/vw_order_detail.sql + git history: views/_docs/_diagnostics-results.md (retired 2026-09-17) (2026-08-10).
 # ---------------------------------------------------------------------------
 # Governed ontology — ECM/DCM ORDER object (Oracle via Starburst/Trino).
 #
@@ -74,7 +74,10 @@ how_to_use:
      while filtering the investor)."
   - "ALWAYS set 'product'. ECM allocations/demand are SHARE COUNTS; DCM order
      amounts are notional MONEY — scope one 'currency' or group by 'currency' for
-     DCM money totals. State the unit in the answer."
+     DCM money totals. State the unit in the answer. Product unknown (a named
+     deal / issuer / transaction with no product
+     word)? never guess one — filter product in ['ECM','DCM'] and put
+     'product' in dimensions; the rows tell you which it is."
   - "PRODUCT APPLICABILITY IS A LOOKUP, NOT A JUDGEMENT. Eight fields are
      ECM-ONLY — the view hard-casts them to NULL on every DCM row, so the list is
      complete and closed: investor_category_key, meeting_type,

@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # Column names are VERIFIED against the deployed view (diagnostics Q1 — 22
 # columns) and against views/vw_deal_summary.sql. Every factual claim in this
-# file traces to views/_docs/_diagnostics-results.md; the query id is quoted inline.
+# file traces to git history: views/_docs/_diagnostics-results.md (retired 2026-09-17); the query id is quoted inline.
 # Counts quoted are QA existence proofs, never PROD sizing.
 # ---------------------------------------------------------------------------
 # Governed ontology — ECM/DCM DEAL object (Oracle via Starburst/Trino).
@@ -72,7 +72,10 @@ how_to_use:
   - "ALWAYS set a 'product' filter — 'ECM' for equity, 'DCM' for debt. ECM sizes
      are SHARE COUNTS; DCM sizes are notional MONEY. Never total ECM and DCM
      together — scope one product or group by 'product'. COUNT metrics are
-     unit-free, so one request with 'product' in dimensions covers both."
+     unit-free, so one request with 'product' in dimensions covers both.
+     Product unknown (a named deal / issuer / transaction with no product
+     word)? never guess one — filter product in ['ECM','DCM'] and put
+     'product' in dimensions; the rows tell you which it is."
   - "DCM money caveat: this object's DEAL_SIZE is a single deal-level figure and
      is NOT scoped to one currency (a deal may price in several — see
      'currencies'). For currency-comparable DCM money totals, use the
@@ -102,6 +105,13 @@ how_to_use:
      list is built from a currency IDENTIFIER column, so '%USD%' may match
      nothing; see the currencies filter and use the tranche object's 'currency'
      for ECM until that is checked."
+  - "RANKINGS THAT FEED AN ORDERBOOK DRILL-DOWN ('largest 5 IPOs, then their top
+     investors / allocations / indications'): add investor_count gte 1 to the
+     ranking query and say 'ranked among deals with orderbook data' — a deal
+     with no book returns 0 rows on the drill-down (QA 2026-09-16: the 5 largest
+     IPOs were all bookless shells; two drill-downs returned nothing). Bare deal
+     lists and counts NEVER get this filter: a deal without orders is still a
+     deal."
   - "NULL IS NOT ZERO on the roll-ups. order_count and investor_count reach this
      view through a LEFT JOIN, so a deal with NO orders carries NULL, not 0 — a
      'fewer than 10 orders' threshold silently drops those deals. Count them with

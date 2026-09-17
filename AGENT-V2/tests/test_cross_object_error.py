@@ -253,3 +253,36 @@ if __name__ == "__main__":
         sys.exit(1)
     print("A missing field ends the attempt with an explanation, not another guess.")
     sys.exit(0)
+
+
+METRIC_SLOT_ERR = (
+    "Unknown dimension 'total_allocation' for source 'capital_markets_order'. "
+    "Known dimensions: ['investor_name', 'investor_category', 'order_allocation']"
+)
+
+
+def test_a_metric_sent_as_a_dimension_is_a_slot_error():
+    """UAT 2026-09-16: total_allocation (the order object's OWN metric) sent in
+    `dimensions` was answered with 'exists on capital_markets_deal — a different
+    grain — cannot be answered', and the agent gave up. A metric in the wrong
+    slot is a one-word correction, never a cross-grain verdict."""
+    spec = FakeRegistry.SPECS["capital_markets_order"]
+    spec.metrics = {"total_allocation": object()}
+    spec.source = "capital_markets_order"
+    try:
+        out = explain(METRIC_SLOT_ERR, "unknown_dimension", "capital_markets_order")
+    finally:
+        del spec.metrics
+        del spec.source
+    assert out.get("field_is_metric_here") is True
+    assert "METRIC on capital_markets_order" in out["message"]
+    assert "Put it in `metric`" in out["message"]
+    assert "cannot be answered" not in out["message"]
+    assert out["field_available_on"] == ["capital_markets_order"]
+
+
+def test_specs_without_metrics_still_explain_cross_object():
+    """The fake specs carry no `metrics` attribute — the explainer must not
+    depend on it (getattr), or every cross-object explanation would die."""
+    out = explain(SECTOR_ERR, "unknown_filter", "capital_markets_order")
+    assert "capital_markets_deal" in out["message"]

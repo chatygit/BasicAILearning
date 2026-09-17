@@ -157,12 +157,37 @@ class DomainQueryService:
                 return payload
             field = match.group(1)
             here = str(request.get("source") or "").strip()
+            # A METRIC name in the wrong slot is the commonest miss (UAT
+            # 2026-09-16: total_allocation / total_deal_size sent as a
+            # dimension). Before hunting other objects, check whether the
+            # field is a metric right HERE — that is a one-word correction,
+            # and the cross-grain verdict below would be false and fatal.
+            try:
+                here_spec = self.registry.get(here) if here else None
+            except Exception:  # noqa: BLE001 - unknown source: fall through
+                here_spec = None
+            here_metrics = getattr(here_spec, "metrics", None) or {}
+            here_name = getattr(here_spec, "source", None) or here
+            if here_spec is not None and field in here_metrics:
+                payload["message"] = (
+                    f"{err.message} '{field}' IS available here — it is a "
+                    f"METRIC on {here_name}. Put it in `metric`, not in "
+                    f"`dimensions` or `filters` (dimensions are grouping/display "
+                    f"fields; a metric is aggregated). Re-send the same request "
+                    f"with metric='{field}'."
+                )
+                payload["field_available_on"] = [here_name]
+                payload["field_is_metric_here"] = True
+                logger.info("BQS field miss: field=%s is a METRIC on %s (wrong slot)",
+                            field, here_name)
+                return payload
             elsewhere = []
             for name in self.registry.list_sources():
                 if name == here:
                     continue
                 spec = self.registry.get(name)
-                if field in spec.filters or field in spec.dimensions:
+                if field in spec.filters or field in spec.dimensions \
+                        or field in (getattr(spec, "metrics", None) or {}):
                     elsewhere.append(name)
             if elsewhere:
                 payload["message"] = (

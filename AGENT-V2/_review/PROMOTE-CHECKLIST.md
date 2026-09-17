@@ -1,110 +1,63 @@
-# Promote checklist — ECM/DCM text2sql agent
+# Promote checklist — Capital Markets Agent (AGENT-V2)
 
-Two gates. The first is mechanical and takes 2 seconds; the second is the part a
-machine cannot judge. Nothing promotes until gate 1 is green.
+Two gates, then a fixed order. Nothing promotes until gate 1 is green.
+We have NO PROD access: every PROD-side line is a request to an access holder,
+answered by a screenshot or a written confirmation — never a task we tick.
 
----
-
-## Gate 1 — mechanical (run it, don't skim it)
-
+## Gate 1 — mechanical
 ```bash
-python3 regression_check.py          # exit 0 = safe to promote
-python3 regression_check.py -v       # show every check
+cd AGENT-V2 && python3 _review/ontology_check.py && python3 -m pytest tests/ -q
 ```
+Extend the gate with every fix: a phrase pin, a structural check, or a test.
+When it fails there are two honest outcomes — fix the regression, or
+consciously retire the assertion in the same commit. Never delete a red check
+to get green.
 
-Covers, for every config layer:
-
-| Layer | What it proves |
-|---|---|
-| STRUCTURE | YAML/JSON parse, all rule regexes compile, no duplicate rule names, no empty-matching regex, schema column count |
-| SQL CORPUS | every SQL shape that ever broke production is still **rejected — by the right rule** (diagnosis, not just rejection); every corrected shape still passes all rules; all query-library statements pass |
-| INVARIANTS | load-bearing doctrine text still present (class-word map, id quoting, window bound, B&D `(true)`, reply anatomy…); retired doctrines still absent (`ORDER_ID … DCM only`, `Solo = ECM only`, `NO upper bound`) |
-| CROSS-LAYER | facts that must appear in every layer that needs them (a rule living only in the skill dies on skill-absent turns — that was the NYSE bug) |
-
-**Extend it with every fix — this is the whole point:**
-
-- fixed a bad SQL shape → add it to `BAD_SQL` with the expected rule keyword
-- wrote a concrete mapping → add the exact phrase to `INVARIANTS`
-- overturned a doctrine → add the old wording to `RETIRED`
-- rule must hold everywhere → add it to `CROSS_LAYER`
-
-**When it fails, there are only two honest outcomes:** fix the regression, or
-*consciously retire* the assertion (doctrine genuinely changed) — edit the case
-and note why in the same commit. Never delete a red check to get green.
-
----
-
-## Gate 2 — behavioral smoke set (fresh session each, after restart)
-
-The suite cannot judge model behavior. These eleven prompts each pin a class we
-fixed; check the fingerprint, not just "looks fine".
-
-| # | Prompt | Fingerprint to verify |
-|---|---|---|
-| 1 | List all deals in NYSE exchange | broad OR-both LIKE, rows returned |
-| 2 | List all Citi B&D deals/tranches in 2024 | BND_BROKER index recipe; **ECM-only user sees no DCM branch** |
-| 3 | Security identifiers for deal &lt;multi-tranche&gt; | grouped per TRANCHE_NAME; zipped `CUSIP x · FIGI y` in one cell |
-| 4 | Top 10 Energy Common Stock FO deals in Q1 2026 | `UPPER(EQUITY_TYPE) = 'COMMON STOCK'`, not PRODUCT_TYPE |
-| 5 | All orders for deal &lt;91-order deal&gt;, then "next 20" ×5 | banners 1–20/91 … 81–91/91, absolute `#`, ends only at 91 |
-| 6 | Top 10 deals with two or more tranches in 2026 | headline says **found** count, not "top 10" over 5 rows |
-| 7 | Orders with investor region Non USA for deal X | negation predicate; `US` **and** `United States` both handled; NULL-region count stated |
-| 8 | Deals priced in the last 12 months for TESLA INC | bounded window — **no 2028 rows** |
-| 9 | &lt;listing&gt; → "analyze &lt;row 1&gt;" | **zero** entity_search calls; uses the id from the shown table |
-| 10 | → "list those deals with their ticker and use of proceeds" | same rows, same order, same `#`; columns **appended**, not replaced |
-| 11 | Any listing | quantitative brief → table (units in headers) → Insights & Trends → numbered follow-ups |
-
-Record pass/fail per prompt with the trace id. A failure here becomes a new
-Gate 1 case wherever it can be mechanized.
-
----
+## Gate 2 — behaviour (fresh session per prompt, after a restart)
+Run the prioritised prompts in `QA-PROMPTS.md`. Record the answer screenshot,
+the session's Total Prompt Tokens, and the ⚡ run_bqs_query args on any error.
+A failure becomes a gate-1 pin wherever it can be mechanised.
 
 ## Promote order
+1. **Views first** — configs name columns only the new views have. Before
+   the handover: `views/_checks/db-asks.sql` S1 (source-name validation —
+   every statement "no rows selected" on the target environment) and any
+   pre-handover asks listed there (section D on UAT). Files go over verbatim
+   and comment-free; a failed Flyway script aborts every later script.
+2. **After the view deploy, before any prompt** — `views/_deploy-check.sql`:
+   A0 shows nine LAST_DDL_TIMEs of today; structure rows 17, 1y, 1z, 18 PASS;
+   grain rows 7, 8, 9, 10b, 11b, 12b PASS; population rows 15, 15b, 20b, 21,
+   21b; section K timings screenshotted. Then db-asks B through Starburst —
+   the Oracle-side check cannot see a stale connector metadata cache.
+   Lesson 2026-09-16: a "deployed" batch was partial; "done" is unverified
+   until A0 is screenshotted.
+3. **Environment** — BQS_ENABLED_SOURCES must list all nine objects
+   (fail-closed; an env without it silently hides the object):
+   - [ ] BQS_ENABLED_SOURCES=capital_markets_deal,capital_markets_tranche,capital_markets_order,capital_markets_entity,capital_markets_hedge,capital_markets_hedge_trade,capital_markets_trade,capital_markets_designation,capital_markets_trade_syndicate
+   - [ ] Verify: discover with no source lists NINE objects.
+4. **Server (MCP)** — release train only; ontology yamls ship inside it.
+5. **SKILL.md + agents.yaml** — higher environments never read adk/config/*:
+   the agent, skills and toolset are created in the Ask Banking onboarding UI,
+   so promoting = copying the instructions into that UI by hand.
+6. **Restart** — pods and the local ADK load definitions at startup;
+   un-restarted runtimes are why "fixed" things appear to regress. Then gate 2.
 
-1. **View DDL** first if columns changed (else new-column SQL hits ORA-00904)
-2. Configs: `skill-v7.md`, `agents-v6.yml`, `domain-v4.yml`,
-   `vw_deal_order_summary-v3.json`, `sql-validation-v2.yml`, `unspported-v2.json`
-3. Server changes (`text2sql_surgical_changes-v2.py`) — separate deploy
-4. **Restart the app** (bootstrap-once: pods load definitions at startup —
-   un-restarted pods are why "fixed" things appear to regress)
-5. Gate 2 in fresh sessions
+## PROD freeze (2026-08-21)
+Only agents.yaml + SKILL.md are updatable in PROD; server, ontology and views
+ride the release train. Any ruling that can be expressed as SKILL doctrine
+ships that way first.
 
-## U4 / numeric-mapping items (added 2026-09-03)
-- [ ] PROD Starburst catalog carries oracle.number.default-scale=9 +
-      oracle.number.rounding-mode=HALF_UP (mirror of the UAT ask in
-      AGENT-V2/_review/bds-catalog-request-2026-09-03.md) BEFORE agent go-live
-- [ ] PROD runs the ROUND-bounded view release (wave 2) before relying on the
-      lossless-mapping argument
-- [ ] Re-run AGENT-V2/views/_checks/_scale-probes-2026-09-02.sql against PROD —
-      fresh census; DEV counts are not expectations (QA≠PROD)
-
-## PROD ACCESS: WE HAVE NONE (2026-09-14)
-This team cannot query, probe, or verify PROD. Every PROD-side item above is a
-REQUEST to an access holder (release/DBA/support), never a task we can tick
-ourselves, and its result comes back as a screenshot or written confirmation.
-Consequences to respect:
-- Never state PROD data facts (counts, fill rates, "PROD looks fine"). PROD
-  behaviour is INFERRED from the release record — which view/config version is
-  deployed — not observed.
-- A defect found in QA/UAT is a PROD SUSPICION until the release record says
-  whether the carrying release reached PROD. Ask that question FIRST; it is
-  answerable from release records without DB access.
-- PROD-only verification (deploy-check, probes, timings) must ship WITH the
-  release as instructions for whoever runs it, or it will not happen at all.
-
-## BQS_ENABLED_SOURCES — the nine-object allow-list (added 2026-09-04)
-The server default (config.py) still enumerates the FOUR original objects; any
-environment (and any LOCAL run) without the override silently hides the other
-five — objects load, discovery omits them, the agent honestly refuses hedge/
-trade/designation asks (observed 2026-09-04, QA-local). Before/with every
-config deploy, the environment MUST set:
-- [ ] BQS_ENABLED_SOURCES=capital_markets_deal,capital_markets_tranche,capital_markets_order,capital_markets_entity,capital_markets_hedge,capital_markets_hedge_trade,capital_markets_trade,capital_markets_designation,capital_markets_trade_syndicate
-      (or "*" for local testing only — explicit list in deployed envs, fail-closed)
-- [ ] Verify: discover with no source — the routing index must list NINE objects.
-
-## ECM indication rebuild (2026-09-14)
-- [ ] Rerun views/_checks/_ioi-final-confirm-2026-09-14c.sql on UAT BEFORE the
-      handover: DEMAND_EQ_MAX must equal ORDERS_WITH_BOTH for SHARES and BOND
-      (it is 100% on QA). A mismatch means the same-unit fill does not hold in
-      that environment — do NOT ship it there.
-- [ ] Desk sign-off that deal-level ECM totals may cover the share-denominated
-      book only, with the exclusion disclosed.
+## PROD-side items (asks to the access holder)
+- [ ] Starburst PROD catalog: oracle.number.default-scale=9 +
+      oracle.number.rounding-mode=HALF_UP (ASKS-external.md §3). The view
+      CASTs make this optional for cast columns; keep it as the safety net.
+      PROD must run the ROUND-bounded view release before relying on it.
+- [ ] Scale re-census on PROD: db-asks S2 (DEV/UAT counts are not expectations).
+- [ ] Deploy-check A0 + structure + grain on PROD after every view release,
+      then db-asks B through Starburst.
+- [ ] Re-measure the QA-labelled coverage numbers quoted in SKILL/yaml prose
+      (regions, settlement, issuer names, unmapped currencies) and update them.
+- [ ] Which PROD mechanism produced "Limit returned as Demand" (wave-2 view
+      fallback vs the V2 mislabel of order_amount) — answerable from the
+      release record, no DB access needed. The SKILL rule covers the label
+      half now; the value half needs the IOI-rebuild view release.

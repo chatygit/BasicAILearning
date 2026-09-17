@@ -53,7 +53,7 @@ order asks should be seconds) and one Gemini trace promptTokenCount (baseline
 
 Screenshot misbehavers to ADK as usual; triage happens as a batch.
 
-## Batch 2026-09-15 retests (NEW ENHANCEMENTS register: uat-dcm-feedback-2026-09-15.md)
+## Batch 2026-09-15 retests (NEW ENHANCEMENTS register: BACKLOG.md §4)
 Needs BOTH the nine views AND the config push in QA (+ BQS_ENABLED_SOURCES / new server default).
 - [ ] 15. "Give me a list of Fidelity's indications and allocations in all DCM
       priced deals over the past 6 months" — PASS: the investor-given matrix
@@ -89,3 +89,27 @@ Needs BOTH the nine views AND the config push in QA (+ BQS_ENABLED_SOURCES / new
 - [ ] 25. "For Origination Transaction ID 75043505, what are the allowed order
       types for each tranche?" — PASS: per tranche, "Spread, Yield (Max Price
       not allowed)" for both NACN US$ 3NC2 tranches; never "not found".
+
+## Run 1 results — 2026-09-16 (local ADK → QA; screenshots + OCP log summary in ADK)
+- 1 PASS · 3 PASS (one query; entity list after a 0 total is noise) · 4 shape
+  PASS, values junk (billion-x ratios = tiny test deal sizes) · 5a PASS · 5b
+  PASS (txn 75077304, 1 query, 2.7 s) · 15 one query, matrix lacks issuer +
+  tenors columns · 16 flat top-5 across the txn, per-tranche unknown (needs ⚡
+  args) · 17 FAIL (trade object, deal_id = txn id, 7 queries) → SKILL row ·
+  18 five queries / 167 s from product guessing → SKILL row; "next N" re-runs
+  the 62 s query (cache) · 23 PASS shape, 5,896 shells · 2 (ran anyway):
+  largest IPOs bookless → 0 rows → deal-yaml drill-down rule ·
+  metric-in-dimensions x4 (rows 10/14/22 + 2) → standalone trap row.
+- Log row 2: Trino "demand_as_submitted cannot be resolved" → run
+  views/_checks/db-asks.sql (section B) through Starburst.
+- Not yet run: 20, 22, 24. Rerun after an ADK restart on the 16:08+ SKILL:
+  17, 18, 16 (capture ⚡ args), 2.
+
+## Run 2 results — 2026-09-17 (views re-deployed)
+- 17 PASS (Amundi on 75043505; add the tranche column) · 20 PASS shape (E5
+  NULL-region check pending) · 22 PASS · 16 PASS (txn 75064973, 1 investor;
+  one slot slip) · 18 FAIL again (ECM guessed; catalogs' "ALWAYS set product"
+  → recipe fixed in SKILL + catalogs) · 2 twelve queries, indication dropped
+  (trap row rewritten as a recipe).
+- Rerun after an ADK restart: 18, 2, 16 on the two-tranche txn 75043505.
+  Then 24 and 15 (new columns, now that the views are in).

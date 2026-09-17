@@ -1800,11 +1800,39 @@ check(has(SKILL, "LIMIT IS NOT DEMAND (PROD ticket 2026-09-15)"),
       "[semantic] SKILL lost the limit-vs-demand rule — the PROD ticket "
       "(limit value returned as Demand/Order/Indication) regresses; the SKILL "
       "is the only layer shippable under the PROD freeze")
+check(has(SKILL, "do NOT guess one: send `product in ['ECM','DCM']`")
+      and has(DEAL, "never guess one — filter product in ['ECM','DCM']")
+      and has(ORDER, "never guess one — filter product in ['ECM','DCM']"),
+      "[trap] SKILL/deal/order lost the no-product-guessing recipe on NAME asks — "
+      "'ALWAYS set product' alone made the agent guess ECM on 'Travelers': 0 rows, "
+      "5 queries / 185 s, two days running (QA 2026-09-16/17)")
+check(has(SKILL, "the trade object has NO `transaction_id`, so a txn id never "
+                 "goes in `deal_id`"),
+      "[trap] SKILL lost the indicate-is-an-order-ask / txn-id-is-not-a-deal-id "
+      "rule — 'BlueFin trading … indicate in txn X' routed to trades by deal_id: "
+      "7 zero-row queries (QA 2026-09-16)")
+check(has(SKILL, "Extra figures come from ROW-LEVEL columns")
+      and has(SKILL, "never one request per deal"),
+      "[trap] SKILL lost the several-figures trap row (one metric per request; "
+      "row-level columns are dimensions; N deals = one partitioned request) — "
+      "8 metric-in-dimensions slips and a 12-query IPO drill-down (QA 2026-09-16/17)")
+check(has(DEAL, "add investor_count gte 1 to the")
+      and has(DEAL, "a deal without orders is still a"),
+      "[trap] deal card lost the drill-down ranking rule (investor_count gte 1, "
+      "disclosed; never on bare lists) — 'largest 5 IPOs → top investors' drilled "
+      "into bookless shells (QA 2026-09-16)")
 check(has(TRANCHE, "allowed_order_spread:") and has(TRANCHE, "ALLOWED ORDER TYPES (E7")
       and has(SKILL, '"allowed order types"'),
       "[v3cfg] E7 allowed-order-type flags lost (tranche dims/filters/note or "
       "SKILL routing) — 'allowed order types per tranche' regresses to 'not "
       "found' (PO Jira C176173F-35783)")
+check("field_is_metric_here" in text(ROOT / "app" / "services" / "domain_query_service.py"),
+      "[server] domain_query_service lost the metric-in-wrong-slot explanation — "
+      "a metric sent as a dimension is again reported as 'not available on ANY "
+      "object' / 'cannot be answered' (UAT 2026-09-16, 629k-token dead end)")
+check(has(SKILL, "NEVER goes in `dimensions` or `filters`"),
+      "[request] SKILL lost the metric-slot rule — total_*/max_*/*_count names "
+      "drift into dimensions and the request is rejected")
 check(has(SKILL, "CONSTRAINT COLUMNS (banker ruling 2026-09-15)"),
       "[present] SKILL lost the constraint-columns rule — filters must echo "
       "as columns (pricing_ts DESC for time windows, currency, class); DCM "
@@ -2087,7 +2115,7 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
 # briefly used to fill blank ECM demand, which rendered a 135.00 limit as
 # "135 shares" against a true 4,444,444-share indication and polluted deal-grain
 # TOTAL_DEMAND/SUBSCRIPTION_RATIO. The fallback is banned in BOTH views until a
-# real quantity column is identified (_checks/_indication-source-probe-2026-09-14).
+# real quantity column is identified (probe retired to git history 2026-09-17).
 for _vf, _expr in [("vw_order_detail.sql", "LIMIT_VALUE) AS NUMBER(38,4)) AS ORDER_DEMAND_QTY"),
                    ("vw_deal_summary.sql", "LIMIT_VALUE")]:
     check(_expr not in text(ROOT / "views" / _vf),
