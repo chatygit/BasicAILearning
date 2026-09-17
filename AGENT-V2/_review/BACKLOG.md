@@ -18,9 +18,6 @@ PROD item is an ask.
       the ⚡ args), then 24 and 15. Proof the new SKILL is live: the ✓
       load_skill text contains "Extra figures come from ROW-LEVEL columns".
 - [ ] 16 / TC1: confirm the top-N is PER TRANCHE (partition_by) from the ⚡ args.
-- [ ] Transaction → deal multiplicity: txn 75075343 = 3 DCM deals on UAT.
-      Doctrine now partitions by deal too and discloses; db-asks E sizes the
-      pattern (test copies vs source property). PROD relaunch behaviour unknown.
 - [ ] 15 matrix: issuer_name + tenors columns missing from the Fidelity answer
       although the ORDERBOOK MATRIX note lists them — check it is applied.
 - [ ] Per-tranche listings must carry tranche_name ("three indications" for

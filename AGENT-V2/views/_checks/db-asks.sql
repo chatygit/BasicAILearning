@@ -320,36 +320,63 @@ FROM   DGSTREAM.VW_TRANCHE_SUMMARY
 GROUP  BY PRODUCT, DEAL_SHARING_TYPE ORDER BY PRODUCT, DEAL_SHARING_TYPE;
 
 
+
+
 -- ===========================================================================
--- E. 2026-09-17 — ONE TRANSACTION ID → SEVERAL DEALS? txn 75075343 maps to
--- three DCM deals on UAT (SD01_regression, DNT_Issuerview_Regression_R21,
--- AUTOD-SD07-CITI-SOLO). Size the pattern: test re-creations only, or a
--- source-model property that PROD relaunches would also show.
+-- F. 2026-09-17 — ISSUER PRECEDENCE: the DCM issuer name is the party master's
+-- Primary Client keyed by ORIGINATION_TRANSACTION_ID, falling back to the
+-- orderbook's own OB_DEAL_ISSUER only when the master has nothing. Txn
+-- 75075343 labels three unrelated test deals WALMART INC. How often do the
+-- two sources DISAGREE on UAT, and what does the orderbook say for those three?
 -- ===========================================================================
 
--- E1. Distribution: how many transaction ids map to 1, 2, 3… deals.
-SELECT DEALS_PER_TXN, COUNT(*) AS TXN_IDS_
-FROM  (SELECT ORIGINATION_TRANSACTION_ID, COUNT(DISTINCT DEAL_ID) AS DEALS_PER_TXN
-       FROM   DGSTREAM.OB_DEAL_TRANCHE
-       WHERE  ORIGINATION_TRANSACTION_ID IS NOT NULL
-       GROUP  BY ORIGINATION_TRANSACTION_ID)
-GROUP  BY DEALS_PER_TXN
-ORDER  BY DEALS_PER_TXN;
+-- F1. The orderbook's own issuer for the deals on 75075343 (what our view hides).
+SELECT DT.DEAL_ID, MAX(DT.DEAL_NAME) AS DEAL_NAME, DI.NAME AS OB_ISSUER, DI.GFCID AS OB_GFCID
+FROM   DGSTREAM.OB_DEAL_TRANCHE DT
+LEFT JOIN DGSTREAM.OB_DEAL_ISSUER DI
+       ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID
+WHERE  DT.ORIGINATION_TRANSACTION_ID = '75075343'
+GROUP  BY DT.DEAL_ID, DI.NAME, DI.GFCID
+ORDER  BY DT.DEAL_ID;
 
--- E2. The deals behind 75075343, one row each (status, pricing, book size).
-SELECT DEAL_ID, DEAL_NAME, DEAL_STATUS, FIRST_PRICED, TRANCHE_COUNT, ORDER_COUNT
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-WHERE  TRANSACTION_ID = '75075343';
+-- F2. The party master's Primary Client for that transaction (what wins).
+SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PUBLISHED_TS
+FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
+WHERE  TRANSACTION_ID = '75075343' AND PARTY_ROLE = 'Primary Client'
+ORDER  BY PUBLISHED_TS DESC;
 
--- E3. The 20 most-duplicated transaction ids with their deal names — do they
---     all read as regression / automation copies?
+-- F3. Across UAT: deals where both sources answer, and how many disagree.
+SELECT COUNT(*) AS DEALS_WITH_BOTH,
+       SUM(CASE WHEN UPPER(TRIM(OB.OB_ISSUER)) <> UPPER(TRIM(P.PARTY_NAME)) THEN 1 ELSE 0 END) AS DISAGREE_
+FROM  (SELECT DT.DEAL_ID, MAX(DT.ORIGINATION_TRANSACTION_ID) AS TXN, MAX(DI.NAME) AS OB_ISSUER
+       FROM   DGSTREAM.OB_DEAL_TRANCHE DT
+       JOIN   DGSTREAM.OB_DEAL_ISSUER DI
+              ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID
+       WHERE  DT.ORIGINATION_TRANSACTION_ID IS NOT NULL AND DI.NAME IS NOT NULL
+       GROUP  BY DT.DEAL_ID) OB
+JOIN  (SELECT TRANSACTION_ID, PARTY_NAME
+       FROM  (SELECT TRANSACTION_ID, PARTY_NAME,
+                     ROW_NUMBER() OVER (PARTITION BY TRANSACTION_ID ORDER BY PUBLISHED_TS DESC) AS RN_
+              FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
+              WHERE  PARTY_ROLE = 'Primary Client')
+       WHERE  RN_ = 1) P
+       ON P.TRANSACTION_ID = OB.TXN;
+
+-- F4. A sample of the disagreements (company names only).
 SELECT *
-FROM  (SELECT ORIGINATION_TRANSACTION_ID, COUNT(*) AS DEALS_,
-              LISTAGG(DEAL_NAME, ' | ') WITHIN GROUP (ORDER BY DEAL_NAME) AS NAMES_
-       FROM  (SELECT DISTINCT ORIGINATION_TRANSACTION_ID, DEAL_ID, DEAL_NAME
-              FROM   DGSTREAM.OB_DEAL_TRANCHE
-              WHERE  ORIGINATION_TRANSACTION_ID IS NOT NULL)
-       GROUP  BY ORIGINATION_TRANSACTION_ID
-       HAVING COUNT(*) > 1
-       ORDER  BY DEALS_ DESC)
-WHERE  ROWNUM <= 20;
+FROM  (SELECT OB.DEAL_ID, OB.TXN, OB.OB_ISSUER, P.PARTY_NAME AS PCM_ISSUER
+       FROM  (SELECT DT.DEAL_ID, MAX(DT.ORIGINATION_TRANSACTION_ID) AS TXN, MAX(DI.NAME) AS OB_ISSUER
+              FROM   DGSTREAM.OB_DEAL_TRANCHE DT
+              JOIN   DGSTREAM.OB_DEAL_ISSUER DI
+                     ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID
+              WHERE  DT.ORIGINATION_TRANSACTION_ID IS NOT NULL AND DI.NAME IS NOT NULL
+              GROUP  BY DT.DEAL_ID) OB
+       JOIN  (SELECT TRANSACTION_ID, PARTY_NAME
+              FROM  (SELECT TRANSACTION_ID, PARTY_NAME,
+                            ROW_NUMBER() OVER (PARTITION BY TRANSACTION_ID ORDER BY PUBLISHED_TS DESC) AS RN_
+                     FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
+                     WHERE  PARTY_ROLE = 'Primary Client')
+              WHERE  RN_ = 1) P
+              ON P.TRANSACTION_ID = OB.TXN
+       WHERE  UPPER(TRIM(OB.OB_ISSUER)) <> UPPER(TRIM(P.PARTY_NAME)))
+WHERE  ROWNUM <= 15;
