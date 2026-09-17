@@ -110,7 +110,7 @@ index-probe milliseconds; no application change on your side.
 
 ---
 
-## 3. BDS / Starburst team — Oracle NUMBER mapping on bds_dg_oraas (status: drafted 2026-09-03; made OPTIONAL by the view CASTs, still wanted for any unconstrained column)
+## 3. BDS / Starburst team — Oracle NUMBER mapping on bds_dg_oraas (status: drafted 2026-09-03; OPTIONAL since UAT 2026-09-17 — Trino SHOW COLUMNS now maps every cast metric as decimal(38,4)/(38,6); keep only as a safety net for unconstrained columns)
 
 Ask: on catalog bds_dg_oraas set
 ```
@@ -138,10 +138,9 @@ DEV/UAT measurements, never PROD facts.
 Verification: `DESCRIBE bds_dg_oraas.dgstream.vw_order_detail` shows
 order_amount as decimal(38,9).
 
-Related, same team (2026-09-16): after a view redeploy, does the Oracle
-connector's metadata cache serve the old column list until a TTL expires? If
-so, what is the TTL and can it be flushed on request? (db-asks B is our
-Trino-side detector.)
+Metadata-cache question of 2026-09-16 WITHDRAWN 2026-09-17: the "column cannot
+be resolved" error was a partial view deploy, not the connector cache. db-asks
+S3 stays our detector after every deploy.
 
 ---
 
@@ -151,3 +150,20 @@ Trino-side detector.)
 - Citi solo deal in the PO's restructured prompt priced 18-Sep-2026, not
   14-Sep (14-Sep is the deal id's creation date).
 - BlueFin does not exist in QA; the TC2 retest must run on UAT.
+
+---
+
+## 5. Data owners / governance — a PROD-shaped UAT (status: not yet asked formally)
+We test against a UAT copy where test deals carry real issuer names over
+synthetic books (51 % of DCM and 86 % of ECM deals have no orderbook; the 15
+largest "IPOs" are nameless 100bn shells). Every coverage number in the
+agent's doctrine is therefore a UAT number, and PROD defects (the "Limit
+returned as Demand" ticket) reach us only as tickets.
+Ask, in order of preference:
+1. A masked PROD snapshot into UAT: last 24 months of deals, tranches and
+   orders; investor and salesperson names hashed or replaced from a lookup;
+   deal/issuer names kept (public information); amounts kept.
+2. If (1) is refused: run the count-only census pack
+   (`views/_checks/db-asks.sql` S4) on PROD at each release and return the
+   screenshots — no rows leave PROD.
+3. Read access to PROD OCP query logs and ADK traces (behaviour, not data).

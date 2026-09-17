@@ -1,5 +1,8 @@
 # QA test prompts — local run, 2026-09-04 config + views
 
+FROM 2026-09-17: run everything on UAT ONLY (local ADK pointed at UAT); the user
+will not run QA checks — never ask for them. "QA" below = historical labels.
+
 QA data ≠ UAT/PROD: judge BEHAVIOR SHAPES, not counts. Watch the ADK trace for
 QUERY COUNT per ask ("one query" is half of what shipped). Side-captures that
 make the session doubly useful: OCP log timings (levers B+C live — deal-scoped

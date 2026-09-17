@@ -13,7 +13,7 @@ are allowed but FROZEN (no new dependencies). We have NO PROD access — every
 PROD item is an ask.
 
 ## 1. Config (SKILL / agents.yaml / ontology yamls) — ships freely; PROD freeze = SKILL + agents.yaml only
-- [ ] QA reruns after a local ADK restart (skills load at startup): 18
+- [ ] UAT reruns (user runs UAT ONLY from 2026-09-17; local ADK pointed at UAT) after a restart — skills load at startup: 18
       Travelers, 2 largest IPOs, 16 on the two-tranche txn 75043505 (capture
       the ⚡ args), then 24 and 15. Proof the new SKILL is live: the ✓
       load_skill text contains "Extra figures come from ROW-LEVEL columns".
@@ -22,8 +22,6 @@ PROD item is an ask.
       although the ORDERBOOK MATRIX note lists them — check it is applied.
 - [ ] Per-tranche listings must carry tranche_name ("three indications" for
       Amundi were three tranches, unlabelled).
-- [ ] E5: NULL-region demand must be disclosed on CUSIP geography splits
-      (db-asks C decides whether it exists on 63307A3T0).
 - [ ] E9: "hedge orders for deal 75043505" → zero — was the txn id sent as
       deal_id? Needs the ⚡ args. If so: an 8-digit id on DCM is a
       transaction_id (DCM deal ids are 'I-…' strings), whatever word was used.
@@ -68,9 +66,6 @@ PROD item is an ask.
 - [ ] TODO tool schema: the `dimensions` parameter description says
       "attribute names only — a total_*/largest_*/*_count name is a metric,
       put it in `metric`". Schemas are seen every turn; cheaper than SKILL prose.
-- [ ] OPTIONAL env-scoped implicit filter (BQS_IMPLICIT_FILTERS; QA/UAT set,
-      PROD unset) — only if the bookless census (db-asks A) says bookless
-      deals are test-only.
 
 ## 3. Views (next planned batch — approval-gated; files handed verbatim, comment-free)
 - [ ] vw_order_detail: transaction_id pushdown — join ORIGINATION_TRANSACTION_ID
@@ -79,6 +74,8 @@ PROD item is an ask.
       order asks run 19-29 s vs 2-6 s deal-scoped. Tranche view too if slow.
 - [ ] vw_tranche_summary: ORDER_COUNT / INVESTOR_COUNT roll-ups (additive), so
       tranche-level rankings can filter bookless shells like the deal object.
+      (UAT 2026-09-17: 19,804 of 21,009 ECM Citi-solo tranches in 2024 sit on
+      bookless deals — nothing at tranche grain can say so today.)
 - [ ] Rename vw_trade_syndicate → vw_trade_designation (before whitelist; it
       is per-dealer designation amounts; source EMPTY today).
 - [ ] DCM FROM/TO_ACCOUNT_* ferry onto the trade view (offered, undecided).
@@ -87,9 +84,10 @@ PROD item is an ask.
       (9), _COMPARABLE_SECURITY (22), _REFERENCE (27), _ISSUER (16),
       _HEDGE_SECURITY (22), _DOCUMENT, _COMMENT; ~170 unprojected
       OB_DEAL_TRANCHE columns. Census against the prompt corpus first.
-- [ ] Pre-handover on UAT: db-asks D (same-unit IOI fill must hold:
-      DEMAND_EQ_MAX = ORDERS_WITH_BOTH for SHARES and BOND) + desk sign-off
-      that ECM deal totals cover the share-denominated book only, disclosed.
+- [ ] IOI rebuild: UAT confirm PASSED 2026-09-17 (SHARES 3,694/3,694, BOND
+      267/267; 48/48 multi-point curves match MAX; coverage 8.9 % → 72.3 %).
+      Remaining: desk sign-off that ECM deal totals cover the share-denominated
+      book only, disclosed.
 - [ ] Upstream data-team ticket (not ours): ECM deal region is a source gap —
       5% of ECM transactions carry a region on any base-transaction version.
 
@@ -102,7 +100,7 @@ implemented (config + views). Only what is still open is listed.
 | C176173F-35774 | constraint columns echoed (USD, 12 months, pricing date desc) | config DONE; verify on prompt 19 |
 | C176173F-35781 | Citi solo deals, all Citi entities | view DONE, verified UAT (14,250 vs 4,025 all-time); tell PO the deal priced 18-Sep, not 14-Sep |
 | C176173F-35773 | top 5 investors in txn 75043505, per tranche | config DONE; verify partition_by from the ⚡ args (QA 16) |
-| C176173F-35776 | CUSIP 63307A3T0 geography split | E2 DONE (three tranches is real: two UAT test entries + the NACN book); E5 OPEN → db-asks C |
+| C176173F-35776 | CUSIP 63307A3T0 geography split | E2 DONE (three tranches is real: two UAT test entries + the NACN book); E5 CLOSED 2026-09-17 — UAT split reconciles to the 26.75M book, no unrecorded-region bucket |
 | C176173F-35777 | top 5 by allocation across all IG deals 2024 | view (product_class ferried) + config DONE; QA 22 PASS |
 | C176173F-35783 | allowed order types per tranche | view + config DONE (Y/N flags; txn 75043505 = Y/Y/N both tranches); verify prompt 25 |
 | TC2 | "Did BlueFin trading indicate…" | SKILL routing fixed 2026-09-16; BlueFin absent from QA → retest on UAT |

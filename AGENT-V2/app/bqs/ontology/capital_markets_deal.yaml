@@ -106,12 +106,12 @@ how_to_use:
      nothing; see the currencies filter and use the tranche object's 'currency'
      for ECM until that is checked."
   - "RANKINGS THAT FEED AN ORDERBOOK DRILL-DOWN ('largest 5 IPOs, then their top
-     investors / allocations / indications'): add investor_count gte 1 to the
-     ranking query and say 'ranked among deals with orderbook data' — a deal
-     with no book returns 0 rows on the drill-down (QA 2026-09-16: the 5 largest
-     IPOs were all bookless shells; two drill-downs returned nothing). Bare deal
-     lists and counts NEVER get this filter: a deal without orders is still a
-     deal."
+     investors / allocations / indications'): add investor_count gte 1 AND
+     deal_name is_not_null to the ranking query and say 'ranked among named
+     deals with orderbook data' — a deal with no book returns 0 rows on the
+     drill-down, and a nameless row is a shell (UAT 2026-09-17: the 15 largest
+     'IPOs' were nameless 100bn bookless shells). Bare deal lists and counts
+     NEVER get this filter: a deal without orders is still a deal."
   - "NULL IS NOT ZERO on the roll-ups. order_count and investor_count reach this
      view through a LEFT JOIN, so a deal with NO orders carries NULL, not 0 — a
      'fewer than 10 orders' threshold silently drops those deals. Count them with
@@ -294,7 +294,7 @@ dimensions:
 # -------------------------------- FILTERS ----------------------------------
   total_demand: {column: total_demand, description: "Deal-grain total demand. ECM sums SHARE-EQUIVALENTS only (2026-09-14): orders submitted in currency/percent/face are EXCLUDED because adding units is meaningless — the source book does the same (its column is 'Indication (Common Shares)'). Disclose that a deal total covers the share-denominated part of the book, never present it as the whole book. NULL/0 = none captured."}
   total_allocation: {column: total_allocation, description: "Deal-grain total allocation across the book."}
-  subscription_ratio: {column: subscription_ratio, description: "STORED oversubscription ratio = total_demand / deal_size (2dp, deal grain). Use this column — never recompute from separate queries. NULL = deal size missing/zero: say not computable, never treat as 1x."}
+  subscription_ratio: {column: subscription_ratio, description: "STORED oversubscription ratio = total_demand / deal_size (2dp, deal grain). Use this column — never recompute from separate queries. NULL = deal size missing/zero: say not computable, never treat as 1x. Always project deal_size and total_demand beside it — a ratio is only readable with its parts (UAT carries 1000x+ ratios from tiny test sizes; no cap, hot retail tranches can be 1000x for real)."}
 filters:
   total_demand:
     column: total_demand

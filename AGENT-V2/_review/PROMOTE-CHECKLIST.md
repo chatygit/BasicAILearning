@@ -22,12 +22,12 @@ A failure becomes a gate-1 pin wherever it can be mechanised.
 1. **Views first** — configs name columns only the new views have. Before
    the handover: `views/_checks/db-asks.sql` S1 (source-name validation —
    every statement "no rows selected" on the target environment) and any
-   pre-handover asks listed there (section D on UAT). Files go over verbatim
+   open pre-handover asks listed there. Files go over verbatim
    and comment-free; a failed Flyway script aborts every later script.
 2. **After the view deploy, before any prompt** — `views/_deploy-check.sql`:
    A0 shows nine LAST_DDL_TIMEs of today; structure rows 17, 1y, 1z, 18 PASS;
    grain rows 7, 8, 9, 10b, 11b, 12b PASS; population rows 15, 15b, 20b, 21,
-   21b; section K timings screenshotted. Then db-asks B through Starburst —
+   21b; section K timings screenshotted. Then db-asks S3 through Starburst —
    the Oracle-side check cannot see a stale connector metadata cache.
    Lesson 2026-09-16: a "deployed" batch was partial; "done" is unverified
    until A0 is screenshotted.
@@ -54,9 +54,13 @@ ships that way first.
       PROD must run the ROUND-bounded view release before relying on it.
 - [ ] Scale re-census on PROD: db-asks S2 (DEV/UAT counts are not expectations).
 - [ ] Deploy-check A0 + structure + grain on PROD after every view release,
-      then db-asks B through Starburst.
-- [ ] Re-measure the QA-labelled coverage numbers quoted in SKILL/yaml prose
-      (regions, settlement, issuer names, unmapped currencies) and update them.
+      then db-asks S3 through Starburst.
+- [ ] PROD census pack: db-asks S4 (counts + vocabularies only, no rows) — its
+      results replace every UAT-labelled number in SKILL/yaml prose.
+- [ ] PROD behaviour evidence without DB access: after each release, request a
+      week of the OCP query log (timings, error classes, zero-row rate,
+      generated SQL) and the ADK traces of PROD sessions — behaviour is
+      observable in logs even when data is not.
 - [ ] Which PROD mechanism produced "Limit returned as Demand" (wave-2 view
       fallback vs the V2 mislabel of order_amount) — answerable from the
       release record, no DB access needed. The SKILL rule covers the label

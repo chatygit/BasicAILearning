@@ -1816,7 +1816,8 @@ check(has(SKILL, "Extra figures come from ROW-LEVEL columns")
       "[trap] SKILL lost the several-figures trap row (one metric per request; "
       "row-level columns are dimensions; N deals = one partitioned request) — "
       "8 metric-in-dimensions slips and a 12-query IPO drill-down (QA 2026-09-16/17)")
-check(has(DEAL, "add investor_count gte 1 to the")
+check(has(DEAL, "add investor_count gte 1 AND")
+      and has(DEAL, "deal_name is_not_null to the ranking query")
       and has(DEAL, "a deal without orders is still a"),
       "[trap] deal card lost the drill-down ranking rule (investor_count gte 1, "
       "disclosed; never on bare lists) — 'largest 5 IPOs → top investors' drilled "

@@ -637,7 +637,7 @@ Coverage: live ECM orders with a usable indication 6,240 -> 51,334 of 71,003
 KNOWN QUIRK (unresolved): both DEMAND_QTY and IOI_QTY carry implausible
 sentinels (1e13; 337 IOI rows >= 1e9). We inherit source behaviour rather than
 invent a cutoff — flagged for the desk.
-BEFORE HANDOVER: rerun _checks/db-asks.sql (section D) on UAT — the
+PRE-HANDOVER CHECK: UAT confirm PASSED 2026-09-17 — SHARES 3,694/3,694, BOND 267/267, coverage 8.9 % → 72.3 % (the probe was retired to git history) on UAT — the
 identity above is measured on QA and QA != UAT/PROD.
 
 ## ADDENDUM 8 — 2026-09-15 Citi entity rule (SOLO / B&D) fixed

@@ -7,207 +7,6 @@
 
 
 -- ===========================================================================
--- A. 2026-09-16 — BOOKLESS-DEAL CENSUS. Run on QA AND UAT.
--- Decides whether "skip deals without orders" is a config default, a QA-only
--- server switch, or (last resort) a view filter.
--- ===========================================================================
-
--- A1. Size of the bookless population per product (what the agent can see).
-SELECT PRODUCT,
-       COUNT(*) AS DEALS_,
-       SUM(CASE WHEN ORDER_COUNT IS NULL THEN 1 ELSE 0 END) AS BOOKLESS_,
-       ROUND(100 * SUM(CASE WHEN ORDER_COUNT IS NULL THEN 1 ELSE 0 END) / COUNT(*), 1)
-         AS BOOKLESS_PCT
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-GROUP  BY PRODUCT
-ORDER  BY PRODUCT;
-
--- A2. Bookless share by pricing year (NULL year = never priced). 2023+ only.
-SELECT PRODUCT,
-       EXTRACT(YEAR FROM LAST_PRICED) AS PRICED_YEAR,
-       COUNT(*) AS DEALS_,
-       SUM(CASE WHEN ORDER_COUNT IS NULL THEN 1 ELSE 0 END) AS BOOKLESS_
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-WHERE  LAST_PRICED IS NULL OR LAST_PRICED >= DATE '2023-01-01'
-GROUP  BY PRODUCT, EXTRACT(YEAR FROM LAST_PRICED)
-ORDER  BY PRODUCT, PRICED_YEAR NULLS FIRST;
-
--- A3. THE DECIDER — is "no orders" a good junk proxy? Book x name-looks-like-test.
---     BOOKLESS + REAL-LOOKING  = what a view filter would wrongly hide.
---     HAS ORDERS + TEST-LOOKING = junk a "no orders" filter would NOT clean.
-SELECT PRODUCT, BOOK_, NAME_, COUNT(*) AS DEALS_
-FROM  (SELECT PRODUCT,
-              CASE WHEN ORDER_COUNT IS NULL THEN 'BOOKLESS' ELSE 'HAS ORDERS' END AS BOOK_,
-              CASE WHEN REGEXP_LIKE(NVL(DEAL_NAME, ''),
-                     'test|demo|regression|issuerview|do.?not.?edit|don.?t touch|(^|[ _-])DNT([ _-]|$)|sprint|autod|perf deal|samuel|manoj|retest|book sharing|SD0[0-9]|smoke|dummy|sample|check',
-                     'i')
-                   THEN 'TEST-LOOKING' ELSE 'REAL-LOOKING' END AS NAME_
-       FROM   DGSTREAM.VW_DEAL_SUMMARY)
-GROUP  BY PRODUCT, BOOK_, NAME_
-ORDER  BY PRODUCT, BOOK_, NAME_;
-
--- A4. Bookless deals by status: never-priced shells vs priced-but-no-book.
-SELECT PRODUCT, DEAL_STATUS,
-       CASE WHEN LAST_PRICED IS NULL THEN 'NEVER PRICED' ELSE 'PRICED' END AS PRICED_,
-       COUNT(*) AS BOOKLESS_DEALS_
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-WHERE  ORDER_COUNT IS NULL
-GROUP  BY PRODUCT, DEAL_STATUS,
-          CASE WHEN LAST_PRICED IS NULL THEN 'NEVER PRICED' ELSE 'PRICED' END
-ORDER  BY PRODUCT, BOOKLESS_DEALS_ DESC;
-
--- A5. "Largest 5 IPOs" → 0 investors: do the biggest IPOs carry a book?
-SELECT *
-FROM  (SELECT DEAL_NAME, DEAL_ID, DEAL_SIZE, ORDER_COUNT, INVESTOR_COUNT,
-              LAST_PRICED, DEAL_STATUS
-       FROM   DGSTREAM.VW_DEAL_SUMMARY
-       WHERE  PRODUCT = 'ECM'
-       AND   (UPPER(OFFERING_TYPE) LIKE '%IPO%' OR UPPER(EQUITY_TYPE) LIKE '%IPO%')
-       ORDER  BY DEAL_SIZE DESC NULLS LAST)
-WHERE  ROWNUM <= 15;
-
--- A6. Citi SOLO 2024 (prompt 23 listed 5,896 tranches): how many sit on
---     bookless deals, how many are zero-size shells, how many both?
-SELECT T.PRODUCT,
-       COUNT(*) AS SOLO_TRANCHES_2024,
-       SUM(CASE WHEN D.ORDER_COUNT IS NULL THEN 1 ELSE 0 END) AS ON_BOOKLESS_DEALS_,
-       SUM(CASE WHEN NVL(T.TRANCHE_SIZE, 0) = 0 THEN 1 ELSE 0 END) AS ZERO_SIZE_,
-       SUM(CASE WHEN D.ORDER_COUNT IS NULL AND NVL(T.TRANCHE_SIZE, 0) = 0
-                THEN 1 ELSE 0 END) AS BOTH_
-FROM   DGSTREAM.VW_TRANCHE_SUMMARY T
-JOIN   DGSTREAM.VW_DEAL_SUMMARY D
-       ON D.DEAL_ID = T.DEAL_ID AND D.PRODUCT = T.PRODUCT
-WHERE  T.DEAL_SHARING_TYPE = 'SOLO'
-AND    T.PRICING_TS >= DATE '2024-01-01' AND T.PRICING_TS < DATE '2025-01-01'
-GROUP  BY T.PRODUCT;
-
--- A7. The "billion-x oversubscribed" rows (prompt 4): a tiny-deal-size problem,
---     not a bookless one — these deals HAVE orders.
-SELECT PRODUCT,
-       SUM(CASE WHEN SUBSCRIPTION_RATIO > 1000 THEN 1 ELSE 0 END) AS OVER_1000X_,
-       SUM(CASE WHEN SUBSCRIPTION_RATIO > 1000 AND DEAL_SIZE < 1000 THEN 1 ELSE 0 END)
-         AS OVER_1000X_TINY_SIZE_,
-       SUM(CASE WHEN SUBSCRIPTION_RATIO BETWEEN 2 AND 100 THEN 1 ELSE 0 END)
-         AS PLAUSIBLE_2_TO_100X_
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-WHERE  LAST_PRICED >= DATE '2026-01-01'
-GROUP  BY PRODUCT;
-
--- A8. What a view filter would HIDE: the largest real-looking bookless deals.
---     On UAT, real issuer names here = the filter is wrong for PROD.
-SELECT *
-FROM  (SELECT PRODUCT, DEAL_NAME, DEAL_ID, ISSUER_NAME, DEAL_SIZE, DEAL_STATUS,
-              LAST_PRICED, TRANSACTION_ID
-       FROM   DGSTREAM.VW_DEAL_SUMMARY
-       WHERE  ORDER_COUNT IS NULL
-       AND    NOT REGEXP_LIKE(NVL(DEAL_NAME, ''),
-                'test|demo|regression|issuerview|do.?not.?edit|don.?t touch|(^|[ _-])DNT([ _-]|$)|sprint|autod|perf deal|samuel|manoj|retest|book sharing|SD0[0-9]|smoke|dummy|sample|check',
-                'i')
-       ORDER  BY DEAL_SIZE DESC NULLS LAST)
-WHERE  ROWNUM <= 20;
-
--- A9. DCM 2025+: bookless x has-origination-txn-id. A shell keyed straight
---     into the orderbook has neither; a real origination-linked deal has both.
-SELECT CASE WHEN ORDER_COUNT IS NULL THEN 'BOOKLESS' ELSE 'HAS ORDERS' END AS BOOK_,
-       CASE WHEN TRANSACTION_ID IS NULL THEN 'NO TXN ID' ELSE 'HAS TXN ID' END AS TXN_,
-       COUNT(*) AS DEALS_
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-WHERE  PRODUCT = 'DCM' AND LAST_PRICED >= DATE '2025-01-01'
-GROUP  BY CASE WHEN ORDER_COUNT IS NULL THEN 'BOOKLESS' ELSE 'HAS ORDERS' END,
-          CASE WHEN TRANSACTION_ID IS NULL THEN 'NO TXN ID' ELSE 'HAS TXN ID' END
-ORDER  BY BOOK_, TXN_;
-
-
--- ===========================================================================
--- B. 2026-09-16 — TRINO-SIDE COLUMN VISIBILITY. Run THROUGH STARBURST/TRINO
--- (catalog bds_dg_oraas), NOT Oracle. Run after every view deploy: the
--- Oracle-side deploy check cannot see a stale connector metadata cache.
--- Any failure here = Trino still serves the pre-deploy column list → BDS ask.
--- ===========================================================================
-SELECT demand_as_submitted, demand_unit, tenors, product_class
-FROM   bds_dg_oraas.dgstream.vw_order_detail
-LIMIT  1;
-
-SELECT allowed_order_spread, allowed_order_yield, allowed_order_max_price
-FROM   bds_dg_oraas.dgstream.vw_tranche_summary
-LIMIT  1;
-
-SELECT transaction_id, tenors
-FROM   bds_dg_oraas.dgstream.vw_hedge_order
-LIMIT  1;
-
-SELECT transaction_id, tenors
-FROM   bds_dg_oraas.dgstream.vw_hedge_trade
-LIMIT  1;
-
-SHOW COLUMNS FROM bds_dg_oraas.dgstream.vw_order_detail;
-
-
--- ===========================================================================
--- C. 2026-09-17 — CUSIP 63307A3T0: which tranches, and does the geography
--- split reconcile (E5)? The agent reported US 24.0M + FR 2.0M + KR 0.75M.
--- ===========================================================================
-
--- C1. Which tranches carry the CUSIP (three ids came back)?
-SELECT DEAL_ID, TRANCHE_ID, TRANCHE_NAME, DEAL_NAME, IDENTIFIER_VALUE
-FROM   DGSTREAM.VW_TRANCHE_SUMMARY
-WHERE  UPPER(IDENTIFIER_VALUE) LIKE '%63307A3T0%';
-
--- C2. Demand by region INCLUDING the unrecorded bucket. A '(region not
---     recorded)' row here that the agent did not disclose = E5 still open.
-SELECT NVL(INVESTOR_REGION, '(region not recorded)') AS REGION_,
-       SUM(ORDER_DEMAND_QTY) AS DEMAND_, COUNT(*) AS ORDERS_
-FROM   DGSTREAM.VW_ORDER_DETAIL
-WHERE  (DEAL_ID, TRANCHE_ID) IN (SELECT DEAL_ID, TRANCHE_ID
-                                 FROM   DGSTREAM.VW_TRANCHE_SUMMARY
-                                 WHERE  UPPER(IDENTIFIER_VALUE) LIKE '%63307A3T0%')
-GROUP  BY NVL(INVESTOR_REGION, '(region not recorded)')
-ORDER  BY DEMAND_ DESC;
-
-
--- ===========================================================================
--- D. 2026-09-14 — UAT PRE-HANDOVER: the ECM indication rebuild's same-unit
--- fill must hold on UAT before the views are handed over. PASS = for
--- IOI_UNIT SHARES and BOND, DEMAND_EQ_MAX = ORDERS_WITH_BOTH (100 % on QA).
--- A mismatch means MAX(IOI_QTY) is not the desk's DEMAND_QTY there — do not
--- ship the rebuild to that environment.
--- ===========================================================================
-SELECT O.IOI_UNIT,
-       COUNT(*)                                             AS ORDERS_WITH_BOTH,
-       COUNT(CASE WHEN O.DEMAND_QTY = X.MAX_QTY THEN 1 END) AS DEMAND_EQ_MAX,
-       COUNT(CASE WHEN O.DEMAND_QTY = X.TOP_QTY THEN 1 END) AS DEMAND_EQ_TOP
-FROM   DGSTREAM.OB_ECM_ORDER O
-JOIN  (SELECT ORDER_ID,
-              MAX(IOI_QTY) AS MAX_QTY,
-              MAX(IOI_QTY) KEEP (DENSE_RANK FIRST
-                   ORDER BY LIMIT_VALUE ASC NULLS FIRST) AS TOP_QTY
-       FROM   DGSTREAM.OB_ECM_ORDER_IOI
-       GROUP  BY ORDER_ID) X ON X.ORDER_ID = O.ORDER_ID
-WHERE  O.DEMAND_QTY IS NOT NULL
-GROUP  BY O.IOI_UNIT
-ORDER  BY ORDERS_WITH_BOTH DESC;
-
-SELECT COUNT(*) AS MULTIPOINT_SHARES_WITH_DEMAND,
-       COUNT(CASE WHEN O.DEMAND_QTY = X.MAX_QTY THEN 1 END) AS EQ_MAX,
-       COUNT(CASE WHEN O.DEMAND_QTY = X.TOP_QTY THEN 1 END) AS EQ_TOP
-FROM   DGSTREAM.OB_ECM_ORDER O
-JOIN  (SELECT ORDER_ID, COUNT(*) AS N,
-              MAX(IOI_QTY) AS MAX_QTY,
-              MAX(IOI_QTY) KEEP (DENSE_RANK FIRST
-                   ORDER BY LIMIT_VALUE ASC NULLS FIRST) AS TOP_QTY
-       FROM   DGSTREAM.OB_ECM_ORDER_IOI
-       GROUP  BY ORDER_ID HAVING COUNT(*) > 1) X ON X.ORDER_ID = O.ORDER_ID
-WHERE  O.DEMAND_QTY IS NOT NULL AND O.IOI_UNIT IN ('SHARES','BOND');
-
-SELECT COUNT(*) AS LIVE_ORDERS,
-       COUNT(CASE WHEN O.DEMAND_QTY IS NOT NULL THEN 1 END) AS HAS_DEMAND_TODAY,
-       COUNT(CASE WHEN O.DEMAND_QTY IS NOT NULL
-                    OR O.IOI_UNIT IN ('SHARES','BOND') THEN 1 END) AS COVERED_AFTER_FIX
-FROM   DGSTREAM.OB_ECM_ORDER O
-WHERE  O.ORDER_STATUS NOT IN ('CANCELLED','DELETED','PASS');
-
-
--- ===========================================================================
 -- S1. STANDING — SOURCE-NAME VALIDATION. Run BEFORE every view handover, on
 -- the target environment. Every statement must return "no rows selected";
 -- an ORA-00904 names the typo (WHERE 1=0 = zero cost). RULE: this list must
@@ -391,3 +190,131 @@ FROM DGSTREAM.OPUS_ECM_TRANSACTION;
 SELECT COUNT(CASE WHEN DEAL_FEE_MM <> ROUND(DEAL_FEE_MM, 6) THEN 1 END) AS FEEMM_GT6,
        COUNT(CASE WHEN DEAL_SIZE_MM <> ROUND(DEAL_SIZE_MM, 6) THEN 1 END) AS SIZEMM_GT6
 FROM DGSTREAM.OPUS_BASE_TRANSACTION;
+
+
+-- ===========================================================================
+-- S3. STANDING — TRINO-SIDE COLUMN VISIBILITY. Run THROUGH STARBURST/TRINO
+-- (catalog bds_dg_oraas), NOT Oracle. Run after every view deploy: the
+-- Oracle-side deploy check cannot see a stale connector metadata cache.
+-- Any failure here = Trino still serves the pre-deploy column list → BDS ask.
+-- PASSED UAT 2026-09-17: all four SELECTs resolve; SHOW COLUMNS maps every cast
+-- metric as decimal(38,4)/(38,6) — nothing left at decimal(38,0).
+-- ===========================================================================
+SELECT demand_as_submitted, demand_unit, tenors, product_class
+FROM   bds_dg_oraas.dgstream.vw_order_detail
+LIMIT  1;
+
+SELECT allowed_order_spread, allowed_order_yield, allowed_order_max_price
+FROM   bds_dg_oraas.dgstream.vw_tranche_summary
+LIMIT  1;
+
+SELECT transaction_id, tenors
+FROM   bds_dg_oraas.dgstream.vw_hedge_order
+LIMIT  1;
+
+SELECT transaction_id, tenors
+FROM   bds_dg_oraas.dgstream.vw_hedge_trade
+LIMIT  1;
+
+SHOW COLUMNS FROM bds_dg_oraas.dgstream.vw_order_detail;
+
+
+
+
+-- ===========================================================================
+-- S4. STANDING — PROD CENSUS PACK. Counts and vocabularies ONLY (no deal
+-- names, no investor names, no row-level data) so an access holder can run
+-- it on PROD and share a screenshot. Run at promote time and after every
+-- PROD view release. The results REPLACE the UAT-labelled numbers quoted in
+-- SKILL / yaml prose (regions, settlement, indication coverage, vocabularies,
+-- bookless share). Every statement is a full scan of one view — run
+-- off-peak; the order-view ones take minutes on 5M+ rows.
+-- ===========================================================================
+
+-- S4.1 Bookless share per product (UAT 2026-09-17: DCM 51 %, ECM 86 %).
+SELECT PRODUCT, COUNT(*) AS DEALS_,
+       SUM(CASE WHEN ORDER_COUNT IS NULL THEN 1 ELSE 0 END) AS BOOKLESS_
+FROM   DGSTREAM.VW_DEAL_SUMMARY
+GROUP  BY PRODUCT;
+
+-- S4.2 ECM indication coverage + IOI unit mix (UAT: 72.3 % covered; SHARES/BOND fill).
+SELECT O.IOI_UNIT, COUNT(*) AS LIVE_ORDERS,
+       COUNT(CASE WHEN O.DEMAND_QTY IS NOT NULL THEN 1 END) AS HAS_DEMAND
+FROM   DGSTREAM.OB_ECM_ORDER O
+WHERE  O.ORDER_STATUS NOT IN ('CANCELLED','DELETED','PASS')
+GROUP  BY O.IOI_UNIT
+ORDER  BY LIVE_ORDERS DESC;
+
+-- S4.3 Order-level fill rates per product (doctrine quotes UAT %s for these).
+SELECT PRODUCT, COUNT(*) AS ORDERS_,
+       COUNT(INVESTOR_REGION)         AS HAS_REGION,
+       COUNT(INVESTOR_CATEGORY)       AS HAS_CATEGORY,
+       COUNT(INVESTOR_CLASSIFICATION) AS HAS_CLASSIFICATION,
+       COUNT(TRANSACTION_ID)          AS HAS_TXN_ID
+FROM   DGSTREAM.VW_ORDER_DETAIL
+GROUP  BY PRODUCT;
+
+-- S4.4 Vocabularies with counts (labels only).
+SELECT PRODUCT, DEAL_STATUS, COUNT(*) AS DEALS_
+FROM   DGSTREAM.VW_DEAL_SUMMARY
+GROUP  BY PRODUCT, DEAL_STATUS ORDER BY PRODUCT, DEALS_ DESC;
+
+SELECT PRODUCT, INVESTOR_CLASSIFICATION, COUNT(*) AS ORDERS_
+FROM   DGSTREAM.VW_ORDER_DETAIL
+GROUP  BY PRODUCT, INVESTOR_CLASSIFICATION ORDER BY PRODUCT, ORDERS_ DESC;
+
+SELECT PRODUCT, INVESTOR_REGION, COUNT(*) AS ORDERS_
+FROM   DGSTREAM.VW_ORDER_DETAIL
+GROUP  BY PRODUCT, INVESTOR_REGION ORDER BY PRODUCT, ORDERS_ DESC;
+
+-- S4.5 Deal-level coverage: region, settlement, issuer identity, txn id.
+SELECT PRODUCT, COUNT(*) AS DEALS_,
+       COUNT(DEAL_REGION)    AS HAS_REGION,
+       COUNT(SETTLEMENT_TS)  AS HAS_SETTLEMENT,
+       COUNT(GFCID)          AS HAS_GFCID,
+       COUNT(ISSUER_NAME)    AS HAS_ISSUER_NAME,
+       COUNT(TRANSACTION_ID) AS HAS_TXN_ID
+FROM   DGSTREAM.VW_DEAL_SUMMARY
+GROUP  BY PRODUCT;
+
+-- S4.6 Transaction-id coverage by pricing year (the "forward-populated" claim).
+SELECT PRODUCT, EXTRACT(YEAR FROM LAST_PRICED) AS YR,
+       COUNT(*) AS DEALS_, COUNT(TRANSACTION_ID) AS HAS_TXN_ID
+FROM   DGSTREAM.VW_DEAL_SUMMARY
+WHERE  LAST_PRICED >= DATE '2022-01-01'
+GROUP  BY PRODUCT, EXTRACT(YEAR FROM LAST_PRICED)
+ORDER  BY PRODUCT, YR;
+
+-- S4.7 Subscription-ratio distribution (are deal sizes and demand sane?).
+SELECT PRODUCT,
+       SUM(CASE WHEN SUBSCRIPTION_RATIO IS NULL THEN 1 ELSE 0 END)                       AS RATIO_NULL,
+       SUM(CASE WHEN SUBSCRIPTION_RATIO < 1 THEN 1 ELSE 0 END)                             AS UNDER_1X,
+       SUM(CASE WHEN SUBSCRIPTION_RATIO BETWEEN 1 AND 10 THEN 1 ELSE 0 END)                AS X1_TO_10,
+       SUM(CASE WHEN SUBSCRIPTION_RATIO > 10 AND SUBSCRIPTION_RATIO <= 100 THEN 1 ELSE 0 END) AS X10_TO_100,
+       SUM(CASE WHEN SUBSCRIPTION_RATIO > 100 THEN 1 ELSE 0 END)                           AS OVER_100X
+FROM   DGSTREAM.VW_DEAL_SUMMARY
+GROUP  BY PRODUCT;
+
+-- S4.8 Identifier-type combinations and currency vocabulary per product.
+SELECT PRODUCT, IDENTIFIER_TYPE, COUNT(*) AS TRANCHES_
+FROM   DGSTREAM.VW_TRANCHE_SUMMARY
+GROUP  BY PRODUCT, IDENTIFIER_TYPE ORDER BY PRODUCT, TRANCHES_ DESC;
+
+SELECT PRODUCT, CURRENCY, COUNT(*) AS TRANCHES_
+FROM   DGSTREAM.VW_TRANCHE_SUMMARY
+GROUP  BY PRODUCT, CURRENCY ORDER BY PRODUCT, TRANCHES_ DESC;
+
+-- S4.9 Citi dealer spellings (bank labels): the SOLO regex must catch every
+--      real Citi entity and no competitor (Citizens / CITIC).
+SELECT DEALER,
+       CASE WHEN REGEXP_LIKE(DEALER, '^CITI(GROUP|BANK)?([ _]|$)', 'i')
+            THEN 'CITI' ELSE 'not citi' END AS VERDICT,
+       COUNT(DISTINCT DEAL_TRANCHE_ID) AS TRANCHES_
+FROM   DGSTREAM.OB_TRANCHE_SYNDICATE_MEMBER
+WHERE  UPPER(DEALER) LIKE '%CITI%'
+GROUP  BY DEALER ORDER BY VERDICT, TRANCHES_ DESC;
+
+-- S4.10 SOLO / SHARED split per product.
+SELECT PRODUCT, DEAL_SHARING_TYPE, COUNT(*) AS TRANCHES_
+FROM   DGSTREAM.VW_TRANCHE_SUMMARY
+GROUP  BY PRODUCT, DEAL_SHARING_TYPE ORDER BY PRODUCT, DEAL_SHARING_TYPE;
