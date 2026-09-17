@@ -122,16 +122,24 @@ how_to_use:
      → total_allocation (NOT total_order_amount — see the next note)."
   - "ORDERBOOK MATRIX (banker ruling 2026-09-15). Any indications/allocations
      listing, investor-given OR issuer-given, projects: investor_name ·
-     issuer_name · pricing_ts · deal_name · tenors · tranche_name ·
-     order_demand_qty · order_allocation · currency (issuer-given puts
-     issuer_name, pricing_ts, deal_name first, then investor_name). ONE ROW PER
-     TRANCHE — DCM deals are multi-tranche; never collapse to deal grain. Sort:
-     investor-given → issuer_name asc; issuer-given → investor_name asc; top-N →
+     issuer_name · pricing_date · deal_name · tenors · tranche_name ·
+     order_demand_qty · order_allocation · currency, plus transaction_id when
+     the ask names one (issuer-given puts issuer_name, pricing_date, deal_name
+     first, then investor_name). ONE ROW PER TRANCHE — DCM deals are
+     multi-tranche; never collapse to deal grain. Sort: investor-given →
+     issuer_name asc; issuer-given → investor_name asc; top-N →
      order_demand_qty desc, then name asc. KEEP zero-indication and
      zero-allocation rows: the book stores explicit 0 orders and bankers expect
      them — never add a gt-0 filter to these matrices. Figures are AS STORED in
      the tranche currency: label the currency column, never assume USD, never
-     FX-convert."
+     FX-convert. HEADERS: order_demand_qty is 'Indication' and order_allocation
+     is 'Allocation' at this grain ('Demand' is the deal/tranche TOTAL word);
+     the currency column is 'Tranche Currency'. A column that is identical on
+     every row (product on a one-transaction ask) is said once in the sentence,
+     not shown as a column (UAT 2026-09-17: the PO's expected layout for
+     'top 5 investors in txn 75076736' had Transaction ID · Pricing Date ·
+     Deal Name · Tranche Name · Indication · Allocation · Tranche Currency;
+     the answer showed Investor · GP Id · Product · Demand)."
   - "TOP-N INVESTORS ON A MULTI-TRANCHE DEAL = top N PER TRANCHE: partition_by
      tranche_name (or tenors) with per_partition_limit N, ordered
      order_demand_qty desc. A flat limit N across the deal mixes tranches and
@@ -345,7 +353,7 @@ dimensions:
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS denormalized to order grain (release 2) — 'investor X in convertibles' is ONE request here now. Same values/rules as the deal object's equity_type; match class words with like. NULL on DCM."}
   order_ownership: {column: order_ownership, products: ["ECM"], description: "ECM. HOME = our (owned) book, AWAY = orders seen away. BOTH are in every total since release 2 (before it, every figure was HOME-only — ECM population grew ~45% at the flip). 'Our orders'/'Citi's book' = HOME. NULL = flag not stored. NULL on DCM (no such flag)."}
   sales_person: {column: sales_person, products: ["DCM"], description: "DCM (release 3; NULL on ECM until its sales columns are measured). Covering salesperson, first + last name (~30% populated). 'Orders covered by <person>' filters here; NULL = not recorded."}
-  transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: the origination transaction id — FORWARD-POPULATED (recent Ipreo deals only; NULL on history) — a NULL means the deal predates the link, not 'no transaction'. TEXT, quote it. 'Transaction 75041397' asks filter here."}
+  transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: the origination transaction id — FORWARD-POPULATED (recent Ipreo deals only; NULL on history) — a NULL means the deal predates the link, not 'no transaction'. TEXT, quote it. 'Transaction 75041397' asks filter here. ONE TRANSACTION CAN MAP TO SEVERAL ORDERBOOK DEALS (UAT 2026-09-17: 75075343 → three deals, re-created regression copies; a PROD relaunch could do the same): on a transaction ask always project deal_id + deal_name, partition by deal_id as well as tranche, and when more than one deal comes back say so and answer per deal — never merge their books into one ranking."}
   order_status: {column: order_status, description: "Order status (V3, both products). NOTE: the ECM branch already excludes CANCELLED/DELETED/PASS rows at the view layer; DCM applies no exclusion — a DCM status breakdown can include statuses ECM never shows."}
   investor_lei: {column: investor_lei, products: ["ECM"], description: "ECM (V3). Investor LEI (sparse). NULL on DCM."}
   investor_qib_status: {column: investor_qib_status, products: ["DCM"], description: "DCM (V3). QIB flag as stored text ('false'/'true'/NULL)."}

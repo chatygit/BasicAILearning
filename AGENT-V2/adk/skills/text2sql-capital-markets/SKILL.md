@@ -162,7 +162,7 @@ total_allocation); the old two-step for it is dead. **Deal status, deal
 size, deal region and use of proceeds are on the order object too
 (2026-09-04)** — "how much did BlackRock put into refinancing deals in
 2025" is ONE `capital_markets_order` request (investor + `use_of_proceeds`
-+ the year's `pricing_ts` bounds + `total_allocation`). Only
++ the year's `pricing_date` bounds + `total_allocation`). Only
 **tranche-grain attributes orders don't carry** (coupon, seniority, ESG
 bond label, ratings, exchange, security identifiers) still need it, and the
 two-step is MANDATORY, never a refusal and never a menu back to the user
@@ -172,7 +172,7 @@ REFUSED, then, ferried the wrong way, it ran 40 queries and was aborted):**
 **(1) Ferry ids from the SMALLER side.** A named investor touches dozens of
 deals; an attribute/year population is hundreds. Example — "how much
 did BlackRock put into green bonds in 2025": R1 order object —
-`investor_name like '%BLACKROCK%'` + the year's `pricing_ts` bounds,
+`investor_name like '%BLACKROCK%'` + the year's `pricing_date` bounds,
 metric `total_allocation`, dimensions `[tranche_id]` (the investor's
 per-tranche allocations — ONE page, usually well under 50 rows; disclose
 that date-bounding drops NULL-pricing orders). R2 tranche object —
@@ -485,8 +485,8 @@ and `investor_count` undercounts — say so on a headcount.
 | "investors NEVER allocated despite placing orders" | ONE request: `total_allocation` grouped by `[investor_name, investor_id]` + your scope filters + **`having` total_allocation `eq` 0**. Grouping over order rows = they placed orders by construction; a row-level `order_allocation eq 0` FILTER is the WRONG shape (finds investors with ANY zero order, not zero-in-total). Phrase it "no allocation recorded in this scope" (0 = nothing OR unrecorded, indistinguishable) and expect a HUGE DCM list — lead with the truncation |
 | "top investors by ORDER SIZE" across products | NEVER `total_order_amount` with `product in [ECM,DCM]` — that SUMs the forbidden ECM IOI limit AND mixes shares with money. Either scope DCM (`total_order_amount`) — "USD-denominated" is bond language — or use `total_demand` with `product` in dimensions so units stay apart |
 | "allowed order types" / "can investors order on spread / yield / max price" | tranche · `allowed_order_spread` `allowed_order_yield` `allowed_order_max_price` (DCM Y/N flags, per tranche) — list the Y ones; NULL = not recorded |
-| "top investors by allocation / demand" | order · `metric: total_allocation` (or `total_demand`), `dimensions: [investor_name, investor_gp_id]`, order by the metric desc |
-| Several figures in one table ("size AND allocation AND indication"), or any "largest / biggest / how many" | ONE metric per request. Extra figures come from ROW-LEVEL columns, which are `dimensions`: `deal_size` · `tranche_size` · `order_allocation` · `order_demand_qty` · `subscription_ratio`. **An aggregate name (`total_*` `largest_*` `max_*` `average_*` `*_count`) NEVER goes in `dimensions` or `filters`** — the server rejects the request and the turn is lost (QA 2026-09-16/17: 8 slips). "Largest 5 IPOs" = deal · dimensions `[deal_name, deal_id, deal_size]` · order `deal_size desc` · limit 5. Their investors = ONE order request: `deal_id in [the 5 ids]` · dimensions `[deal_name, investor_name, investor_gp_id, order_demand_qty, order_allocation]` · `partition_by [deal_name]` · `per_partition_limit 5` · order `order_allocation desc` — never one request per deal (QA 2026-09-17: 12 queries, 369k tokens, and the indication still got dropped) |
+| "top investors by allocation / demand" | ACROSS MANY DEALS (a year, sector, product, class): order · `metric: total_allocation` (or `total_demand`), `dimensions: [investor_name, investor_id]`, order by the metric desc. ON ONE DEAL / TRANSACTION (an orderbook ask): the ORDERBOOK MATRIX listing from the order card — `metric: row_count` · `dimensions: [investor_name, investor_id, transaction_id, deal_id, deal_name, pricing_date, tranche_name, order_demand_qty, order_allocation, currency]` · `partition_by [deal_id, tranche_name]` (one transaction can map to SEVERAL orderbook deals — re-created copies; partition by deal too and say so when more than one comes back) · `per_partition_limit N` · `order [order_demand_qty desc]` — one row per investor per tranche, BOTH figures, headers Indication / Allocation / Tranche Currency (UAT 2026-09-17: the aggregate shape gave the PO "Investor · GP Id · Product · Demand" against an expected per-tranche matrix) |
+| Several figures in one table ("size AND allocation AND indication"), or any "largest / biggest / how many" | ONE metric per request. Extra figures come from ROW-LEVEL columns, which are `dimensions`: `deal_size` · `tranche_size` · `order_allocation` · `order_demand_qty` · `subscription_ratio`. **An aggregate name (`total_*` `largest_*` `max_*` `average_*` `*_count`) NEVER goes in `dimensions` or `filters`** — the server rejects the request and the turn is lost (QA 2026-09-16/17: 8 slips). "Largest 5 IPOs" = deal · dimensions `[deal_name, deal_id, deal_size]` · order `deal_size desc` · limit 5. Their investors = ONE order request: `deal_id in [the 5 ids]` · dimensions `[deal_name, investor_name, investor_id, order_demand_qty, order_allocation]` · `partition_by [deal_name]` · `per_partition_limit 5` · order `order_allocation desc` — never one request per deal (QA 2026-09-17: 12 queries, 369k tokens, and the indication still got dropped) |
 | "largest / biggest order" in a deal | order · LISTING ranked `order_demand_qty` desc (+ `order_id` asc tiebreak), value-first then `eq` (superlative rule) — **the size of an order is its DEMAND; `order_amount` is an IOI limit on ECM and ranks the wrong order**. "Largest allocation" ranks by `order_allocation` |
 | deal size / value / "biggest deal" | deal · `total_deal_size` / `largest_deal_size` |
 | tranche / issue size | tranche · `total_tranche_size` / `largest_tranche_size` |
@@ -580,7 +580,7 @@ the same number presented twice under different names.
 
 **CONSTRAINT COLUMNS (banker ruling 2026-09-15): every constraint in the ask
 becomes a column in the answer** so the user can validate — a time window →
-`pricing_ts` (sorted DESC), a currency → `currency`, a sector / rating / class →
+`pricing_date` (sorted DESC), a currency → `currency`, a sector / rating / class →
 that field. A listing that hides the filter it ran on reads as incomplete. DCM
 tranche listings show BOTH `tenors` and `tranche_name`. Money columns carry the
 TRANCHE currency as a column or label — never an assumed "(USD)".

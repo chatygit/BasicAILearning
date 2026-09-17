@@ -1822,6 +1822,12 @@ check(has(DEAL, "add investor_count gte 1 AND")
       "[trap] deal card lost the drill-down ranking rule (investor_count gte 1, "
       "disclosed; never on bare lists) — 'largest 5 IPOs → top investors' drilled "
       "into bookless shells (QA 2026-09-16)")
+check(has(ORDER, "HEADERS: order_demand_qty is 'Indication'")
+      and has(ORDER, "plus transaction_id when")
+      and has(ORDER, "is said once in the sentence"),
+      "[present] order card lost the matrix header/echo rules — 'Indication' "
+      "not 'Demand' at order grain, transaction_id echoed as a column, constant "
+      "columns dropped (PO expected layout, TC1, 2026-09-17)")
 check(has(TRANCHE, "allowed_order_spread:") and has(TRANCHE, "ALLOWED ORDER TYPES (E7")
       and has(SKILL, '"allowed order types"'),
       "[v3cfg] E7 allowed-order-type flags lost (tranche dims/filters/note or "
@@ -2463,6 +2469,57 @@ for _tf in sorted((ROOT / "tests").glob("test_*.py")):
     check(_rc == 0,
           f"[python] {_tf.name} FAILED — run `python3 tests/{_tf.name}` "
           f"directly to see which case regressed")
+
+# ---------------------------------------------------------------------------
+# NAMES — agent-facing doctrine must use catalog KEYS (business names), never
+# view column names or invented fields. 2026-09-17: the order card's matrix
+# note said `pricing_ts` and two SKILL rows said `investor_gp_id`; the object's
+# keys are pricing_date / investor_id, so an agent obeying the doctrine hit
+# unknown_dimension and fell back to a flat table (PO TC1 failed on the latest
+# config). Every underscore token inside a backtick span in SKILL must be a
+# metric/dimension/filter key of SOME catalog, or request/response vocabulary.
+# ---------------------------------------------------------------------------
+_CATALOG_KEYS = set()
+for _yf in sorted(ONT.glob("*.yaml")):
+    for _sec in ("metrics", "dimensions", "filters"):
+        _CATALOG_KEYS.update(n for n, _ in blocks(_yf, _sec))
+    _m = re.search(r"^source:\s*([a-z_]+)", text(_yf), re.M)
+    if _m:
+        _CATALOG_KEYS.add(_m.group(1))
+_NAMES_VOCAB = {
+    # request keys / operators
+    "partition_by", "per_partition_limit", "is_null", "is_not_null", "not_in",
+    "not_like", "computed_filters", "derived_filters", "time_grain",
+    "time_dimension", "date_anchor", "current_date", "max_limit",
+    # response keys / error codes
+    "entitled_products", "next_offset", "returned_rows", "did_you_mean",
+    "as_of_date", "generated_sql", "rank_in_group", "user_message",
+    "entitlement_denied", "no_entitled_products", "product_not_applicable",
+    "product_not_entitled", "stale_relative_window", "unknown_computed_filter",
+    "unsupported_intents", "usage_notes", "how_to_use",
+    # tools / servers / prose
+    "run_bqs_query", "discover_business_terms", "capital_markets_oracle_mcp",
+    "bill_and_deliver",
+    "product_type_name",  # the SKILL's own example of an INVENTED field
+    "over_allotment_authorized", "exercised_shares",  # halves of a slash-joined pair
+}
+_bad_names = {}
+for _span in re.findall(r"`([^`\n]+)`", text(SKILL)):
+    for _tok in re.findall(r"(?<![A-Za-z0-9_%])[a-z][a-z0-9_]*_[a-z0-9_]+(?![A-Za-z0-9_%])", _span):
+        if _tok not in _CATALOG_KEYS and _tok not in _NAMES_VOCAB:
+            _bad_names[_tok] = _bad_names.get(_tok, 0) + 1
+check(not _bad_names,
+      "[names] SKILL names fields that exist in NO catalog (use the yaml KEY, "
+      f"never the column or a guess): {sorted(_bad_names)}")
+check("investor_gp_id" not in text(SKILL) and "`pricing_ts`" not in text(SKILL),
+      "[names] SKILL uses a COLUMN name (investor_gp_id / pricing_ts) where the "
+      "business names are investor_id / pricing_date (TC1, 2026-09-17)")
+check(has(ORDER, "issuer_name · pricing_date · deal_name"),
+      "[names] order card matrix note names pricing_ts again — the key is pricing_date")
+check(has(SKILL, "ON ONE DEAL / TRANSACTION (an orderbook ask)")
+      and has(SKILL, "`partition_by [deal_id, tranche_name]`"),
+      "[trap] SKILL lost the two-shape rule for 'top investors' — the aggregate "
+      "shape on a one-deal/txn ask gave the PO a flat table (TC1, 2026-09-17)")
 
 print(f"\n{passes} checks passed, {len(failures)} failed\n")
 if failures:

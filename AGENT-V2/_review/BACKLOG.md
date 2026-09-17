@@ -18,6 +18,9 @@ PROD item is an ask.
       the ⚡ args), then 24 and 15. Proof the new SKILL is live: the ✓
       load_skill text contains "Extra figures come from ROW-LEVEL columns".
 - [ ] 16 / TC1: confirm the top-N is PER TRANCHE (partition_by) from the ⚡ args.
+- [ ] Transaction → deal multiplicity: txn 75075343 = 3 DCM deals on UAT.
+      Doctrine now partitions by deal too and discloses; db-asks E sizes the
+      pattern (test copies vs source property). PROD relaunch behaviour unknown.
 - [ ] 15 matrix: issuer_name + tenors columns missing from the Fidelity answer
       although the ORDERBOOK MATRIX note lists them — check it is applied.
 - [ ] Per-tranche listings must carry tranche_name ("three indications" for
@@ -99,7 +102,7 @@ implemented (config + views). Only what is still open is listed.
 | C176173F-35768 | Fidelity matrix (columns / sort / zero rows kept) | config DONE; QA 15 lacks issuer + tenors columns → §1 |
 | C176173F-35774 | constraint columns echoed (USD, 12 months, pricing date desc) | config DONE; verify on prompt 19 |
 | C176173F-35781 | Citi solo deals, all Citi entities | view DONE, verified UAT (14,250 vs 4,025 all-time); tell PO the deal priced 18-Sep, not 14-Sep |
-| C176173F-35773 | top 5 investors in txn 75043505, per tranche | config DONE; verify partition_by from the ⚡ args (QA 16) |
+| C176173F-35773 | top 5 investors in txn 75043505, per tranche | FAILED UAT 2026-09-17 on the latest config (flat Investor · GP Id · Product · Demand). ROOT CAUSE ours: doctrine named non-existent fields (investor_gp_id, pricing_ts → investor_id, pricing_date) and the SKILL row prescribed the aggregate shape. Fixed + [names] gate; RETEST on txn 75076736 after the next push |
 | C176173F-35776 | CUSIP 63307A3T0 geography split | E2 DONE (three tranches is real: two UAT test entries + the NACN book); E5 CLOSED 2026-09-17 — UAT split reconciles to the 26.75M book, no unrecorded-region bucket |
 | C176173F-35777 | top 5 by allocation across all IG deals 2024 | view (product_class ferried) + config DONE; QA 22 PASS |
 | C176173F-35783 | allowed order types per tranche | view + config DONE (Y/N flags; txn 75043505 = Y/Y/N both tranches); verify prompt 25 |

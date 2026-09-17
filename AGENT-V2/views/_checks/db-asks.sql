@@ -318,3 +318,38 @@ GROUP  BY DEALER ORDER BY VERDICT, TRANCHES_ DESC;
 SELECT PRODUCT, DEAL_SHARING_TYPE, COUNT(*) AS TRANCHES_
 FROM   DGSTREAM.VW_TRANCHE_SUMMARY
 GROUP  BY PRODUCT, DEAL_SHARING_TYPE ORDER BY PRODUCT, DEAL_SHARING_TYPE;
+
+
+-- ===========================================================================
+-- E. 2026-09-17 — ONE TRANSACTION ID → SEVERAL DEALS? txn 75075343 maps to
+-- three DCM deals on UAT (SD01_regression, DNT_Issuerview_Regression_R21,
+-- AUTOD-SD07-CITI-SOLO). Size the pattern: test re-creations only, or a
+-- source-model property that PROD relaunches would also show.
+-- ===========================================================================
+
+-- E1. Distribution: how many transaction ids map to 1, 2, 3… deals.
+SELECT DEALS_PER_TXN, COUNT(*) AS TXN_IDS_
+FROM  (SELECT ORIGINATION_TRANSACTION_ID, COUNT(DISTINCT DEAL_ID) AS DEALS_PER_TXN
+       FROM   DGSTREAM.OB_DEAL_TRANCHE
+       WHERE  ORIGINATION_TRANSACTION_ID IS NOT NULL
+       GROUP  BY ORIGINATION_TRANSACTION_ID)
+GROUP  BY DEALS_PER_TXN
+ORDER  BY DEALS_PER_TXN;
+
+-- E2. The deals behind 75075343, one row each (status, pricing, book size).
+SELECT DEAL_ID, DEAL_NAME, DEAL_STATUS, FIRST_PRICED, TRANCHE_COUNT, ORDER_COUNT
+FROM   DGSTREAM.VW_DEAL_SUMMARY
+WHERE  TRANSACTION_ID = '75075343';
+
+-- E3. The 20 most-duplicated transaction ids with their deal names — do they
+--     all read as regression / automation copies?
+SELECT *
+FROM  (SELECT ORIGINATION_TRANSACTION_ID, COUNT(*) AS DEALS_,
+              LISTAGG(DEAL_NAME, ' | ') WITHIN GROUP (ORDER BY DEAL_NAME) AS NAMES_
+       FROM  (SELECT DISTINCT ORIGINATION_TRANSACTION_ID, DEAL_ID, DEAL_NAME
+              FROM   DGSTREAM.OB_DEAL_TRANCHE
+              WHERE  ORIGINATION_TRANSACTION_ID IS NOT NULL)
+       GROUP  BY ORIGINATION_TRANSACTION_ID
+       HAVING COUNT(*) > 1
+       ORDER  BY DEALS_ DESC)
+WHERE  ROWNUM <= 20;
