@@ -319,79 +319,33 @@ SELECT PRODUCT, DEAL_SHARING_TYPE, COUNT(*) AS TRANCHES_
 FROM   DGSTREAM.VW_TRANCHE_SUMMARY
 GROUP  BY PRODUCT, DEAL_SHARING_TYPE ORDER BY PRODUCT, DEAL_SHARING_TYPE;
 
-
-
-
-
--- ===========================================================================
--- G. 2026-09-17 — VIEW-BATCH BASELINES (before any view change). Run
--- views/_deploy-check.sql section K (K1–K7) on UAT with timing shown and
--- screenshot the ELAPSED times; they are the "before" numbers for the order
--- view anti-join (V1) and the party-master rewrite (V2). No SQL here — the
--- statements live in the deploy check so before/after use identical text.
--- ===========================================================================
-
--- ===========================================================================
--- I. 2026-09-18 — PRICING PROGRESSION + the missing H1. Section H (run
--- 2026-09-18) found OB_TRANCHE_PRICING: 44,717 rows keyed by tranche with
--- PRICING_TYPE / PRICING_STATUS / VALUE / LOWER_BOUND / UPPER_BOUND /
--- AREA_RANGE / CREATED_TS — the DCM IPT → guidance → launch → final film.
--- Size it, then the batch is designed. UAT. Screenshot each result.
--- ===========================================================================
-
--- I1 (= H1, not yet run). DCM per-order limits on OB_ORDER_SIZE by TYPE.
-SELECT TYPE, COUNT(*) AS ROWS_,
-       COUNT(PRICE_DEMAND)  AS HAS_PRICE_LIMIT,
-       COUNT(SPREAD_DEMAND) AS HAS_SPREAD_LIMIT,
-       COUNT(MIN_YIELD)     AS HAS_MIN_YIELD,
-       COUNT(AMT_CHANGE)    AS HAS_AMT_CHANGE,
-       COUNT(CREATED_TS)    AS HAS_CREATED_TS
-FROM   DGSTREAM.OB_ORDER_SIZE
-GROUP  BY TYPE ORDER BY ROWS_ DESC;
-
--- I2. The pricing film's vocabulary: type × status, with fill of the value
---     columns (which stage carries a point value, which a range).
+-- S4.11 DCM pricing film population (OB_TRANCHE_PRICING): on UAT the four
+--       stages exist on ~11k tranches but VALUE is filled on only a few
+--       hundred. PROD decides whether vw_tranche_pricing is worth building.
 SELECT PRICING_TYPE, PRICING_STATUS, COUNT(*) AS ROWS_,
        COUNT(DISTINCT DEAL_TRANCHE_ID) AS TRANCHES_,
        COUNT(VALUE) AS HAS_VALUE, COUNT(LOWER_BOUND) AS HAS_LOWER,
-       COUNT(UPPER_BOUND) AS HAS_UPPER, COUNT(AREA_RANGE) AS HAS_AREA
+       COUNT(AREA_RANGE) AS HAS_AREA
 FROM   DGSTREAM.OB_TRANCHE_PRICING
-GROUP  BY PRICING_TYPE, PRICING_STATUS
-ORDER  BY ROWS_ DESC;
+GROUP  BY PRICING_TYPE, PRICING_STATUS ORDER BY ROWS_ DESC;
 
--- I3. Stages per tranche (a full film = several rows per tranche).
-SELECT STAGES, COUNT(*) AS TRANCHES_
-FROM  (SELECT DEAL_TRANCHE_ID, COUNT(*) AS STAGES FROM DGSTREAM.OB_TRANCHE_PRICING
-       GROUP BY DEAL_TRANCHE_ID)
-GROUP  BY STAGES ORDER BY STAGES;
+-- S4.12 DCM order price basis + limit fill (OB_ORDER_SIZE): UAT = 99 % reOffer,
+--       ~55k limit rows (benchmark / midSwap / minYield / maxPrice /
+--       floatingRate), AMT_CHANGE on 19 %, CREATED_TS ~100 %.
+SELECT TYPE, COUNT(*) AS ROWS_, COUNT(PRICE_DEMAND) AS HAS_PRICE_LIMIT,
+       COUNT(SPREAD_DEMAND) AS HAS_SPREAD_LIMIT, COUNT(MIN_YIELD) AS HAS_MIN_YIELD,
+       COUNT(AMT_CHANGE) AS HAS_AMT_CHANGE, COUNT(CREATED_TS) AS HAS_CREATED_TS
+FROM   DGSTREAM.OB_ORDER_SIZE
+GROUP  BY TYPE ORDER BY ROWS_ DESC;
 
--- I4. One known deal end to end: txn 75043505's tranches, every stage in time
---     order (this is what the agent would narrate as "IPT T+150a → guidance
---     T+130 → priced T+120").
-SELECT P.DEAL_TRANCHE_ID, P.PRICING_TYPE, P.PRICING_STATUS, P.DEFINITION,
-       P.VALUE, P.LOWER_BOUND, P.UPPER_BOUND, P.AREA_RANGE, P.OTHER, P.CREATED_TS
-FROM   DGSTREAM.OB_TRANCHE_PRICING P
-WHERE  P.DEAL_TRANCHE_ID IN (SELECT DEAL_ID || '-' || TRANCHE_ID
-                             FROM DGSTREAM.OB_DEAL_TRANCHE
-                             WHERE ORIGINATION_TRANSACTION_ID = '75043505')
-ORDER  BY P.DEAL_TRANCHE_ID, P.CREATED_TS;
 
--- I5. Coverage by pricing year: how many DCM tranches have ANY film, and how
---     many have 2+ stages (a progression, not just a final print).
-SELECT EXTRACT(YEAR FROM T.PRICING_TS) AS YR,
-       COUNT(DISTINCT T.DEAL_ID || '-' || T.TRANCHE_ID) AS TRANCHES_,
-       COUNT(DISTINCT P.DEAL_TRANCHE_ID) AS WITH_FILM_,
-       COUNT(DISTINCT CASE WHEN P.N >= 2 THEN P.DEAL_TRANCHE_ID END) AS WITH_2PLUS_STAGES_
-FROM   DGSTREAM.OB_DEAL_TRANCHE T
-LEFT JOIN (SELECT DEAL_TRANCHE_ID, COUNT(*) AS N FROM DGSTREAM.OB_TRANCHE_PRICING
-           GROUP BY DEAL_TRANCHE_ID) P
-       ON P.DEAL_TRANCHE_ID = T.DEAL_ID || '-' || T.TRANCHE_ID
-WHERE  T.PRICING_TS >= DATE '2023-01-01'
-GROUP  BY EXTRACT(YEAR FROM T.PRICING_TS) ORDER BY YR;
-
--- I6. What ECM LIMIT_DISCOUNT_POT holds (97.7 % filled — a default or a real
---     limit?): top values.
-SELECT LIMIT_DISCOUNT_POT, COUNT(*) AS ORDERS_
-FROM   DGSTREAM.OB_ECM_ORDER
-WHERE  ORDER_STATUS NOT IN ('CANCELLED','DELETED','PASS')
-GROUP  BY LIMIT_DISCOUNT_POT ORDER BY ORDERS_ DESC FETCH FIRST 10 ROWS ONLY;
+-- ===========================================================================
+-- G. 2026-09-18 — VIEW-BATCH BASELINES, TIMING NOT YET CAPTURED. The K1–K7
+-- screenshots of 2026-09-18 show the row values but not the seconds. Re-run
+-- views/_deploy-check.sql section K on UAT with the status line in the shot
+-- ("All Rows Fetched: N in X seconds") or with `set timing on`. Those seconds
+-- are the "before" for the order-view anti-join (V1) and the party-master
+-- rewrite (V2). Values seen: K1 2 rows · K2 47,297 DCM deals · K3 1.85e19
+-- (test data) · K4 219,409 entities · K5 78 trades · K6 42 orders / 261.5M ·
+-- K7 ECM 70,198 orders, DCM 4,977,084 orders.
+-- ===========================================================================

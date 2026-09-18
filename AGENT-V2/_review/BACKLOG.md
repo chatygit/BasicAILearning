@@ -97,21 +97,26 @@ Batch B:
 - [ ] V5 ECM deal branch in the lever-C shape (D = T⋈S grouped; deal-keyed blocks top-level; 41 aliases) — uniform shape + cheaper entity branches, not a latency claim (rows 7, 1e, 1o, 1w, 4, 4b, 15b, 15c; K10 vs K2; multi-transaction issuer hash probe; QA 2, 4, 11; T PARTITION BY unchanged pending census)
 - [ ] Standing check S3 gains a Starburst EXPLAIN of `WHERE product = 'DCM'` on vw_deal_summary — CHAR(3) literal pushdown unverified (type change if it fails; own decision)
 Still staged from before:
-- [ ] PRICING & SENTIMENT batch (design after db-asks I; H run 2026-09-18).
-      FOUND: OB_TRANCHE_PRICING (44,717 rows; PRICING_TYPE / STATUS / VALUE /
-      bounds / AREA_RANGE / CREATED_TS per tranche) = the DCM IPT → guidance →
-      launch → final film — the pricing-progression source PRICE_GUIDANCE is
-      not (527 / 74,932 filled). ECM: 28 % of IOI orders carry a PRICE limit,
-      6 % a multi-point curve (OB_ECM_ORDER_IOI); IOI timestamps dead on UAT
-      (39 / 71,152); LAST_TRADE_PRICE_BEFORE_OFFER 27 % / _LAUNCH 34 % /
-      INITIAL_DEAL_AMOUNT 80 % of ECM tranches (discount-to-close, upsizing
-      derivable). DCM order size rows: 99.4 % single-row (revisions rare);
-      limit-column fill = I1. Candidate shapes: (a) NEW view vw_tranche_pricing
-      (one row per tranche × stage) — the film; (b) additive deal/tranche
-      columns last_close_before_offer / _launch, initial_deal_amount; (c) NEW
-      view vw_order_ioi (one row per ECM order × limit point) or additive
-      limit_type / points / qty_at_lowest_limit on the order view; (d) DCM
-      limit columns only if I1 shows fill. All approval-gated; OPUS_BASE untouched.
+- [ ] PRICING & SENTIMENT batch — censused UAT 2026-09-18 (H + I), ranked:
+      (1) ADDITIVE on vw_order_detail, DCM branch, from OB_ORDER_SIZE's latest
+      row per order: order_price_basis (TYPE: reOffer 99 % / benchmark /
+      midSwap / minYield / maxPrice / floatingRate — ~55k limit rows),
+      limit_spread (SPREAD_DEMAND), limit_yield (MIN_YIELD), limit_price
+      (PRICE_DEMAND), size_change (AMT_CHANGE, filled on 917,788 rows),
+      order_ts (CREATED_TS, ~100 %) → price sensitivity AND book momentum
+      ("how the book built after guidance") for DCM. ECM NULL stubs.
+      (2) ADDITIVE on the deal/tranche views, ECM: last_close_before_offer /
+      _launch (27 % / 34 %), initial_deal_amount (80 %) → discount-to-close,
+      upsizing.
+      (3) NEW grain vw_tranche_pricing (OB_TRANCHE_PRICING: IPT → Guidance →
+      Revised Guidance → Launch per tranche; types PRICE/SPREAD/YIELD/COUPON/
+      benchmark/minYield) — stage rows exist on ~11k UAT tranches but VALUE on
+      only ~300; build ONLY after the PROD count (db-asks S4.11) shows values.
+      (4) NEW grain vw_order_ioi (ECM: one row per order × limit point; 28 % of
+      orders limited, 6 % multi-point) or additive limit_type / points /
+      qty_at_lowest_limit on the order view.
+      Dead ends: PRICE_GUIDANCE (0.7 % filled), ECM IOI timestamps (39 rows),
+      LIMIT_DISCOUNT_POT (a boolean). All approval-gated; OPUS_BASE untouched.
 - [ ] vw_tranche_summary: ORDER_COUNT / INVESTOR_COUNT roll-ups (additive), so
       tranche-level rankings can filter bookless shells like the deal object.
       (UAT 2026-09-17: 19,804 of 21,009 ECM Citi-solo tranches in 2024 sit on

@@ -148,3 +148,9 @@ Needs BOTH the nine views AND the config push in QA (+ BQS_ENABLED_SOURCES / new
 AFTER: re-run the same six in fresh sessions on the compressed SKILL (93,427 →
 63,402 bytes) and fill a second column pair. Expect the final-call floor to drop
 by ~7-8k tokens; session totals also depend on the query count.
+
+## K baselines (UAT 2026-09-18) — VALUES captured, SECONDS not yet (re-run with the status line)
+K1 deal-scoped DCM orders: 2 rows · K2 DCM deal count: 47,297 · K3 DCM total
+demand: 1.85e19 (test values) · K4 entity full pass: 219,409 · K5 deal-scoped
+trades: 78 · K6 Fidelity 6m DCM: 42 orders / 261,512,593 · K7 ECM 70,198
+orders, DCM 4,977,084 orders. Elapsed: pending.
