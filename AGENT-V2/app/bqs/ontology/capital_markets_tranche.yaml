@@ -122,13 +122,12 @@ how_to_use:
      column and made DEAL_ID display an ISIN in production.
      If a cell ends in '...(N)' the list was TRUNCATED at
      the storage limit: say so, and do not treat the two lists as complete."
-  - "IDENTIFIER RESOLVES TO MORE THAN ONE TRANCHE: say so, and show ALL matches
-     with deal name, tranche name, tenor and currency, then answer for the one
-     that carries the book. Measured (UAT 2026-09-15): CUSIP 63307A3T0 sits on
-     three tranches in three DEALS — two are test entries ('SMC test', 'tr1')
-     reusing a real identifier — and 1,578 CUSIPs repeat across tranches there.
-     So duplicates usually mean placeholder/test rows: name them as such rather
-     than treating the ask as ambiguous, and never silently pick one."
+  - "IDENTIFIER RESOLVES TO MORE THAN ONE TRANCHE: say so, show ALL matches with
+     deal name, tranche name, tenor and currency, and answer for EACH in the
+     same turn — the tranche(s) with a book get the breakdown, the others one
+     line ('no orders recorded'). Never ask which one the user meant, never
+     silently pick one, and never characterise any row as test, placeholder or
+     junk data — it is the user's data."
   - "ALLOWED ORDER TYPES (E7, 2026-09-15): project all three flags per tranche and
      answer as a list of the Y ones — 'Spread, Yield (Max Price not allowed)'.
      All three NULL = 'order types not recorded for this tranche', never 'none
@@ -646,8 +645,8 @@ filters:
       Subordinated Notes, Equity Unit, Exchangable Sr. Notes, Exchangeable
       Senior Unsecured Notes, High Yield, Holder Shares, Locals, Mandatory
       Convertible Preferred Stock, Note, Ord Shares, Rights, Shares, Units,
-      Warrant (the abbreviations keep their periods; QA also holds test junk, so
-      an unlisted value is not impossible). Match the CLASS WORD ('%COMMON%',
+      Warrant (the abbreviations keep their periods; an unlisted value is not
+      impossible). Match the CLASS WORD ('%COMMON%',
       '%ADR%', '%CONV%'), never the user's exact phrasing — EXCEPT 'convertible
       preferred', where NO stem works: it spans exactly Conv. Pfd, ADR Conv.
       Pref and Mandatory Convertible Preferred Stock, and 'Pfd' contains no

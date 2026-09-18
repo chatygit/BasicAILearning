@@ -465,15 +465,14 @@ def build_disambiguation(
                     "matched_multiple": matched,
                     "truncated": len(names) > _DISAMBIG_MAX,
                     "hint": (
-                        f"Your filter on '{ef.field}' matched multiple distinct "
-                        f"entities, so the result blends them together. Show them "
-                        f"to the user as a NUMBERED list"
-                        + (" with each entity's id beside its name, "
-                           if has_ids else ", ")
-                        + "and invite them to reply with a number"
-                        + (" or paste an id" if has_ids else "")
-                        + ". To isolate one, re-run filtered to that single "
-                        + ("id." if has_ids else "exact name.")
+                        f"Your filter on '{ef.field}' matched {len(matched)} distinct "
+                        f"entities; the result covers all of them combined. Answer "
+                        f"with the combined figure AND a per-entity breakdown (name"
+                        + (" + id" if has_ids else "")
+                        + ") in this turn — do not stop at a menu. Offer the "
+                        + "single-entity view as a follow-up; re-run filtered to one "
+                        + ("id" if has_ids else "exact name")
+                        + " only when the user asks for one entity."
                     ),
                 }
             )

@@ -33,11 +33,11 @@ refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
   K7 regression = no handover.
 
 ## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
-- [ ] UAT reruns (UAT ONLY from 2026-09-17; local ADK pointed at UAT) after a
-      restart — skills load at startup: TC1 on txn 75076736, 18 Travelers, 2
-      largest IPOs, 16 on the two-tranche txn 75043505 (capture the ⚡ args),
-      then 24 and 15. Proof the new SKILL is live: the ✓ load_skill text
-      contains "Extra figures come from ROW-LEVEL columns".
+- [ ] UAT run 4 after the 2026-09-18 config push (fresh sessions): TC1 on
+      75076736 WITH the ⚡ run_bqs_query args (failed 3x — the args decide whether
+      it is routing or the request shape), 15 Fidelity (must be ONE turn, the
+      matrix, no menu), 3 BlackRock (family table, no menu), 20 CUSIP (all three
+      tranches in one turn, no "test" wording, share bars), then 18 and 24.
 - [ ] 15 matrix: issuer_name + tenors columns missing from the Fidelity answer
       although the ORDERBOOK MATRIX note lists them — check it is applied.
 - [ ] Per-tranche listings must carry tranche_name ("three indications" for
@@ -60,6 +60,7 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
 - [ ] DONE metric-slot explainer: `_explain_cross_object` checks the requesting
       object's metrics first (E10; tests in tests/test_cross_object_error.py).
 - [ ] DONE config.py default BQS_ENABLED_SOURCES = nine sources.
+- [ ] DONE (in repo, undeployed) suggestions.py disambiguation hint no longer instructs a NUMBERED-list menu — it asks for the combined figure + per-entity breakdown in the same turn (UAT 2026-09-18: prompts 3, 15, 20 each burned 3 extra turns on the menu). Ships with the next server push; the SKILL/agents rule covers it meanwhile.
 - [ ] SRV-1 MCP result de-dup: `output_schema=None` + one compact TextContent, compact `tool_serializer`; lazy imports or extended test stubs — every result reaches the model twice (~16k tokens per tranche fetch) (test_entitlement_gate.py 15 cases; gate 1538/1210 on the wrapper; importorskip Client test; PROMOTE-CHECKLIST FastMCP/ADK check; exclusive with ASKS-external §1b)
 - [ ] SRV-4 tool schema via `Annotated[..., Field(description=...)]` with the metric-slot rule on dimensions/filters; docstrings < 1,500/800 chars; `question` signature untouched; tools.yaml:48 nine — −800 tokens/call, class-1 defence at the argument (gate 1111, 1210 moved, new textual pins; QA 2, 24)
 - [ ] SRV-3 `ECM_DCM_SQL_AUDIT` default off, one-line paging keeping "rows N-M", delete `scored`; SKILL 895 drops generated_sql only — 300-550 tokens/result (test_response_paging.py :144 rewritten; gate 1239/1243-1246/2496 moved)

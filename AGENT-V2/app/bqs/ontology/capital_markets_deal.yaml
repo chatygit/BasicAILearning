@@ -75,13 +75,12 @@ how_to_use:
      unit-free, so one request with 'product' in dimensions covers both.
      Product unknown (a named deal / issuer / transaction with no product
      word)? never guess one — filter product in ['ECM','DCM'] and put
-     'product' in dimensions; the rows tell you which it is."
+     'product' in dimensions; the rows tell you which it is. A product-scoped
+     field in the request decides the product — scope product eq to it."
   - "DCM money caveat: this object's DEAL_SIZE is a single deal-level figure and
      is NOT scoped to one currency (a deal may price in several — see
      'currencies'). For currency-comparable DCM money totals, use the
-     capital_markets_tranche object's total_tranche_size scoped/grouped by 'currency'.
-     That advice was unexecutable before the view rewrite (tranche size was text
-     and a numeric SUM raised an invalid-number error); it works now."
+     capital_markets_tranche object's total_tranche_size scoped/grouped by 'currency'."
   - "PRICING DATES — a deal has NO single pricing date. first_priced is the MIN
      and last_priced the MAX of its tranches' pricing timestamps, so a
      ONE-TRANCHE deal, and any deal whose tranches all priced on the same day,

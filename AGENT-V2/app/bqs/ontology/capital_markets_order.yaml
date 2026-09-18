@@ -77,7 +77,8 @@ how_to_use:
      DCM money totals. State the unit in the answer. Product unknown (a named
      deal / issuer / transaction with no product
      word)? never guess one — filter product in ['ECM','DCM'] and put
-     'product' in dimensions; the rows tell you which it is."
+     'product' in dimensions; the rows tell you which it is. A product-scoped
+     field in the request decides the product — scope product eq to it."
   - "PRODUCT APPLICABILITY IS A LOOKUP, NOT A JUDGEMENT. Eight fields are
      ECM-ONLY — the view hard-casts them to NULL on every DCM row, so the list is
      complete and closed: investor_category_key, meeting_type,
@@ -109,14 +110,11 @@ how_to_use:
      RUSSIA, AUSTRIA and AUSTRALIA. Filters are ANDed, so an OR of two patterns
      is not expressible: use 'in' with every spelling that qualifies. A
      NOT-region predicate drops null-region rows — count them with is_null and
-     say how many were excluded. WHEN A REGION GUESS RETURNS 0 ROWS, know
-     exactly what the server will and will not do for you: did_you_mean fires
+     say how many were excluded. WHEN A REGION GUESS RETURNS 0 ROWS: did_you_mean fires
      ONLY on a 0-row result AND only when the value is a SINGLE string, and it
      ranks values that share a word-stem with your guess. So the multi-value
      'in' above gets NO suggestions, and neither do not_in or is_null. To
-     recover, re-ask with ONE spelling (eq or a single-item in) — that is the
-     shape the server can answer — rather than grouping by investor_region to
-     dump the domain, which the list above already gives you."
+     recover, re-ask with ONE spelling (eq or a single-item in)."
   - "Metric routing: demand/indication → total_demand; allocation/'got shares' →
      total_allocation; DCM order size/amount → total_order_amount; ECM order size
      → total_allocation (NOT total_order_amount — see the next note)."
@@ -399,7 +397,7 @@ dimensions:
 filters:
   tenors: {column: tenors, products: ["DCM"], operators: [like, is_null, is_not_null], case_insensitive: true, description: "Tenor label 'VALUE-PERIOD' ('5-YEAR') — like '%5%YEAR%'; bankers say 5YR/5Y/5 year; never eq."}
   product_class: {column: product_class, products: ["DCM"], operators: [eq, ne, in, not_in, like], case_insensitive: true, suggestable: true, description: "Bond class (Investment Grade, High Yield, SSA, ABS…). Expand IG/HY/EM to the stored label before filtering."}
-  investor_classification: {column: investor_classification, operators: [eq, ne, in, not_in, like, is_null, is_not_null], suggestable: true, case_insensitive: true, description: "Different taxonomy from investor_category (own column). Like-match head values; DCM tail holds free-text junk — if a value looks like test data say so; QA/UAT vocabularies differ, never claim completeness."}
+  investor_classification: {column: investor_classification, operators: [eq, ne, in, not_in, like, is_null, is_not_null], suggestable: true, case_insensitive: true, description: "Different taxonomy from investor_category (own column). Like-match head values; the DCM tail is free text; vocabularies differ by environment, never claim completeness."}
   deal_region:
     column: deal_region
     operators: [eq, ne, in, not_in, like]

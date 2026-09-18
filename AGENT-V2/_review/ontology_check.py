@@ -2585,6 +2585,31 @@ for _p, _phrase, _why in [
 ]:
     check(has(_p, _phrase), f"[xlayer] {_p.name} lost {_why} ({_phrase!r})")
 
+# UAT RUN 3 (2026-09-18) — user directive: never characterise the user's data as
+# test/placeholder/junk (UAT is where the PO tests); a disambiguation block is
+# information, not a menu (three asks each cost 3 extra turns); a product-scoped
+# field decides the product (tenors + product in [ECM,DCM] was rejected); the
+# one-deal/one-transaction top-N is a routing row of its own (TC1 failed 3x).
+for _p, _phrase in [(SKILL, "call out junk"), (TRANCHE, "test entries"),
+                    (TRANCHE, "placeholder/test rows"), (TRANCHE, "test junk"),
+                    (ORDER, "looks like test data")]:
+    check(not has(_p, _phrase),
+          f"[present] {_p.name} tells the agent to call the user's data test/junk "
+          f"({_phrase!r}) — forbidden (user 2026-09-18: 'we test in UAT, that is bad')")
+check(has(TRANCHE, "never characterise any row as test, placeholder or"),
+      "[present] tranche card lost the never-call-it-test-data rule on duplicate identifiers")
+check(has(SKILL, "is information, not a menu") and has(AGENTS, "is information, not a menu"),
+      "[trap] SKILL/agents lost the disambiguation-is-not-a-menu rule (UAT 2026-09-18: 3 asks x 3 extra turns)")
+check(has(SKILL, "DECIDES the product") and has(DEAL, "decides the product") and has(ORDER, "decides the product"),
+      "[trap] the product-scoped-field-decides-the-product exception is gone — tenors + product in [ECM,DCM] is rejected")
+check(has(SKILL, "IN ONE deal or transaction"),
+      "[trap] SKILL lost the §3 routing row for top-N investors in ONE deal/transaction (TC1)")
+check(has(AGENTS, "NEVER carry a unit parenthetical"),
+      "[present] agents.yaml lost the header unit-parenthetical ban (ignored 6/6 from the SKILL alone)")
+_SUGG = text(ROOT / "app" / "bqs" / "suggestions.py")
+check("do not stop at a menu" in _SUGG and "NUMBERED list" not in _SUGG,
+      "[server] suggestions.py disambiguation hint teaches a blocking menu again")
+
 # SIZE RATCHET (RT-6, 2026-09-17): pay-every-turn (SKILL, agents) and
 # pay-per-fetch (catalog) files may only SHRINK. Lower a cap in the same commit
 # as each compression step (targets: SKILL 45,000; tranche 32,000; order/deal

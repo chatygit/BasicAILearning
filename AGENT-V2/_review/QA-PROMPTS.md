@@ -163,3 +163,19 @@ by ~7-8k tokens; session totals also depend on the query count.
 K1b proves lever B: deal-scoped asks are sub-second; K1's 19.5 s was the probe's
 scalar subquery. Targets: V1 (order-view anti-join) is judged on K6 and must not worsen K7;
 V2 (party-master rewrite) on K2; V3 (entity from the base tables) on K4.
+
+## Run 3 — UAT 2026-09-18, compressed SKILL live (fresh sessions)
+| Prompt | final-call prompt tokens before → after | session before → after | Result |
+|---|---|---|---|
+| 1 | 61,281 → 54,897 | 132,325 → 120,002 | PASS, one query; header "Total Order Amount (USD)" (unit parenthetical, E8) |
+| 2 | 89,332 → 85,431 | 368,945 → 334,489 | named, booked IPOs (drill-down rule works); per-deal investor tables; "(Shares)" headers |
+| 3 | 60,560 → 54,332 | 131,795 → 171,700 (→ 621k after 3 menu turns) | family total given, then a "which entity?" MENU — the disambiguation hint |
+| 15 | 64,270 → 55,664 | 135,129 → 120,474 (→ 293k) | per-entity aggregates + MENU; after the pick, the matrix (17 rows, correct columns minus issuer/tenor) |
+| 16 / TC1 | 61,725 → 54,332 | 194,364 → 119,285 | FAIL 3rd time: flat top 5 (Investor · GP Id · amount). ⚡ args needed |
+| 17 | — | — | PASS: headline with USD 5.0M total, three rows WITH tranche names |
+| 20 | — | 320,447 (→ 584k) | product_not_applicable (tenors + product in [ECM,DCM]), then a MENU of three tranches with "two appear to be test entries" (forbidden), then the split; total reconciles 26.75M |
+Compression effect on the final call: −6.2k to −8.6k tokens per prompt, as predicted.
+Behaviour fixes shipped 2026-09-18 for the failures above: disambiguation = information not a menu
+(SKILL §8, §4, agents rule 11, server hint text); product-scoped field decides the product; §3
+routing row for top-N in ONE deal/txn; test-entry wording removed everywhere; header unit ban +
+five-beat shape added to agents.yaml. Still to run: 18, 24; ⚡ args for 16 and 15.
