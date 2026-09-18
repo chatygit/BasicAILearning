@@ -501,3 +501,12 @@ AND    PRICING_TS >= ADD_MONTHS(TRUNC(SYSDATE), -6);
 SELECT PRODUCT, COUNT(*) AS ORDERS_, SUM(ORDER_DEMAND_QTY) AS DEMAND_
 FROM   DGSTREAM.VW_ORDER_DETAIL
 GROUP  BY PRODUCT;
+
+-- K1b. Same as K1 with a LITERAL deal id — the shape the agent actually sends.
+-- K1's scalar subquery may be evaluated after the window instead of pushed
+-- into it; if K1b is seconds-class while K1 is not, K1 was a probe artefact.
+SELECT 'K1b deal-scoped DCM orders, literal id' AS probe_,
+       TO_CHAR(COUNT(*)) || ' rows' AS actual_
+FROM DGSTREAM.VW_ORDER_DETAIL
+WHERE PRODUCT = 'DCM'
+AND   DEAL_ID = 'I-260831-113859365632';

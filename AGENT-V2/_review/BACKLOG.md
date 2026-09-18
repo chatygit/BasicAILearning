@@ -87,12 +87,12 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
 Batch A:
-- [ ] V1 vw_order_detail DCM/ECM dedupe → correlated min-ROWID NOT EXISTS (hedge/trade blocks excluded — their survivor is latest PUBLISHED_TS); supersedes the txn-id PARTITION BY item — non-key predicates (investor name/id, dates, currency, txn id) cannot push into the window (rows 9, 6, 1d, 1j, 21, 21b; ORA_HASH identity per product; K6 before/after; K7 unscoped-aggregate go/no-go; QA 15, 16, 17, 18; NULL-guard pins, [opusbase] 3)
+- [ ] V1 (baseline UAT 2026-09-18: K6 17.0 s, K7 25.1 s, K1 19.5 s / K1b pending) vw_order_detail DCM/ECM dedupe → correlated min-ROWID NOT EXISTS (hedge/trade blocks excluded — their survivor is latest PUBLISHED_TS); supersedes the txn-id PARTITION BY item — non-key predicates (investor name/id, dates, currency, txn id) cannot push into the window (rows 9, 6, 1d, 1j, 21, 21b; ORA_HASH identity per product; K6 before/after; K7 unscoped-aggregate go/no-go; QA 15, 16, 17, 18; NULL-guard pins, [opusbase] 3)
 - [ ] V4 fallback if V1 is rejected: txn-id pushdown joins the EXISTING deduped ODT block inside the DCM window with DT.ORIGINATION_TRANSACTION_ID in PARTITION BY (never the raw table); no hedge extension — 19-29 s vs 2-6 s (row 9; K9 vs K1; QA 16, 25, 17, E9; TRANSACTION_ID last projection)
-- [ ] V2 PCM x6 / ODI x3 → `MAX(col) KEEP (DENSE_RANK FIRST ORDER BY PUBLISHED_TS DESC, ROWID)` GROUP BY join key — window views are never join-eliminable; every aggregate pays a 361k-row scan+sort (rows 7, 8, 9, 1e, 1o, 1w; K2 recorded; K8 DBMS_XPLAN deal AND tranche; QA 10, 19; [opusbase] 3/3/3)
+- [ ] V2 (baseline: K2 28.7 s for a DCM deal COUNT — lever C did not make it cheap) PCM x6 / ODI x3 → `MAX(col) KEEP (DENSE_RANK FIRST ORDER BY PUBLISHED_TS DESC, ROWID)` GROUP BY join key — window views are never join-eliminable; every aggregate pays a 361k-row scan+sort (rows 7, 8, 9, 1e, 1o, 1w; K2 recorded; K8 DBMS_XPLAN deal AND tranche; QA 10, 19; [opusbase] 3/3/3)
 - [ ] RT-4 deploy-check section A → nine column-count rows (expected_ = file projection, asserted by RT-3); rows 22 (txn→deals, INFO) / 23 (bookless by product, INFO) in section B agg; PROMOTE-CHECKLIST step 2 rewritten — a partial deploy becomes a FAIL naming the view (A0 + nine rows + 17/2/3/18; grain 7-13b unchanged; gate 498/2184 untouched)
 Batch B:
-- [ ] V3 vw_entity_search INVESTOR branch from OB_ORDER/OB_ECM_ORDER with the order view's population predicates; `CAST(MAX(TT.PRICING_TS) AS TIMESTAMP(3))` on ECM — re-derives the 5M-row order view for six columns (K11 census incl. SUM(ENTITY_ACTIVITY_COUNT) identical; K4 before/after; QA 3, 10, 17; [opusbase] 0)
+- [ ] V3 (baseline: K4 146.7 s full pass) vw_entity_search INVESTOR branch from OB_ORDER/OB_ECM_ORDER with the order view's population predicates; `CAST(MAX(TT.PRICING_TS) AS TIMESTAMP(3))` on ECM — re-derives the 5M-row order view for six columns (K11 census incl. SUM(ENTITY_ACTIVITY_COUNT) identical; K4 before/after; QA 3, 10, 17; [opusbase] 0)
 - [ ] V6 DEAL_SHARING_TYPE folded into the syndicate member block per product — two scans of a 377k-row table for one ask (rows 8, 1q, 18, 20 recorded before, 20b, ad-hoc ECM SOLO count; `_CITI_RX` count 3; QA 23)
 - [ ] V5 ECM deal branch in the lever-C shape (D = T⋈S grouped; deal-keyed blocks top-level; 41 aliases) — uniform shape + cheaper entity branches, not a latency claim (rows 7, 1e, 1o, 1w, 4, 4b, 15b, 15c; K10 vs K2; multi-transaction issuer hash probe; QA 2, 4, 11; T PARTITION BY unchanged pending census)
 - [ ] Standing check S3 gains a Starburst EXPLAIN of `WHERE product = 'DCM'` on vw_deal_summary — CHAR(3) literal pushdown unverified (type change if it fails; own decision)
@@ -135,8 +135,8 @@ Still staged from before:
       book only, disclosed.
 - [ ] Upstream data-team ticket (not ours): ECM deal region is a source gap —
       5% of ECM transactions carry a region on any base-transaction version.
-- [ ] Before any batch: record K1–K5 elapsed on UAT in QA-PROMPTS.md; capture
-      K6 (investor-name class) and K7 (unscoped GROUP BY) BEFORE V1.
+- [ ] K1b (literal-id deal-scoped orders) — the one baseline still missing; decides
+      whether deal-scoped asks need V1 or K1 was a probe artefact.
 
 ## 4. NEW ENHANCEMENTS — PO UAT DCM feedback, batch 2026-09-15 ("don't re-ask")
 Standard matrix (reqs 1-7), constraint columns (C/E1), TC1-TC4, E2-E7 are all

@@ -338,14 +338,10 @@ SELECT TYPE, COUNT(*) AS ROWS_, COUNT(PRICE_DEMAND) AS HAS_PRICE_LIMIT,
 FROM   DGSTREAM.OB_ORDER_SIZE
 GROUP  BY TYPE ORDER BY ROWS_ DESC;
 
-
 -- ===========================================================================
--- G. 2026-09-18 — VIEW-BATCH BASELINES, TIMING NOT YET CAPTURED. The K1–K7
--- screenshots of 2026-09-18 show the row values but not the seconds. Re-run
--- views/_deploy-check.sql section K on UAT with the status line in the shot
--- ("All Rows Fetched: N in X seconds") or with `set timing on`. Those seconds
--- are the "before" for the order-view anti-join (V1) and the party-master
--- rewrite (V2). Values seen: K1 2 rows · K2 47,297 DCM deals · K3 1.85e19
--- (test data) · K4 219,409 entities · K5 78 trades · K6 42 orders / 261.5M ·
--- K7 ECM 70,198 orders, DCM 4,977,084 orders.
+-- G. 2026-09-18 — ONE MORE BASELINE: K1b. K1–K7 seconds are recorded
+-- (QA-PROMPTS.md). K1 used a scalar-subquery deal id (19.5 s); the agent sends
+-- a literal. Run K1b from views/_deploy-check.sql (section K, last statement)
+-- with the status line visible. Seconds-class = K1 was a probe artefact and
+-- deal-scoped asks are fine; ~20 s = V1 is needed for them too.
 -- ===========================================================================
