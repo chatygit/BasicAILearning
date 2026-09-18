@@ -53,14 +53,19 @@ def _view_branches(path: Path) -> list[list[tuple[str, str]]]:
             if depth < 0:
                 break
         if depth == 0:
-            if body.startswith("UNION ALL", i):
+            # A keyword only counts when it is a whole word: the character
+            # before must not be part of an identifier, and the slice must
+            # extend past the keyword so the trailing boundary is real
+            # (`FROM_TS`, `SELECTED` must NOT match — PR bot, 2026-09-18).
+            word_start = i == 0 or not (body[i - 1].isalnum() or body[i - 1] == "_")
+            if word_start and re.match(r"UNION\s+ALL(?![A-Za-z0-9_])", body[i:i + 12]):
                 branches.append(items); items, cur, infrom = [], [], False
-                i += len("UNION ALL"); continue
-            if not infrom and re.match(r"\bFROM\b", body[i:i + 4]):
+                i += len(re.match(r"UNION\s+ALL", body[i:i + 12]).group(0)); continue
+            if not infrom and word_start and re.match(r"FROM(?![A-Za-z0-9_])", body[i:i + 5]):
                 if cur:
                     items.append("".join(cur)); cur = []
                 infrom = True
-            if not infrom and re.match(r"\bSELECT\b", body[i:i + 6]):
+            if not infrom and word_start and re.match(r"SELECT(?![A-Za-z0-9_])", body[i:i + 7]):
                 i += 6; continue
             if not infrom and ch == ",":
                 items.append("".join(cur)); cur = []; i += 1; continue
@@ -117,7 +122,9 @@ def _drifts() -> set[tuple[str, str, str, str]]:
     for ypath in sorted(ONT.glob("*.yaml")):
         view, fields = _catalog_fields(ypath)
         vpath = VIEWS / f"{view.lower()}.sql"
-        assert vpath.exists(), f"{ypath.name}: base_view {view} has no views/{view.lower()}.sql"
+        if not vpath.exists():
+            found.add((ypath.name, "base_view", view, f"no views/{view.lower()}.sql — every field is unverifiable"))
+            continue
         branches = _view_branches(vpath)
         aliases = {a for br in branches for a, _ in br}
         # Each branch names its own product in the PRODUCT literal — never

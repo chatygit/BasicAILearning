@@ -44,6 +44,16 @@ def _deps() -> bool:
     return True
 
 
+def _skip(note: str) -> None:
+    """Standalone: record the SKIP (the gate fails on it). Under pytest: a real
+    skip — never a silent PASS (PR bot finding, 2026-09-18)."""
+    SKIPPED.append(note)
+    if "pytest" in sys.modules:
+        import pytest
+
+        pytest.skip(note)
+
+
 def _registry():
     from bqs.ontology import OntologyRegistry
 
@@ -84,7 +94,7 @@ def _yaml_examples():
 
 def test_every_catalog_example_plans_and_compiles():
     if not _deps():
-        SKIPPED.append("catalog examples (pydantic/yaml not installed)")
+        _skip("catalog examples (pydantic/yaml not installed)")
         return
     reg = _registry()
     examples = _yaml_examples()
@@ -251,7 +261,7 @@ def _golden_check(name: str, sql: str) -> str | None:
 
 def test_recipe_corpus_plans_compiles_and_matches_golden():
     if not _deps():
-        SKIPPED.append("recipe corpus (pydantic/yaml not installed)")
+        _skip("recipe corpus (pydantic/yaml not installed)")
         return
     reg = _registry()
     failures = []

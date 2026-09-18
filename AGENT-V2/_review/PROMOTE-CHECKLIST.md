@@ -6,11 +6,10 @@ answered by a screenshot or a written confirmation — never a task we tick.
 
 ## Gate 1 — mechanical
 ```bash
-cd AGENT-V2 && <python-with-pydantic-and-yaml> _review/ontology_check.py \
-  && <python-with-pydantic-and-yaml> -m pytest tests/ -q
+cd AGENT-V2 && .venv/bin/python _review/ontology_check.py && .venv/bin/python -m pytest tests/ -q
 ```
-Run BOTH with the interpreter that has pydantic + PyYAML (the one that passes
-pytest). The gate runs every tests/test_*.py itself and FAILS on a SKIPped case
+`.venv` is the repo-local interpreter (gitignored); recreate it with
+`python3 -m venv .venv && .venv/bin/pip install pytest pydantic pyyaml rapidfuzz`. The gate runs every tests/test_*.py itself and FAILS on a SKIPped case
 (RT-1, 2026-09-17) — bare system python without those packages is red by design.
 Extend the gate with every fix: a phrase pin, a structural check, or a test.
 When it fails there are two honest outcomes — fix the regression, or
