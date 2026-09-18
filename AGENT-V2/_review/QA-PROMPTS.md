@@ -179,3 +179,10 @@ Behaviour fixes shipped 2026-09-18 for the failures above: disambiguation = info
 (SKILL §8, §4, agents rule 11, server hint text); product-scoped field decides the product; §3
 routing row for top-N in ONE deal/txn; test-entry wording removed everywhere; header unit ban +
 five-beat shape added to agents.yaml. Still to run: 18, 24; ⚡ args for 16 and 15.
+- [ ] 33. "List all OTT orders in <a convertible ECM deal>" — PASS: figures
+      labelled bonds (not shares), full digits with commas, Security column or
+      unit stated once.
+- [ ] 34. "Provide the list of REGULAR orders across all deals during the last
+      5 years" — PASS: ONE table with a Security column (Common Stock /
+      Convertible Bonds …) and the unit per class; no total that mixes shares
+      and bonds; counts in full digits.

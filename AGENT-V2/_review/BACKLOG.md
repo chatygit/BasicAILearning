@@ -48,6 +48,11 @@ refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
 - [ ] Placeholder-table behaviour (agent narrates a query it never ran, then
       emits '...' rows) — budget-exhaustion doctrine; watch on UAT.
 - [ ] Company-profile hallucination on unsupported asks — routing, open.
+- [ ] PO units feedback (2026-09-18, via user): DONE in config — ECM unit follows
+      equity_type (shares / bonds / preferred shares / units), counts exact in
+      full digits, mixed-class tables carry a Security column; money may
+      abbreviate. Census db-asks J proves the equity_type → unit mapping and the
+      deal-size unit (SIZE_UNIT at source) before any view work; retest QA 33/34.
 - [ ] PROD, under the freeze: ship the SKILL-only "LIMIT IS NOT DEMAND" rule
       now; the value half needs the view release (IOI rebuild).
 - [ ] Interim guards until the train: SKILL 284 (VALUE FIRST) and 641 (DCM members) byte-exact — the only layer overriding the stale order/tranche catalog notes in PROD (gate 524, 1988) — SKILL-2
@@ -97,6 +102,10 @@ Batch B:
 - [ ] V6 DEAL_SHARING_TYPE folded into the syndicate member block per product — two scans of a 377k-row table for one ask (rows 8, 1q, 18, 20 recorded before, 20b, ad-hoc ECM SOLO count; `_CITI_RX` count 3; QA 23)
 - [ ] V5 ECM deal branch in the lever-C shape (D = T⋈S grouped; deal-keyed blocks top-level; 41 aliases) — uniform shape + cheaper entity branches, not a latency claim (rows 7, 1e, 1o, 1w, 4, 4b, 15b, 15c; K10 vs K2; multi-transaction issuer hash probe; QA 2, 4, 11; T PARTITION BY unchanged pending census)
 - [ ] Standing check S3 gains a Starburst EXPLAIN of `WHERE product = 'DCM'` on vw_deal_summary — CHAR(3) literal pushdown unverified (type change if it fails; own decision)
+- [ ] SECURITY_UNIT derived column (after db-asks J): order/tranche/deal views,
+      ECM = CASE on equity_type (shares / bonds / preferred shares / units /
+      warrants), DCM = 'currency' — one authoritative unit per row instead of a
+      doctrine mapping; exposed as a dimension. Additive; approval-gated.
 Still staged from before:
 - [ ] PRICING & SENTIMENT batch — censused UAT 2026-09-18 (H + I), ranked:
       (1) ADDITIVE on vw_order_detail, DCM branch, from OB_ORDER_SIZE's latest

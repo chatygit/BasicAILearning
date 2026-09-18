@@ -2609,6 +2609,23 @@ check(has(AGENTS, "NEVER carry a unit parenthetical"),
 _SUGG = text(ROOT / "app" / "bqs" / "suggestions.py")
 check("do not stop at a menu" in _SUGG and "NUMBERED list" not in _SUGG,
       "[server] suggestions.py disambiguation hint teaches a blocking menu again")
+for _srv in (ROOT / "app" / "mcpserver.py", ROOT / "app" / "bqs" / "ontology.py"):
+    check("Information, not a menu" in text(_srv) or "It is information, not a menu" in text(_srv),
+          f"[server] {_srv.name}: the disambiguation instruction says re-run/isolate again — "
+          f"it must match the hint (PR bot 2026-09-18: conflicting instructions)")
+    check("re-run with one exact name" not in text(_srv),
+          f"[server] {_srv.name} still tells the agent to re-run with one exact name on a disambiguation")
+
+# BANKER UNITS (PO feedback via user, 2026-09-18): ECM figures are counts in the
+# SECURITY's unit — equity_type decides shares vs bonds; counts are exact (full
+# digits, commas, never "3.0mm shares"); mixed-class tables carry a Security
+# column. A convertible's allocation printed as shares was the reported defect.
+check(has(SKILL, "`equity_type` decides which") and has(SKILL, "COUNTS ARE EXACT"),
+      "[units] SKILL lost the security-unit / exact-count doctrine (PO 2026-09-18)")
+check(not has(SKILL, "mm shares"),
+      "[units] SKILL abbreviates a share count again ('mm shares') — counts are exact")
+check(has(ORDER, "shares for common stock, bonds for convertibles"),
+      "[units] order card lost the security-unit note on order_allocation")
 
 # SIZE RATCHET (RT-6, 2026-09-17): pay-every-turn (SKILL, agents) and
 # pay-per-fetch (catalog) files may only SHRINK. Lower a cap in the same commit

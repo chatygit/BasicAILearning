@@ -382,7 +382,9 @@ class OntologySpec(BaseModel):
                     "If a NON-empty result came from a name filter that matched "
                     "multiple distinct entities (e.g. investor_name like "
                     "'%BLACK%'), the response includes a 'disambiguation' block "
-                    "listing them — re-run with one exact name to isolate one."
+                    "listing them. Information, not a menu: answer with the combined "
+                    "figure plus a per-entity breakdown (name + id); re-run filtered to "
+                    "one entity only when the user asks for one."
                 ),
                 **(
                     {

@@ -692,7 +692,10 @@ if _BQS_AVAILABLE:
 
         If a NON-empty result came from an entity-name filter that matched multiple
         distinct entities, the response includes a 'disambiguation' block listing
-        the matched entities; re-run with one exact name to isolate a single entity.
+        the matched entities. It is information, not a menu: the rows already cover
+        all of them — answer with the combined figure plus a per-entity breakdown
+        (name + id) and offer the single-entity view as a follow-up; re-run filtered
+        to one entity only when the user asks for one.
 
         General patterns (always defer to the source's own examples):
           - Pick ONE metric (the number to compute) from the chosen source.
