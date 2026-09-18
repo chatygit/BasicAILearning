@@ -153,12 +153,13 @@ by ~7-8k tokens; session totals also depend on the query count.
 | Probe | Measures | Seconds | Rows |
 |---|---|---|---|
 | K1 | deal-scoped DCM orders via scalar-subquery id (lever B) | 19.5 | 2 |
-| K1b | same with a literal deal id (the agent's shape) | pending | |
+| K1b | same with a literal deal id (the agent's shape) | 0.6 | 7 |
 | K2 | DCM deal count, no demand columns (lever C) | 28.7 | 47,297 |
 | K3 | DCM total demand, full order-book scan (control) | 29.0 | 1 |
 | K4 | entity search, full pass | 146.7 | 219,410 |
 | K5 | deal-scoped DCM trades | 2.2 | 78 |
 | K6 | investor-name-scoped DCM orders, 6 months (Fidelity) | 17.0 | 42 |
 | K7 | unscoped aggregate over the order view (V1 go/no-go) | 25.1 | 2 |
-Targets: V1 (order-view anti-join) is judged on K6 and must not worsen K7;
+K1b proves lever B: deal-scoped asks are sub-second; K1's 19.5 s was the probe's
+scalar subquery. Targets: V1 (order-view anti-join) is judged on K6 and must not worsen K7;
 V2 (party-master rewrite) on K2; V3 (entity from the base tables) on K4.

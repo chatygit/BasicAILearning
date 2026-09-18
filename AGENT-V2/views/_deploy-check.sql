@@ -448,9 +448,9 @@ FROM DGSTREAM.VW_TRADE_SYNDICATE;
 -- statement so the tool reports per-probe elapsed. Values are INFO only.
 -- ===========================================================================
 
--- K1. Lever B: deal-scoped DCM order listing. The DEAL_ID filter can now
--- push into the OB_ORDER dedupe block and use IX_OB_ORDER_ROOT_PARENT_ORDER.
--- Was: full scan + window sort over 5.0M rows (~30s class). Expect: seconds.
+-- K1. Lever B: deal-scoped DCM order listing via a SCALAR-SUBQUERY id. NOTE
+-- (UAT 2026-09-18): 19.5 s here vs 0.6 s for K1b's literal id — the subquery
+-- is evaluated after the window; K1b is the agent's shape. Keep both.
 SELECT 'K1 deal-scoped DCM orders (lever B)' AS probe_,
        TO_CHAR(COUNT(*)) || ' rows for sampled deal' AS actual_
 FROM DGSTREAM.VW_ORDER_DETAIL

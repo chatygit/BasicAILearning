@@ -337,11 +337,3 @@ SELECT TYPE, COUNT(*) AS ROWS_, COUNT(PRICE_DEMAND) AS HAS_PRICE_LIMIT,
        COUNT(AMT_CHANGE) AS HAS_AMT_CHANGE, COUNT(CREATED_TS) AS HAS_CREATED_TS
 FROM   DGSTREAM.OB_ORDER_SIZE
 GROUP  BY TYPE ORDER BY ROWS_ DESC;
-
--- ===========================================================================
--- G. 2026-09-18 — ONE MORE BASELINE: K1b. K1–K7 seconds are recorded
--- (QA-PROMPTS.md). K1 used a scalar-subquery deal id (19.5 s); the agent sends
--- a literal. Run K1b from views/_deploy-check.sql (section K, last statement)
--- with the status line visible. Seconds-class = K1 was a probe artefact and
--- deal-scoped asks are fine; ~20 s = V1 is needed for them too.
--- ===========================================================================
