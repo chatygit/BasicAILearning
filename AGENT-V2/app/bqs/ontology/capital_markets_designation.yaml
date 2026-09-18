@@ -168,5 +168,5 @@ examples:
         - {field: deal_id, op: eq, value: "X"}
         - {field: approved_ts, op: is_null}
       order:
-        - {field: designation_id, dir: asc}
+        - {field: designation_id, direction: asc}
       limit: 50

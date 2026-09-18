@@ -52,7 +52,8 @@ order asks should be seconds) and one Gemini trace promptTokenCount (baseline
 - [ ] 13. "Which investors placed orders but were never allocated in 2025?" —
       PASS: one grouped query with having eq 0, not a row-level filter.
 - [ ] 14. "Top allocated investor on deal <many same-size allocations>" —
-      PASS: top-3 limit with a mass-tie count, not a row dump.
+      PASS: VALUE FIRST — one aggregate for the MAX, then the exact set at that
+      value; answered by the tie count. Never limit 1 or a limit-3 guess.
 
 Screenshot misbehavers to ADK as usual; triage happens as a batch.
 
@@ -116,3 +117,34 @@ Needs BOTH the nine views AND the config push in QA (+ BQS_ENABLED_SOURCES / new
   (trap row rewritten as a recipe).
 - Rerun after an ADK restart: 18, 2, 16 on the two-tranche txn 75043505.
   Then 24 and 15 (new columns, now that the views are in).
+
+## Added 2026-09-17 (analysis follow-ups — each is the check for a fix)
+- [ ] 26. "What are the coupon, yield, price and total fee of each tranche of
+      txn 75043505?" — PASS: tranche object answers (V3 columns); never "no
+      rate/fee exists".
+- [ ] 27. "List the syndicate members of deal <DCM deal> and how many there are"
+      — PASS: the DCM member list + count from one tranche query; no
+      "single B&D bank" caveat.
+- [ ] 28. "Show cancelled orders on deal <DCM deal>" — PASS: order_status filter
+      on the order object; no refusal.
+- [ ] 29. "List EMEA DCM deals priced in 2025" — PASS: deal object, deal_region
+      eq EMEA + product DCM, one query (deal_region is both products).
+- [ ] 30. "What spread over treasuries did <deal> price at?" — PASS: a governed
+      refusal ("spread over benchmark is not stored"), offering coupon/yield.
+- [ ] 31. "Top investors in deals by Fideltiy" (typo) — PASS: did_you_mean
+      suggestion on the 0-row single-string filter, one re-ask.
+- [ ] 32. "List every deal" (unscoped deal-view scan) — PASS: limit + a narrow
+      offered, or a clean query_timeout — never a silent 300 s client abort.
+
+## Token baseline BEFORE the SKILL compression (UAT/QA runs 2026-09-16/17, fresh sessions)
+| Prompt | final-call promptTokenCount | session Total Prompt Tokens |
+|---|---|---|
+| 1 top 10 investors by order size, USD, 12 months | 61,281 | 132,325 |
+| 2 largest 5 IPOs → top investors (allocation + indication) | 89,332 | 368,945 |
+| 3 BlackRock in refinancing deals 2025 | 60,560 | 131,795 |
+| 15 Fidelity indications/allocations, DCM, 6 months | 64,270 | 135,129 |
+| 16 top 5 investors in txn (per tranche) | 61,725 | 194,364 |
+| 18 top 5 investors in deal "The Travelers Co Inc" | 64,098 | 268,226 |
+AFTER: re-run the same six in fresh sessions on the compressed SKILL (93,427 →
+63,402 bytes) and fill a second column pair. Expect the final-call floor to drop
+by ~7-8k tokens; session totals also depend on the query count.

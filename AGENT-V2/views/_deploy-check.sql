@@ -486,3 +486,18 @@ SELECT 'K5 deal-scoped DCM trades (awaits OB_ORDER_TRADE ROOT_ID index)' AS prob
 FROM DGSTREAM.VW_TRADE_DETAIL
 WHERE PRODUCT = 'DCM'
 AND   DEAL_ID = (SELECT MIN(ROOT_ID) FROM DGSTREAM.OB_ORDER_TRADE);
+
+-- K6. Investor-name-scoped DCM order ask. The banker's dominant filter is NOT
+-- a PARTITION BY key, so the dedupe window runs over every OB_ORDER row
+-- first. Record ELAPSED before and after the V1 anti-join rewrite.
+SELECT COUNT(*) AS ORDERS_, SUM(ORDER_DEMAND_QTY) AS DEMAND_
+FROM   DGSTREAM.VW_ORDER_DETAIL
+WHERE  PRODUCT = 'DCM'
+AND    UPPER(INVESTOR_NAME) LIKE '%FIDELITY%'
+AND    PRICING_TS >= ADD_MONTHS(TRUNC(SYSDATE), -6);
+
+-- K7. Unscoped aggregate over the order view — the V1 go/no-go: it must not
+-- get slower after the anti-join rewrite.
+SELECT PRODUCT, COUNT(*) AS ORDERS_, SUM(ORDER_DEMAND_QTY) AS DEMAND_
+FROM   DGSTREAM.VW_ORDER_DETAIL
+GROUP  BY PRODUCT;

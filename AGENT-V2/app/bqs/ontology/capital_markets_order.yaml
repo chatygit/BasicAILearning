@@ -352,7 +352,7 @@ dimensions:
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Deal-level offering type denormalized to order grain — only 'IPO' and 'FO' stored. Makes 'investors in IPOs' ONE request on this object (no deal-id ferry). NULL on DCM."}
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS denormalized to order grain (release 2) — 'investor X in convertibles' is ONE request here now. Same values/rules as the deal object's equity_type; match class words with like. NULL on DCM."}
   order_ownership: {column: order_ownership, products: ["ECM"], description: "ECM. HOME = our (owned) book, AWAY = orders seen away. BOTH are in every total since release 2 (before it, every figure was HOME-only — ECM population grew ~45% at the flip). 'Our orders'/'Citi's book' = HOME. NULL = flag not stored. NULL on DCM (no such flag)."}
-  sales_person: {column: sales_person, products: ["DCM"], description: "DCM (release 3; NULL on ECM until its sales columns are measured). Covering salesperson, first + last name (~30% populated). 'Orders covered by <person>' filters here; NULL = not recorded."}
+  sales_person: {column: sales_person, description: "Both products (ECM = the investor salesperson name, population unmeasured on UAT; DCM since release 3). Covering salesperson, first + last name (~30% populated). 'Orders covered by <person>' filters here; NULL = not recorded."}
   transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: the origination transaction id — FORWARD-POPULATED (recent Ipreo deals only; NULL on history) — a NULL means the deal predates the link, not 'no transaction'. TEXT, quote it. 'Transaction 75041397' asks filter here. ONE TRANSACTION CAN MAP TO SEVERAL ORDERBOOK DEALS (UAT 2026-09-17: 75075343 → three deals, re-created regression copies; a PROD relaunch could do the same): on a transaction ask always project deal_id + deal_name, partition by deal_id as well as tranche, and when more than one deal comes back say so and answer per deal — never merge their books into one ranking."}
   order_status: {column: order_status, description: "Order status (V3, both products). NOTE: the ECM branch already excludes CANCELLED/DELETED/PASS rows at the view layer; DCM applies no exclusion — a DCM status breakdown can include statuses ECM never shows."}
   investor_lei: {column: investor_lei, products: ["ECM"], description: "ECM (V3). Investor LEI (sparse). NULL on DCM."}
@@ -392,7 +392,7 @@ dimensions:
 
 # -------------------------------- FILTERS ----------------------------------
   deal_region: {column: deal_region, description: "Parent deal's region ferried onto orders (helper wave) — 'orders/investors in NAM deals' is ONE request here. Deal-object vocabulary."}
-  tranche_region: {column: tranche_region, description: "Tranche-level region (DCM; NULL on ECM). Prefer deal_region unless the ask names tranches."}
+  tranche_region: {column: tranche_region, products: ["DCM"], description: "Tranche-level region (DCM; NULL on ECM). Prefer deal_region unless the ask names tranches."}
   deal_status: {column: deal_status, description: "Parent deal status ferried onto orders — status-scoped order asks in one request. Deal-object vocabulary; case variants real."}
   deal_size: {column: deal_size, description: "Parent deal size ferried onto orders. ECM = share count, DCM = notional — never mix units across products."}
   use_of_proceeds: {column: use_of_proceeds, description: "Parent deal use-of-proceeds ferried onto orders — 'investor money into refinancing deals' is ONE request. Deal-object vocabulary and traps (refi splits across two values)."}
@@ -408,6 +408,7 @@ filters:
     description: Deal-region scoping WITHOUT a deal-id ferry — deal-object vocabulary.
   tranche_region:
     column: tranche_region
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     case_insensitive: true
     description: DCM tranche region; NULL on every ECM row.
@@ -679,7 +680,6 @@ filters:
       request HERE — the deal-id two-step for equity_type is dead.
   sales_person:
     column: sales_person
-    products: ["DCM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true

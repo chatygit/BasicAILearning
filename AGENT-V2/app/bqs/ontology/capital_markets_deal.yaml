@@ -335,7 +335,7 @@ filters:
     description: "Issuer-side filter (GFCID, text — quote it). 'deals issued by <company>'."
   deal_name:
     column: deal_name
-    operators: [like, eq, in]
+    operators: [like, eq, in, is_null, is_not_null]
     suggestable: true
     entity_name: true
     entity_id_column: deal_id

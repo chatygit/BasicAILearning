@@ -62,6 +62,7 @@ metrics:
     description: Total trade notional in scope — NOT currency-scoped; label plainly.
   total_trade_allocation:
     column: trade_allocation
+    products: ["DCM"]
     aggregation: SUM
     numeric: true
     description: Total allocated across trades in scope — NOT currency-scoped.
@@ -76,22 +77,22 @@ dimensions:
   tranche_id: {column: tranche_id, description: "Tranche id the trade attaches to. TEXT."}
   order_id: {column: order_id, description: "The originating ORDER's id — joins capital_markets_order rows. TEXT."}
   trade_id: {column: trade_id, description: "Unique trade id — the drill-down handle; project it in listings. TEXT."}
-  parent_trade_id: {column: parent_trade_id, description: "Parent trade id when the trade descends from another (nullable). TEXT."}
+  parent_trade_id: {column: parent_trade_id, products: ["DCM"], description: "Parent trade id when the trade descends from another (nullable). TEXT."}
   trade_reference: {column: trade_reference, description: "EXTERNAL booking reference — what desks quote back; project it beside trade_id."}
   trade_type: {column: trade_type, description: "Trade type (seen: 'Institutional Pot'). Open vocabulary."}
   trade_sub_type: {column: trade_sub_type, description: "Trade sub-type (seen: 'SyndicateBilled Pot'). Open vocabulary."}
-  allocation_type: {column: allocation_type, description: "Allocation type (open vocabulary; sparse)."}
+  allocation_type: {column: allocation_type, products: ["DCM"], description: "Allocation type (open vocabulary; sparse)."}
   direction: {column: direction, description: "Trade direction (seen: 'Sell')."}
   billed_by: {column: billed_by, description: "Billing bank on the trade (full names) — same value family as the order object's billed_by."}
   counterparty_name: {column: counterparty_name, description: "Trade counterparty (investor/institution) name."}
   counterparty_gp_id: {column: counterparty_gp_id, description: "Counterparty GP id. TEXT."}
-  counterparty_type: {column: counterparty_type, description: "Counterparty type (seen: 'Institution')."}
-  sales_person: {column: sales_person, description: "Covering salesperson (first + last; NULL when not recorded)."}
+  counterparty_type: {column: counterparty_type, products: ["DCM"], description: "Counterparty type (seen: 'Institution')."}
+  sales_person: {column: sales_person, products: ["DCM"], description: "Covering salesperson (first + last; NULL when not recorded)."}
   sales_region: {column: sales_region, description: "Salesperson's region label (sparse)."}
   trade_size: {column: trade_size, description: "Trade notional (NUMBER). No currency scoping exists."}
-  trade_allocation: {column: trade_allocation, description: "Final allocation on the trade (NUMBER)."}
-  price_basis_code: {column: price_basis_code, description: "Price basis code (seen: 'IP')."}
-  price_basis_value: {column: price_basis_value, description: "Price basis value (NUMBER; seen: 55, 0)."}
+  trade_allocation: {column: trade_allocation, products: ["DCM"], description: "Final allocation on the trade (NUMBER)."}
+  price_basis_code: {column: price_basis_code, products: ["DCM"], description: "Price basis code (seen: 'IP')."}
+  price_basis_value: {column: price_basis_value, products: ["DCM"], description: "Price basis value (NUMBER; seen: 55, 0)."}
   trade_status: {column: trade_status, description: "Trade status (open vocabulary — unmeasured)."}
   trade_source_system: {column: trade_source_system, description: "Source system of the booking (sparse)."}
   trade_price: {column: trade_price, products: ["ECM"], description: "ECM (V3). Trade price (NUMBER). NULL on DCM (price basis lives in price_basis_code/value)."}
@@ -166,6 +167,7 @@ filters:
     description: Open vocabulary (unmeasured).
   sales_person:
     column: sales_person
+    products: ["DCM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
@@ -205,7 +207,7 @@ examples:
         - {field: deal_id, op: eq, value: "1500009396"}
         - {field: counterparty_name, op: like, value: "%MANULIFE%"}
       order:
-        - {field: trade_id, dir: asc}
+        - {field: trade_id, direction: asc}
       limit: 50
     note: Present trade_id AND trade_reference, both labelled.
   - question: Total trade size for tranche X of deal Y

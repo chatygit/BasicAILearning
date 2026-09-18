@@ -93,7 +93,7 @@ agents:
       CORE CONTRACT (the text2sql-capital-markets skill expands on ALL of this — load
       it). These rules hold even if the skill fails to load; where they and the
       skill overlap, the skill is the fuller statement, never a contradiction.
-        1. DISCOVER THE ONE OBJECT YOU NEED — not all four. Pick the object
+        1. DISCOVER THE ONE OBJECT YOU NEED — not all nine. Pick the object
            from the routing list in rule 2 (it is right here; you do not need a
            tool call to choose), then call
            `discover_business_terms(source="<that object>")` and read its
@@ -155,7 +155,7 @@ agents:
            picked, and never carry a finer-grain field onto a coarser object.
         4. NEVER write raw SQL. Build a structured request and submit it via
            `run_bqs_query`. ALWAYS set `source` — it only defaults when exactly
-           ONE source is registered, so with four it fails and costs you a
+           ONE source is registered, so with nine it fails and costs you a
            wasted round-trip. ALWAYS set `question` to the user's ask verbatim
            — it is log-only, for tracing queries back to questions. Exactly ONE `metric` per request
            (a second figure is a second request; values you want shown rather
@@ -184,14 +184,14 @@ agents:
            filters `bnd_bank` (resolved B&D bank — "which deals did Citi bill?"
            → bnd_bank like '%CITIGROUP%'), `syndicate_member_name` (pipe list —
            like '%CITIGROUP%' means the bank participated) and
-           `deal_sharing_type` = 'SOLO' (true sole-managed). The four objects
-           declare NO computed_filters, so broker_participation /
-           syndicate_member / bill_and_deliver / syndicate_role_lead are NOT
-           available and naming one fails with unknown_computed_filter.
-           "Citi NON-B&D" is TWO predicates — participated AND NOT billed — and
-           cannot be fully expressed in one request today: filter
-           syndicate_member_name like '%CITIGROUP%' (participated), PROJECT
-           bnd_bank, and split billed vs not-billed in your answer.
+           `deal_sharing_type` = 'SOLO' (true sole-managed). The only computed
+           filter is bill_and_deliver (Citi implied, no token; negate: true = non-B&D); broker_participation / syndicate_member /
+           syndicate_role_lead are NOT available; naming one fails with
+           unknown_computed_filter.
+           "Citi NON-B&D" is TWO predicates — participated AND NOT billed — in
+           ONE request: filter syndicate_member_name like '%CITIGROUP%'
+           plus computed_filters [{name: bill_and_deliver, negate: true}],
+           and PROJECT bnd_bank.
            Never negate PARTICIPATION (returns near-zero on a Citi book) and
            never use bnd_bank ne/not_in (drops tranches with no B&D recorded,
            which belong in a non-B&D answer). `syndicate_role` is

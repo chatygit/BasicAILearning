@@ -10,14 +10,34 @@ promotion steps to `PROMOTE-CHECKLIST.md`; prompts and run results to
 Layer ladder (view-change discipline): config → server → catalog → views.
 Views are approval-gated and ship only in planned batches. OPUS_BASE tables
 are allowed but FROZEN (no new dependencies). We have NO PROD access — every
-PROD item is an ask.
+PROD item is an ask. Finding ids (SKILL-n, CAT-n, V-n, SRV-n, RT-n, XL-n)
+refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
 
-## 1. Config (SKILL / agents.yaml / ontology yamls) — ships freely; PROD freeze = SKILL + agents.yaml only
-- [ ] UAT reruns (user runs UAT ONLY from 2026-09-17; local ADK pointed at UAT) after a restart — skills load at startup: 18
-      Travelers, 2 largest IPOs, 16 on the two-tranche txn 75043505 (capture
-      the ⚡ args), then 24 and 15. Proof the new SKILL is live: the ✓
-      load_skill text contains "Extra figures come from ROW-LEVEL columns".
-- [ ] 16 / TC1: confirm the top-N is PER TRANCHE (partition_by) from the ⚡ args.
+## 0. Sequence (analysis 2026-09-17)
+- Phase 0 — DONE 2026-09-17 except the UAT baselines: gate fails on SKIPped
+  tests, size ratchet, slot-aware [names], corpus test with golden SQL, catalog↔view
+  contract test (16 products drifts fixed in the same commit), two broken catalog
+  examples fixed (dir: → direction:). Still to do: K1–K7 on UAT (db-asks G).
+- Phase 1 — config: the nine cross-layer fixes DONE 2026-09-17; compression
+  PASS 1 DONE 2026-09-17 (SKILL 93,427 → 63,402 bytes, every gate pin kept,
+  1680 checks green). Pass 2 (→ ≤45k) waits for the six-prompt before/after
+  (QA-PROMPTS token baseline) — candidates: §2 two-step prose, §3 routing
+  rows, §6 table rows, §11 style bullets, the class-word map. PROD push rule:
+  the compressed SKILL is UAT-only until the yaml/server train ships to PROD
+  (deleted §7b lists exist only in the catalogs); a PROD-only SKILL push before
+  that = git HEAD SKILL + the nine small fixes, not the compressed file.
+- Phase 2 — server + ontology release train: SRV-1 → SRV-4 → SRV-3 → CAT-3 →
+  SRV-2 → SRV-5 → SRV-6; CAT-1 → CAT-2 → CAT-4/XL-1/2/3 → CAT-5 → CAT-6 →
+  SKILL-2 catalog fixes → XL-4 (with RT-3 xfails un-marked) → entity stem rule.
+- Phase 3 — view batches: A = V1 (+V4 fallback) + V2 + RT-4; B = V3, V6, V5.
+  K7 regression = no handover.
+
+## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
+- [ ] UAT reruns (UAT ONLY from 2026-09-17; local ADK pointed at UAT) after a
+      restart — skills load at startup: TC1 on txn 75076736, 18 Travelers, 2
+      largest IPOs, 16 on the two-tranche txn 75043505 (capture the ⚡ args),
+      then 24 and 15. Proof the new SKILL is live: the ✓ load_skill text
+      contains "Extra figures come from ROW-LEVEL columns".
 - [ ] 15 matrix: issuer_name + tenors columns missing from the Fidelity answer
       although the ORDERBOOK MATRIX note lists them — check it is applied.
 - [ ] Per-tranche listings must carry tranche_name ("three indications" for
@@ -26,34 +46,35 @@ PROD item is an ask.
       deal_id? Needs the ⚡ args. If so: an 8-digit id on DCM is a
       transaction_id (DCM deal ids are 'I-…' strings), whatever word was used.
 - [ ] Placeholder-table behaviour (agent narrates a query it never ran, then
-      emits '...' rows) — budget-exhaustion doctrine; watch in QA.
+      emits '...' rows) — budget-exhaustion doctrine; watch on UAT.
 - [ ] Company-profile hallucination on unsupported asks — routing, open.
-- [ ] COMPRESSION Phase 1 (after the QA list is done; measure 6 prompts
-      before/after): SKILL 92k chars → ≤45k (object doctrine → the owning
-      yaml; SKILL keeps routing, iron rules, budget, presentation, traps,
-      cross-object rules); catalogs tranche 16k → ≤8k tokens, order/deal ~12k
-      → ≤7k (telegraphic descriptions, boilerplate once per object, keep value
-      lists); agents.yaml routing ~5k → ~2k tokens. Gate pins move with the
-      text. Evidence: rule dilution (E8 pinned no-unit-parenthetical rule
-      ignored 2/2 with V3 live; metric-in-dimensions 8 slips in two days);
-      a two-catalog ask costs 2.7x a one-catalog ask (354k vs 133k session).
 - [ ] PROD, under the freeze: ship the SKILL-only "LIMIT IS NOT DEMAND" rule
       now; the value half needs the view release (IOI rebuild).
+- [ ] Interim guards until the train: SKILL 284 (VALUE FIRST) and 641 (DCM members) byte-exact — the only layer overriding the stale order/tranche catalog notes in PROD (gate 524, 1988) — SKILL-2
+SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measurement:
+- [ ] Pass 2 candidates: §2 two-step prose (~4.3k → 2.5k), §3 routing rows, §6 table rows (~7.5k → 4.8k), §11 bullets (~5.9k → 4.5k), class-word map (~2.4k → 1.8k); every deletion checked with the pin-range helper (scratchpad pinmap.py) and the gate after each section
+- [ ] agents.yaml ratchet 20,618 → 8,000 in step with the §11/§0b survival-kit decision — gate §14 680-694 requires the overlap (RT-6)
+- [ ] Measure: six-prompt before/after (QA-PROMPTS 1, 2, 3, 15, 16, 18 — one promptTokenCount each) at the end of the compression
 
-## 2. Server (release train) — DONE = in repo, undeployed; TODO = not written
+## 2. Server (release train; ontology yamls ship inside it) — DONE = in repo, undeployed
 - [ ] DONE metric-slot explainer: `_explain_cross_object` checks the requesting
       object's metrics first (E10; tests in tests/test_cross_object_error.py).
 - [ ] DONE config.py default BQS_ENABLED_SOURCES = nine sources.
-- [ ] TODO MCP result de-dup: mcpserver.py dict-return tools emit BOTH
-      content[0].text (full JSON) and structuredContent — ~25% of every call,
-      doubles every catalog fetch. Return one form. Faster path = ADK
-      before_model callback (ASKS-external.md §1).
-- [ ] TODO sql_audit flag ECM_DCM_SQL_AUDIT=summary|full|off, default summary;
-      cap suggestion/disambiguation block sizes.
-- [ ] TODO execution timeout < 300 s (e.g. 240 s, Trino session property or
-      driver) so heavy queries fail fast; never raise the 300 s client timeout.
-- [ ] TODO zero-row enrich probes: skip or budget them once execute has
-      exceeded a threshold (they re-query slow views for nothing).
+- [ ] SRV-1 MCP result de-dup: `output_schema=None` + one compact TextContent, compact `tool_serializer`; lazy imports or extended test stubs — every result reaches the model twice (~16k tokens per tranche fetch) (test_entitlement_gate.py 15 cases; gate 1538/1210 on the wrapper; importorskip Client test; PROMOTE-CHECKLIST FastMCP/ADK check; exclusive with ASKS-external §1b)
+- [ ] SRV-4 tool schema via `Annotated[..., Field(description=...)]` with the metric-slot rule on dimensions/filters; docstrings < 1,500/800 chars; `question` signature untouched; tools.yaml:48 nine — −800 tokens/call, class-1 defence at the argument (gate 1111, 1210 moved, new textual pins; QA 2, 24)
+- [ ] SRV-3 `ECM_DCM_SQL_AUDIT` default off, one-line paging keeping "rows N-M", delete `scored`; SKILL 895 drops generated_sql only — 300-550 tokens/result (test_response_paging.py :144 rewritten; gate 1239/1243-1246/2496 moved)
+- [ ] CAT-3 discovery(): drop `_generic_how_to_use()` and response_features suggestions/disambiguation; prune by `products:` ∩ `entitled` only when entitled non-empty — −3k chars/fetch; the only route to tranche ≤8k without cutting vocabulary (gate 527-528/2271 → SKILL, 1595/1624 kept; test_discovery_carries_entitled_products + 3 pruning tests; QA 1, 11, 14, 15, 16)
+- [ ] SRV-2 zero-row enrich: exec_seconds threaded; `BQS_ENRICH_PROBE_BUDGET_SECONDS`=10, `BQS_MAX_SUGGESTION_PROBES`=2, entity_name guesses first; no block for curated same-value filters — k serial 19-29 s probes after the answer is known (tests/test_suggestion_budget.py; gate 1268-1282; SKILL 861-863 keeps "the *slow* path"; QA 31)
+- [ ] SRV-5 Trino `query_max_execution_time` from query_timeout_seconds (240 s big three, 120 s others); INERT comments out; gate floor ≥120 — the only bound today is the 300 s client abort the agent retries (stub-connector test; EXCEEDED_TIME_LIMIT → query_timeout; QA 32; confirm POC connector kwarg first)
+- [ ] SRV-6 `_entitlement_gate` returns (denial, entitled), called once; delete Oracle/Postgres executor branch, zen path, template tool/resource/prompt; as_of_date emitted as null; cache-design.md:90 corrected — ~600 dead lines (scoping tests tuple-shaped; single-call counting stub; gate 1012-1022 scoped to run_bqs_query body; confirm POC consumers)
+- [ ] CAT-1 catalog one-home-per-fact: doctrine on filters, dimension one-liners, how_to_use restatements deleted; relocate `censused QA+UAT 2026-09-04` — 15-20k chars off the big three, one fewer dilution vector (gate TRAPS 392-403, 384, 429-442, 1974; test_yaml_schema_hygiene; QA 2, 8, 9; literal-set diff empty)
+- [ ] CAT-2 provenance clauses → YAML comments; six pins re-pinned date-free; rendered-text citation check — 8-10k chars; no UAT counts / PO txn id in the payload (gate 1831/1847/1852/1857/1938/1973; QA 15, 16, 25; discover size measured)
+- [ ] CAT-4 + XL-1/2/3 stale refusals: delete `syndicate_on_dcm`, `cancelled_deleted_orders`; `pricing_economics` → `spread_to_benchmark`; `hedge_securities_count` → hedge-listing redirect; entity "ALWAYS NULL for INVESTOR + DCM" softened; tranche 99-100/811/688/241-243/971-973/1037-1038 corrected; stale comment blocks out — four wrong-refusal classes on exposed fields (gate 237/459/461/610 + negatives; test_planner_contract; QA 3, 5b, 5c, 7, 26, 27, 28, 30)
+- [ ] CAT-5 boilerplate once per object (date rule, TEXT ids + 40-cap, ferry line, product filter "Set it when the product is known") — 2-2.5k chars; closes the "ALWAYS set product" cause of class 2 (gate [time] 419 extended to date-bearing objects, 421, [yaml] 96-115; QA 1, 15, 5b, 17, 25)
+- [ ] CAT-6 how_to_use reorder + tranche never-guess sentence — MATRIX/TOP-N sit 6.7-8.2k chars into the rendered list (gate 1803-1808 extended to TRANCHE; 1819-1827/1847-1848/470-471 presence; QA 2, 7, 15, 16, 18)
+- [ ] SKILL-2a/b/d + SKILL-4 catalog side: order.yaml 156-163 value-first; 143-144 partition_by `[deal_id, tranche_name]` with deal_id in the MATRIX projection; tranche 690-691 anchored Citi forms keeping `%CITIGROUP%` — catalog beats SKILL by the SKILL's own precedence note (gate 524, 1919-1920, 1848, 1825-1827, 2148-2149 + negatives; planner bad_partition test; QA 14, 16, 23)
+- [ ] SKILL-6 gate: description starts with its `products:` token; fix the seven exceptions — the leading token is the agent's only applicability hint (new textual check; QA 11)
+- [ ] SKILL-3 catalog side: entity.yaml gains the SpaceX stem + "re-asked question gets a NEW strategy" rules; comment 15-18 updated with V3 — only entity doctrine not yet in the yaml (gate 1791-1792 stay on SKILL; QA 10, 17)
 - [ ] TODO unmask fetch errors — surface the DB error text.
 - [ ] TODO DENSE_RANK for partition_by top-N (ties at the boundary).
 - [ ] TODO result cache — spec in cache-design.md; build on "build it".
@@ -63,15 +84,35 @@ PROD item is an ask.
       with `in [ECM, DCM]`, so requires_filters can never fire.
 - [ ] TODO bad_having_grain guard: reject `having` on a COUNT-DISTINCT metric
       whose column is also in dimensions (0 rows by construction).
-- [ ] TODO tool schema: the `dimensions` parameter description says
-      "attribute names only — a total_*/largest_*/*_count name is a metric,
-      put it in `metric`". Schemas are seen every turn; cheaper than SKILL prose.
 
-## 3. Views (next planned batch — approval-gated; files handed verbatim, comment-free)
-- [ ] vw_order_detail: transaction_id pushdown — join ORIGINATION_TRANSACTION_ID
-      INSIDE the DCM dedupe subquery and add it to the PARTITION BY
-      (functionally dependent on ROOT_ID → identical partitions). Txn-scoped
-      order asks run 19-29 s vs 2-6 s deal-scoped. Tranche view too if slow.
+## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+Batch A:
+- [ ] V1 vw_order_detail DCM/ECM dedupe → correlated min-ROWID NOT EXISTS (hedge/trade blocks excluded — their survivor is latest PUBLISHED_TS); supersedes the txn-id PARTITION BY item — non-key predicates (investor name/id, dates, currency, txn id) cannot push into the window (rows 9, 6, 1d, 1j, 21, 21b; ORA_HASH identity per product; K6 before/after; K7 unscoped-aggregate go/no-go; QA 15, 16, 17, 18; NULL-guard pins, [opusbase] 3)
+- [ ] V4 fallback if V1 is rejected: txn-id pushdown joins the EXISTING deduped ODT block inside the DCM window with DT.ORIGINATION_TRANSACTION_ID in PARTITION BY (never the raw table); no hedge extension — 19-29 s vs 2-6 s (row 9; K9 vs K1; QA 16, 25, 17, E9; TRANSACTION_ID last projection)
+- [ ] V2 PCM x6 / ODI x3 → `MAX(col) KEEP (DENSE_RANK FIRST ORDER BY PUBLISHED_TS DESC, ROWID)` GROUP BY join key — window views are never join-eliminable; every aggregate pays a 361k-row scan+sort (rows 7, 8, 9, 1e, 1o, 1w; K2 recorded; K8 DBMS_XPLAN deal AND tranche; QA 10, 19; [opusbase] 3/3/3)
+- [ ] RT-4 deploy-check section A → nine column-count rows (expected_ = file projection, asserted by RT-3); rows 22 (txn→deals, INFO) / 23 (bookless by product, INFO) in section B agg; PROMOTE-CHECKLIST step 2 rewritten — a partial deploy becomes a FAIL naming the view (A0 + nine rows + 17/2/3/18; grain 7-13b unchanged; gate 498/2184 untouched)
+Batch B:
+- [ ] V3 vw_entity_search INVESTOR branch from OB_ORDER/OB_ECM_ORDER with the order view's population predicates; `CAST(MAX(TT.PRICING_TS) AS TIMESTAMP(3))` on ECM — re-derives the 5M-row order view for six columns (K11 census incl. SUM(ENTITY_ACTIVITY_COUNT) identical; K4 before/after; QA 3, 10, 17; [opusbase] 0)
+- [ ] V6 DEAL_SHARING_TYPE folded into the syndicate member block per product — two scans of a 377k-row table for one ask (rows 8, 1q, 18, 20 recorded before, 20b, ad-hoc ECM SOLO count; `_CITI_RX` count 3; QA 23)
+- [ ] V5 ECM deal branch in the lever-C shape (D = T⋈S grouped; deal-keyed blocks top-level; 41 aliases) — uniform shape + cheaper entity branches, not a latency claim (rows 7, 1e, 1o, 1w, 4, 4b, 15b, 15c; K10 vs K2; multi-transaction issuer hash probe; QA 2, 4, 11; T PARTITION BY unchanged pending census)
+- [ ] Standing check S3 gains a Starburst EXPLAIN of `WHERE product = 'DCM'` on vw_deal_summary — CHAR(3) literal pushdown unverified (type change if it fails; own decision)
+Still staged from before:
+- [ ] PRICING & SENTIMENT batch (design after db-asks H): the banker's core
+      ask is unanswerable today beyond static terms. In the SOURCE, not in any
+      view: DCM per-order limits (OB_ORDER_SIZE PRICE_DEMAND / SPREAD_DEMAND /
+      MIN_YIELD / MIN_SIZE), size revisions (AMT_CHANGE) and order timing
+      (CREATED_TS/UPDATED_TS) → price sensitivity + book momentum; ECM IOI
+      curve points (OB_ECM_ORDER_IOI LIMIT_TYPE/LIMIT_VALUE/IOI_QTY, collapsed
+      to MAX today), IOI timestamps (IOI_ACT_DATE_TIME), ACTIVE_PRICE /
+      BOOK_STATUS (exposed); ECM pricing context (OPUS_ECM_TRANSACTION_TRANCHE
+      LAST_TRADE_PRICE_BEFORE_OFFER/LAUNCH → discount to last close,
+      INITIAL_DEAL_AMOUNT → upsizing); DCM PRICE_GUIDANCE text (exposed; content
+      unknown), OB_TRANCHE_PRICING (unexplored). Candidate shapes: additive
+      columns on vw_order_detail (limit_price / limit_spread / min_yield /
+      size_change / order_ts), deal-view context columns (last_close_before_offer,
+      initial_deal_amount), and ONE new grain — an IOI/limit-curve view (one row
+      per order × limit point) if H2/H3 show real curves. All approval-gated;
+      OPUS_BASE untouched.
 - [ ] vw_tranche_summary: ORDER_COUNT / INVESTOR_COUNT roll-ups (additive), so
       tranche-level rankings can filter bookless shells like the deal object.
       (UAT 2026-09-17: 19,804 of 21,009 ECM Citi-solo tranches in 2024 sit on
@@ -90,6 +131,8 @@ PROD item is an ask.
       book only, disclosed.
 - [ ] Upstream data-team ticket (not ours): ECM deal region is a source gap —
       5% of ECM transactions carry a region on any base-transaction version.
+- [ ] Before any batch: record K1–K5 elapsed on UAT in QA-PROMPTS.md; capture
+      K6 (investor-name class) and K7 (unscoped GROUP BY) BEFORE V1.
 
 ## 4. NEW ENHANCEMENTS — PO UAT DCM feedback, batch 2026-09-15 ("don't re-ask")
 Standard matrix (reqs 1-7), constraint columns (C/E1), TC1-TC4, E2-E7 are all
@@ -110,11 +153,18 @@ implemented (config + views). Only what is still open is listed.
 MRM: DCM 85 % (minimum 80 %), ECM 94 %; the PO holds the DCM submission until
 our push lands — coordinate timing (a mid-cycle change invalidates the sample).
 
-## 5. Where the rest lives
+## 5. Tests (tests/ + gate edits) — none of the 12 recent failure classes had a pre-deploy catch
+- [ ] RT-5 remainder: extend the [names] scan to yaml how_to_use/usage_notes prose and validate routed rows against THAT object's keys (the slot-aware metric-in-dimensions half shipped 2026-09-17)
+- [ ] Server tests that pin new behaviour before it ships: tests/test_suggestion_budget.py, stub-connector timeout test, single-entitlement-call test, discovery pruning trio, XL-4 planner cases, importorskip FastMCP client test (each named in §2) — SRV-1/2/5/6, CAT-3, XL-4
+- [ ] SKILL-6 leading-token check; CAT-2 no-provenance check; XL-*/CAT-4 negative pins — phrase-named failures (gate)
+
+## 6. Where the rest lives
 - Asks to other teams: ASKS-external.md
 - PROD-side items, promotion order: PROMOTE-CHECKLIST.md
 - SQL checks for the user (open + standing): views/_checks/db-asks.sql
 - Prompts + run results: QA-PROMPTS.md
+- The analysis report itself (byte budgets, pin lists, per-item proofs):
+  scratchpad analysis-2026-09-17.md (ephemeral) — conclusions in memory.
 - Closed history: git log of the retired files (audit-backlog-2026-08-11.md,
   uat-dcm-feedback-2026-09-15.md, uat-issues-2026-09-02.md,
   prod-issues-2026-08-21.md, dcm-issues-2026-08-24.md,

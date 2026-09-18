@@ -322,85 +322,91 @@ GROUP  BY PRODUCT, DEAL_SHARING_TYPE ORDER BY PRODUCT, DEAL_SHARING_TYPE;
 
 
 
+
 -- ===========================================================================
--- F. 2026-09-17 — ISSUER PRECEDENCE: the DCM issuer name is the party master's
--- Primary Client keyed by ORIGINATION_TRANSACTION_ID, falling back to the
--- orderbook's own OB_DEAL_ISSUER only when the master has nothing. Txn
--- 75075343 labels three unrelated test deals WALMART INC. How often do the
--- two sources DISAGREE on UAT, and what does the orderbook say for those three?
+-- G. 2026-09-17 — VIEW-BATCH BASELINES (before any view change). Run
+-- views/_deploy-check.sql section K (K1–K7) on UAT with timing shown and
+-- screenshot the ELAPSED times; they are the "before" numbers for the order
+-- view anti-join (V1) and the party-master rewrite (V2). No SQL here — the
+-- statements live in the deploy check so before/after use identical text.
 -- ===========================================================================
 
--- F1. The orderbook's own issuer for the deals on 75075343 (what our view hides).
-SELECT DT.DEAL_ID, MAX(DT.DEAL_NAME) AS DEAL_NAME, DI.NAME AS OB_ISSUER, DI.GFCID AS OB_GFCID
-FROM   DGSTREAM.OB_DEAL_TRANCHE DT
-LEFT JOIN DGSTREAM.OB_DEAL_ISSUER DI
-       ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID
-WHERE  DT.ORIGINATION_TRANSACTION_ID = '75075343'
-GROUP  BY DT.DEAL_ID, DI.NAME, DI.GFCID
-ORDER  BY DT.DEAL_ID;
 
--- F2. The party master's Primary Client for that transaction (what wins).
-SELECT TRANSACTION_ID, PARTY_NAME, PARTY_GFCID, PUBLISHED_TS
-FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
-WHERE  TRANSACTION_ID = '75075343' AND PARTY_ROLE = 'Primary Client'
-ORDER  BY PUBLISHED_TS DESC;
+-- ===========================================================================
+-- H. 2026-09-17 — PRICING & SENTIMENT CENSUS (UAT). The banker's biggest use
+-- is "where did it price and how did the book feel". The source carries
+-- per-order LIMITS, size REVISIONS and TIMESTAMPS that no view exposes today.
+-- This sizes each before a view batch is designed. Screenshot each result.
+-- ===========================================================================
 
--- F3. Across UAT: deals where both sources answer, and how many disagree.
-SELECT COUNT(*) AS DEALS_WITH_BOTH,
-       SUM(CASE WHEN UPPER(TRIM(OB.OB_ISSUER)) <> UPPER(TRIM(P.PARTY_NAME)) THEN 1 ELSE 0 END) AS DISAGREE_
-FROM  (SELECT DT.DEAL_ID, MAX(DT.ORIGINATION_TRANSACTION_ID) AS TXN, MAX(DI.NAME) AS OB_ISSUER
-       FROM   DGSTREAM.OB_DEAL_TRANCHE DT
-       JOIN   DGSTREAM.OB_DEAL_ISSUER DI
-              ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID
-       WHERE  DT.ORIGINATION_TRANSACTION_ID IS NOT NULL AND DI.NAME IS NOT NULL
-       GROUP  BY DT.DEAL_ID) OB
-JOIN  (SELECT TRANSACTION_ID, PARTY_NAME
-       FROM  (SELECT TRANSACTION_ID, PARTY_NAME,
-                     ROW_NUMBER() OVER (PARTITION BY TRANSACTION_ID ORDER BY PUBLISHED_TS DESC) AS RN_
-              FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
-              WHERE  PARTY_ROLE = 'Primary Client')
-       WHERE  RN_ = 1) P
-       ON P.TRANSACTION_ID = OB.TXN;
+-- H1. DCM per-order limit conditions (OB_ORDER_SIZE): what TYPE rows exist and
+--     how many carry a price / spread / yield limit or a size change.
+SELECT TYPE, COUNT(*) AS ROWS_,
+       COUNT(PRICE_DEMAND)  AS HAS_PRICE_LIMIT,
+       COUNT(SPREAD_DEMAND) AS HAS_SPREAD_LIMIT,
+       COUNT(MIN_YIELD)     AS HAS_MIN_YIELD,
+       COUNT(AMT_CHANGE)    AS HAS_AMT_CHANGE,
+       COUNT(MIN_SIZE)      AS HAS_MIN_SIZE,
+       COUNT(CREATED_TS)    AS HAS_CREATED_TS
+FROM   DGSTREAM.OB_ORDER_SIZE
+GROUP  BY TYPE
+ORDER  BY ROWS_ DESC;
 
--- F4. A sample of the disagreements (company names only).
-SELECT *
-FROM  (SELECT OB.DEAL_ID, OB.TXN, OB.OB_ISSUER, P.PARTY_NAME AS PCM_ISSUER
-       FROM  (SELECT DT.DEAL_ID, MAX(DT.ORIGINATION_TRANSACTION_ID) AS TXN, MAX(DI.NAME) AS OB_ISSUER
-              FROM   DGSTREAM.OB_DEAL_TRANCHE DT
-              JOIN   DGSTREAM.OB_DEAL_ISSUER DI
-                     ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID
-              WHERE  DT.ORIGINATION_TRANSACTION_ID IS NOT NULL AND DI.NAME IS NOT NULL
-              GROUP  BY DT.DEAL_ID) OB
-       JOIN  (SELECT TRANSACTION_ID, PARTY_NAME
-              FROM  (SELECT TRANSACTION_ID, PARTY_NAME,
-                            ROW_NUMBER() OVER (PARTITION BY TRANSACTION_ID ORDER BY PUBLISHED_TS DESC) AS RN_
-                     FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
-                     WHERE  PARTY_ROLE = 'Primary Client')
-              WHERE  RN_ = 1) P
-              ON P.TRANSACTION_ID = OB.TXN
-       WHERE  UPPER(TRIM(OB.OB_ISSUER)) <> UPPER(TRIM(P.PARTY_NAME)))
-WHERE  ROWNUM <= 15;
+-- H2. How many DCM orders have more than one size row (a limit curve or a
+--     revision history), and the typical count.
+SELECT ROWS_PER_ORDER, COUNT(*) AS ORDERS_
+FROM  (SELECT ORDER_ID, COUNT(*) AS ROWS_PER_ORDER
+       FROM   DGSTREAM.OB_ORDER_SIZE GROUP BY ORDER_ID)
+GROUP  BY ROWS_PER_ORDER ORDER BY ROWS_PER_ORDER;
 
--- F5. Party-master name fill on UAT, and GFCID-based agreement (names are NULL
---     in the UAT party master — F2 — so compare the entity KEY instead).
-SELECT COUNT(*) AS PRIMARY_CLIENT_ROWS,
-       COUNT(PARTY_NAME)  AS WITH_NAME,
-       COUNT(PARTY_GFCID) AS WITH_GFCID
-FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
-WHERE  PARTY_ROLE = 'Primary Client';
+-- H3. ECM IOI curve (OB_ECM_ORDER_IOI): limit types and multi-point share.
+SELECT LIMIT_TYPE, COUNT(*) AS IOI_ROWS, COUNT(DISTINCT ORDER_ID) AS ORDERS_,
+       COUNT(LIMIT_VALUE) AS HAS_LIMIT_VALUE
+FROM   DGSTREAM.OB_ECM_ORDER_IOI
+GROUP  BY LIMIT_TYPE ORDER BY IOI_ROWS DESC;
 
-SELECT COUNT(*) AS DEALS_WITH_BOTH_GFCID,
-       SUM(CASE WHEN OB.OB_GFCID <> P.PARTY_GFCID THEN 1 ELSE 0 END) AS GFCID_DISAGREE_
-FROM  (SELECT DT.DEAL_ID, MAX(DT.ORIGINATION_TRANSACTION_ID) AS TXN, MAX(DI.GFCID) AS OB_GFCID
-       FROM   DGSTREAM.OB_DEAL_TRANCHE DT
-       JOIN   DGSTREAM.OB_DEAL_ISSUER DI
-              ON DI.DEAL_TRANCHE_ID = DT.DEAL_ID || '-' || DT.TRANCHE_ID
-       WHERE  DT.ORIGINATION_TRANSACTION_ID IS NOT NULL AND DI.GFCID IS NOT NULL
-       GROUP  BY DT.DEAL_ID) OB
-JOIN  (SELECT TRANSACTION_ID, PARTY_GFCID
-       FROM  (SELECT TRANSACTION_ID, PARTY_GFCID,
-                     ROW_NUMBER() OVER (PARTITION BY TRANSACTION_ID ORDER BY PUBLISHED_TS DESC) AS RN_
-              FROM   DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES
-              WHERE  PARTY_ROLE = 'Primary Client' AND PARTY_GFCID IS NOT NULL)
-       WHERE  RN_ = 1) P
-       ON P.TRANSACTION_ID = OB.TXN;
+SELECT POINTS, COUNT(*) AS ORDERS_
+FROM  (SELECT ORDER_ID, COUNT(*) AS POINTS FROM DGSTREAM.OB_ECM_ORDER_IOI GROUP BY ORDER_ID)
+GROUP  BY POINTS ORDER BY POINTS;
+
+-- H4. ECM order timing + price context on OB_ECM_ORDER (names from the
+--     2026-08-31 desc; a failure here = a name to correct, not a finding).
+SELECT COUNT(*) AS ORDERS_,
+       COUNT(IOI_ACT_DATE_TIME) AS HAS_IOI_TS,
+       COUNT(ACTIVE_PRICE)      AS HAS_ACTIVE_PRICE,
+       COUNT(LIMIT_DISCOUNT_POT) AS HAS_LIMIT_DISCOUNT,
+       COUNT(RELATIVE_INDICATION) AS HAS_RELATIVE_INDICATION
+FROM   DGSTREAM.OB_ECM_ORDER
+WHERE  ORDER_STATUS NOT IN ('CANCELLED','DELETED','PASS');
+
+-- H5. ECM pricing context at tranche grain (OPUS_ECM_TRANSACTION_TRANCHE):
+--     discount-to-last-close and upsizing inputs. Name check first (no rows =
+--     names compile), then fill.
+SELECT LAST_TRADE_PRICE_BEFORE_OFFER, LAST_TRADE_PRICE_BEFORE_LAUNCH,
+       LAST_TRADE_PRICE_BEFORE_FILING, INITIAL_DEAL_AMOUNT, REVISED_PAR_VALUE
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE WHERE 1 = 0;
+
+SELECT COUNT(*) AS TRANCHES_,
+       COUNT(LAST_TRADE_PRICE_BEFORE_OFFER)  AS HAS_LAST_CLOSE_BEFORE_OFFER,
+       COUNT(LAST_TRADE_PRICE_BEFORE_LAUNCH) AS HAS_LAST_CLOSE_BEFORE_LAUNCH,
+       COUNT(INITIAL_DEAL_AMOUNT)            AS HAS_INITIAL_DEAL_AMOUNT,
+       COUNT(REVISED_PAR_VALUE)              AS HAS_REVISED_PAR
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE;
+
+-- H6. DCM pricing progression at tranche grain: what PRICE_GUIDANCE looks
+--     like (sample), and fill of guidance / yield / coupon / book size.
+SELECT COUNT(*) AS TRANCHES_,
+       COUNT(PRICE_GUIDANCE) AS HAS_GUIDANCE, COUNT(YIELD) AS HAS_YIELD,
+       COUNT(COUPON) AS HAS_COUPON, COUNT(PRICE) AS HAS_PRICE,
+       COUNT(BOOK_SIZE) AS HAS_BOOK_SIZE, COUNT(ORDER_BOOK_SIZE_USD) AS HAS_BOOK_USD
+FROM   DGSTREAM.OB_DEAL_TRANCHE;
+
+SELECT PRICE_GUIDANCE, COUNT(*) AS TRANCHES_
+FROM   DGSTREAM.OB_DEAL_TRANCHE
+WHERE  PRICE_GUIDANCE IS NOT NULL
+GROUP  BY PRICE_GUIDANCE ORDER BY TRANCHES_ DESC FETCH FIRST 25 ROWS ONLY;
+
+-- H7. The unexplored OB_TRANCHE_PRICING table — columns and row count.
+SELECT column_name, data_type FROM all_tab_columns
+WHERE  owner = 'DGSTREAM' AND table_name = 'OB_TRANCHE_PRICING' ORDER BY column_id;
+SELECT COUNT(*) AS ROWS_ FROM DGSTREAM.OB_TRANCHE_PRICING;

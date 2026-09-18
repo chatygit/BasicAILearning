@@ -150,8 +150,7 @@ for path in [SKILL, AGENTS]:
             raw = src[max(0, m.start() - 500): m.end() + 500]
             window = " ".join(re.sub(r"[`*]", "", raw).split())
             line = src[: m.start()].count("\n") + 1
-            check(re.search(r"NOT available|not available|unknown_computed_filter|"
-                            r"declares no computed_filters|declare NO computed_filters",
+            check(re.search(r"NOT available|not available|unknown_computed_filter",
                             window, re.I) is not None,
                   f"[refint] {path.name}:{line}: recommends computed_filter "
                   f"'{name}', which no ontology declares, without saying it is "
@@ -1347,24 +1346,40 @@ if PLANNER.exists():
           "units guard in all four ontologies depends on it raising")
 
 # The scope test is the executable proof of FIX 1; it must pass.
+import subprocess  # noqa: E402
+
+
+def _run_py(path):
+    """Run a dual-mode test file. A SKIPped case is a FAILURE here (RT-1,
+    2026-09-17): under an interpreter without pydantic/yaml every planner-backed
+    case printed '  SKIP …' and exited 0, and this gate said 'Safe to hand
+    back' having proven nothing. Run the gate with the interpreter that passes
+    pytest (the venv), never bare system python."""
+    p = subprocess.run([sys.executable, str(path)], capture_output=True, text=True)
+    out = (p.stdout or "") + (p.stderr or "")
+    skipped = [l.strip() for l in out.splitlines() if l.strip().startswith("SKIP")]
+    check(not skipped,
+          f"[python] {Path(path).name} SKIPPED {len(skipped)} case(s) — nothing was "
+          f"proven ({skipped[0][:70] if skipped else ''}); run the gate with the "
+          f"interpreter that has pydantic/yaml")
+    return p.returncode
+
+
 if SCOPE_TEST.exists():
     import subprocess
-    rc = subprocess.run([sys.executable, str(SCOPE_TEST)],
-                        capture_output=True, text=True).returncode
+    rc = _run_py(SCOPE_TEST)
     check(rc == 0, "[python] entitlement_scope_test.py FAILED — run it directly "
                    "to see which case regressed")
 
 if SOEID_TEST.exists():
     import subprocess
-    rc = subprocess.run([sys.executable, str(SOEID_TEST)],
-                        capture_output=True, text=True).returncode
+    rc = _run_py(SOEID_TEST)
     check(rc == 0, "[python] test_soeid_resolution.py FAILED — run it directly "
                    "to see which identity case regressed")
 
 if SECRETS_TEST.exists():
     import subprocess
-    rc = subprocess.run([sys.executable, str(SECRETS_TEST)],
-                        capture_output=True, text=True).returncode
+    rc = _run_py(SECRETS_TEST)
     check(rc == 0, "[python] test_cyberark_cache.py FAILED — run it directly to "
                    "see which cache guarantee regressed")
 
@@ -1385,8 +1400,7 @@ if SECRETS_TEST.exists():
 
 if DISAMBIG_TEST.exists():
     import subprocess
-    rc = subprocess.run([sys.executable, str(DISAMBIG_TEST)],
-                        capture_output=True, text=True).returncode
+    rc = _run_py(DISAMBIG_TEST)
     check(rc == 0, "[python] test_disambiguation_scope.py FAILED — the probe is "
                    "no longer scoped like the query it explains")
 
@@ -1471,8 +1485,7 @@ if ENT_SVC.exists():
 
 if ENT_CACHE_TEST.exists():
     import subprocess
-    rc = subprocess.run([sys.executable, str(ENT_CACHE_TEST)],
-                        capture_output=True, text=True).returncode
+    rc = _run_py(ENT_CACHE_TEST)
     check(rc == 0, "[python] test_entitlement_cache.py FAILED — run it directly "
                    "to see which entitlement guarantee regressed")
 
@@ -1654,9 +1667,13 @@ _PRODUCT_PINS = [
     ("capital_markets_tranche.yaml", "product_type", "ECM"),
     ("capital_markets_tranche.yaml", "equity_type", "ECM"),
     ("capital_markets_order.yaml", "offering_type", "ECM"),
+    ("capital_markets_order.yaml", "tranche_region", "DCM"),
+    ("capital_markets_tranche.yaml", "offering_type", "ECM"),
+    ("capital_markets_tranche.yaml", "execution_status", "ECM"),
+    ("capital_markets_trade.yaml", "trade_allocation", "DCM"),
+    ("capital_markets_trade.yaml", "sales_person", "DCM"),
     ("capital_markets_order.yaml", "equity_type", "ECM"),
     ("capital_markets_order.yaml", "order_ownership", "ECM"),
-    ("capital_markets_order.yaml", "sales_person", "DCM"),
     ("capital_markets_deal.yaml", "issuer_lei", "ECM"),
     ("capital_markets_tranche.yaml", "issuer_lei", "ECM"),
     ("capital_markets_tranche.yaml", "settlement_ts", "DCM"),
@@ -2380,15 +2397,13 @@ if MCPSERVER.exists():
 
 if XOBJ_TEST.exists():
     import subprocess
-    rc = subprocess.run([sys.executable, str(XOBJ_TEST)],
-                        capture_output=True, text=True).returncode
+    rc = _run_py(XOBJ_TEST)
     check(rc == 0, "[python] test_cross_object_error.py FAILED — run it directly "
                    "to see which explanation regressed")
 
 if PAGING_TEST.exists():
     import subprocess
-    rc = subprocess.run([sys.executable, str(PAGING_TEST)],
-                        capture_output=True, text=True).returncode
+    rc = _run_py(PAGING_TEST)
     check(rc == 0, "[python] test_response_paging.py FAILED — run it directly to "
                    "see which response bound regressed")
 
@@ -2464,8 +2479,7 @@ import subprocess  # noqa: E402
 for _tf in sorted((ROOT / "tests").glob("test_*.py")):
     if _tf.name in _INDIVIDUALLY_WIRED:
         continue
-    _rc = subprocess.run([sys.executable, str(_tf)],
-                         capture_output=True, text=True).returncode
+    _rc = _run_py(_tf)
     check(_rc == 0,
           f"[python] {_tf.name} FAILED — run `python3 tests/{_tf.name}` "
           f"directly to see which case regressed")
@@ -2520,6 +2534,79 @@ check(has(SKILL, "ON ONE DEAL / TRANSACTION (an orderbook ask)")
       and has(SKILL, "`partition_by [deal_id, tranche_name]`"),
       "[trap] SKILL lost the two-shape rule for 'top investors' — the aggregate "
       "shape on a one-deal/txn ask gave the PO a flat table (TC1, 2026-09-17)")
+
+# SLOT-AWARE NAMES (RT-5, 2026-09-17): inside a backticked recipe fragment a
+# METRIC-ONLY key must never sit in a dimensions/filters/partition_by list —
+# that is failure class 1 (8 slips on UAT/QA 2026-09-16/17) written into
+# doctrine. Keys that are ALSO a dimension/filter somewhere (investor_count on
+# the deal card) are exempt.
+_METRIC_KEYS, _DIMFILT_KEYS = set(), set()
+for _yf in sorted(ONT.glob("*.yaml")):
+    _METRIC_KEYS.update(n for n, _ in blocks(_yf, "metrics"))
+    for _sec in ("dimensions", "filters"):
+        _DIMFILT_KEYS.update(n for n, _ in blocks(_yf, _sec))
+_METRIC_ONLY = _METRIC_KEYS - _DIMFILT_KEYS
+_slot_bad = set()
+for _span in re.findall(r"`([^`\n]+)`", text(SKILL)):
+    for _slot, _body in re.findall(r"\b(dimensions|filters|partition_by)\s*:?\s*\[([^\]]*)\]", _span):
+        for _tok in re.findall(r"[a-z][a-z0-9_]*", _body):
+            if _tok in _METRIC_ONLY:
+                _slot_bad.add(f"{_tok} in {_slot}")
+check(not _slot_bad,
+      "[names] SKILL recipe puts a METRIC key inside a dimensions/filters/"
+      f"partition_by list — the server rejects it (failure class 1): {sorted(_slot_bad)}")
+
+# CROSS-LAYER FIXES (XL-1/2/5/6, SKILL-6, 2026-09-17): the SKILL and agents.yaml
+# must not re-grow the contradictions the analysis found — four objects,
+# "declare NONE" computed filters, deal_region ECM-only, "no rate/fee exists",
+# "all DCM exposes", sales_person DCM-only.
+for _p, _phrase, _why in [
+    (SKILL, "with four it raises", "four objects (there are nine)"),
+    (SKILL, "declare NONE", "computed_filters declare NONE (bill_and_deliver exists)"),
+    (SKILL, "ECM-only on the DEAL object", "deal_region ECM-only (both products since batch 3)"),
+    (SKILL, "exists anywhere in this data", "no rate/yield/price/fee (tranche exposes them)"),
+    (SKILL, "all DCM exposes", "DCM syndicate = only the B&D bank (release 3 lists members)"),
+    (AGENTS, "declare NO computed_filters", "computed_filters declare NO (bill_and_deliver exists)"),
+    (AGENTS, "with four it fails", "four objects (there are nine)"),
+    (AGENTS, "not all four", "four objects (there are nine)"),
+    (AGENTS, "cannot be fully expressed in one request", "non-B&D needs two requests (it is one)"),
+]:
+    check(not has(_p, _phrase),
+          f"[xlayer] {_p.name} re-grew a retired contradiction: {_why} ({_phrase!r})")
+for _p, _phrase, _why in [
+    (SKILL, "with nine it raises", "nine-object source rule"),
+    (SKILL, "only `bill_and_deliver` exists", "the one real computed filter"),
+    (SKILL, "tranche-grain attributes only: coupon, seniority, ESG, ratings, exchange, identifiers", "what the order object does NOT carry"),
+    (SKILL, "on both products on the deal AND tranche", "deal_region applicability"),
+    (SKILL, "discover does NOT show a `products` key", "leading-token applicability rule"),
+    (SKILL, "a spread over benchmark is not stored", "coupon/yield/price/fee routing + the one true refusal"),
+    (AGENTS, "not all nine", "nine-object discovery rule"),
+    (AGENTS, "plus computed_filters [{name: bill_and_deliver,", "non-B&D as ONE request"),
+]:
+    check(has(_p, _phrase), f"[xlayer] {_p.name} lost {_why} ({_phrase!r})")
+
+# SIZE RATCHET (RT-6, 2026-09-17): pay-every-turn (SKILL, agents) and
+# pay-per-fetch (catalog) files may only SHRINK. Lower a cap in the same commit
+# as each compression step (targets: SKILL 45,000; tranche 32,000; order/deal
+# 28,000; agents 8,000). A cap that has to go UP is a design discussion, not an edit.
+_SIZE_CAPS = {
+    SKILL: 63_402,
+    AGENTS: 20_611,
+    ONT / "capital_markets_deal.yaml": 54_431,
+    ONT / "capital_markets_designation.yaml": 7_861,
+    ONT / "capital_markets_entity.yaml": 25_751,
+    ONT / "capital_markets_hedge.yaml": 12_597,
+    ONT / "capital_markets_hedge_trade.yaml": 8_693,
+    ONT / "capital_markets_order.yaml": 64_398,
+    ONT / "capital_markets_trade.yaml": 10_690,
+    ONT / "capital_markets_trade_syndicate.yaml": 3_027,
+    ONT / "capital_markets_tranche.yaml": 81_055,
+}
+for _p, _cap in _SIZE_CAPS.items():
+    _n = len(_p.read_bytes())
+    check(_n <= _cap,
+          f"[budget] {_p.name} is {_n:,} bytes, above its ratchet {_cap:,} — delete or "
+          f"compress before adding (token cost is a first-class constraint)")
 
 print(f"\n{passes} checks passed, {len(failures)} failed\n")
 if failures:
