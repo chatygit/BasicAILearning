@@ -97,22 +97,21 @@ Batch B:
 - [ ] V5 ECM deal branch in the lever-C shape (D = T⋈S grouped; deal-keyed blocks top-level; 41 aliases) — uniform shape + cheaper entity branches, not a latency claim (rows 7, 1e, 1o, 1w, 4, 4b, 15b, 15c; K10 vs K2; multi-transaction issuer hash probe; QA 2, 4, 11; T PARTITION BY unchanged pending census)
 - [ ] Standing check S3 gains a Starburst EXPLAIN of `WHERE product = 'DCM'` on vw_deal_summary — CHAR(3) literal pushdown unverified (type change if it fails; own decision)
 Still staged from before:
-- [ ] PRICING & SENTIMENT batch (design after db-asks H): the banker's core
-      ask is unanswerable today beyond static terms. In the SOURCE, not in any
-      view: DCM per-order limits (OB_ORDER_SIZE PRICE_DEMAND / SPREAD_DEMAND /
-      MIN_YIELD / MIN_SIZE), size revisions (AMT_CHANGE) and order timing
-      (CREATED_TS/UPDATED_TS) → price sensitivity + book momentum; ECM IOI
-      curve points (OB_ECM_ORDER_IOI LIMIT_TYPE/LIMIT_VALUE/IOI_QTY, collapsed
-      to MAX today), IOI timestamps (IOI_ACT_DATE_TIME), ACTIVE_PRICE /
-      BOOK_STATUS (exposed); ECM pricing context (OPUS_ECM_TRANSACTION_TRANCHE
-      LAST_TRADE_PRICE_BEFORE_OFFER/LAUNCH → discount to last close,
-      INITIAL_DEAL_AMOUNT → upsizing); DCM PRICE_GUIDANCE text (exposed; content
-      unknown), OB_TRANCHE_PRICING (unexplored). Candidate shapes: additive
-      columns on vw_order_detail (limit_price / limit_spread / min_yield /
-      size_change / order_ts), deal-view context columns (last_close_before_offer,
-      initial_deal_amount), and ONE new grain — an IOI/limit-curve view (one row
-      per order × limit point) if H2/H3 show real curves. All approval-gated;
-      OPUS_BASE untouched.
+- [ ] PRICING & SENTIMENT batch (design after db-asks I; H run 2026-09-18).
+      FOUND: OB_TRANCHE_PRICING (44,717 rows; PRICING_TYPE / STATUS / VALUE /
+      bounds / AREA_RANGE / CREATED_TS per tranche) = the DCM IPT → guidance →
+      launch → final film — the pricing-progression source PRICE_GUIDANCE is
+      not (527 / 74,932 filled). ECM: 28 % of IOI orders carry a PRICE limit,
+      6 % a multi-point curve (OB_ECM_ORDER_IOI); IOI timestamps dead on UAT
+      (39 / 71,152); LAST_TRADE_PRICE_BEFORE_OFFER 27 % / _LAUNCH 34 % /
+      INITIAL_DEAL_AMOUNT 80 % of ECM tranches (discount-to-close, upsizing
+      derivable). DCM order size rows: 99.4 % single-row (revisions rare);
+      limit-column fill = I1. Candidate shapes: (a) NEW view vw_tranche_pricing
+      (one row per tranche × stage) — the film; (b) additive deal/tranche
+      columns last_close_before_offer / _launch, initial_deal_amount; (c) NEW
+      view vw_order_ioi (one row per ECM order × limit point) or additive
+      limit_type / points / qty_at_lowest_limit on the order view; (d) DCM
+      limit columns only if I1 shows fill. All approval-gated; OPUS_BASE untouched.
 - [ ] vw_tranche_summary: ORDER_COUNT / INVESTOR_COUNT roll-ups (additive), so
       tranche-level rankings can filter bookless shells like the deal object.
       (UAT 2026-09-17: 19,804 of 21,009 ECM Citi-solo tranches in 2024 sit on

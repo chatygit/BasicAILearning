@@ -331,82 +331,67 @@ GROUP  BY PRODUCT, DEAL_SHARING_TYPE ORDER BY PRODUCT, DEAL_SHARING_TYPE;
 -- statements live in the deploy check so before/after use identical text.
 -- ===========================================================================
 
-
 -- ===========================================================================
--- H. 2026-09-17 — PRICING & SENTIMENT CENSUS (UAT). The banker's biggest use
--- is "where did it price and how did the book feel". The source carries
--- per-order LIMITS, size REVISIONS and TIMESTAMPS that no view exposes today.
--- This sizes each before a view batch is designed. Screenshot each result.
+-- I. 2026-09-18 — PRICING PROGRESSION + the missing H1. Section H (run
+-- 2026-09-18) found OB_TRANCHE_PRICING: 44,717 rows keyed by tranche with
+-- PRICING_TYPE / PRICING_STATUS / VALUE / LOWER_BOUND / UPPER_BOUND /
+-- AREA_RANGE / CREATED_TS — the DCM IPT → guidance → launch → final film.
+-- Size it, then the batch is designed. UAT. Screenshot each result.
 -- ===========================================================================
 
--- H1. DCM per-order limit conditions (OB_ORDER_SIZE): what TYPE rows exist and
---     how many carry a price / spread / yield limit or a size change.
+-- I1 (= H1, not yet run). DCM per-order limits on OB_ORDER_SIZE by TYPE.
 SELECT TYPE, COUNT(*) AS ROWS_,
        COUNT(PRICE_DEMAND)  AS HAS_PRICE_LIMIT,
        COUNT(SPREAD_DEMAND) AS HAS_SPREAD_LIMIT,
        COUNT(MIN_YIELD)     AS HAS_MIN_YIELD,
        COUNT(AMT_CHANGE)    AS HAS_AMT_CHANGE,
-       COUNT(MIN_SIZE)      AS HAS_MIN_SIZE,
        COUNT(CREATED_TS)    AS HAS_CREATED_TS
 FROM   DGSTREAM.OB_ORDER_SIZE
-GROUP  BY TYPE
+GROUP  BY TYPE ORDER BY ROWS_ DESC;
+
+-- I2. The pricing film's vocabulary: type × status, with fill of the value
+--     columns (which stage carries a point value, which a range).
+SELECT PRICING_TYPE, PRICING_STATUS, COUNT(*) AS ROWS_,
+       COUNT(DISTINCT DEAL_TRANCHE_ID) AS TRANCHES_,
+       COUNT(VALUE) AS HAS_VALUE, COUNT(LOWER_BOUND) AS HAS_LOWER,
+       COUNT(UPPER_BOUND) AS HAS_UPPER, COUNT(AREA_RANGE) AS HAS_AREA
+FROM   DGSTREAM.OB_TRANCHE_PRICING
+GROUP  BY PRICING_TYPE, PRICING_STATUS
 ORDER  BY ROWS_ DESC;
 
--- H2. How many DCM orders have more than one size row (a limit curve or a
---     revision history), and the typical count.
-SELECT ROWS_PER_ORDER, COUNT(*) AS ORDERS_
-FROM  (SELECT ORDER_ID, COUNT(*) AS ROWS_PER_ORDER
-       FROM   DGSTREAM.OB_ORDER_SIZE GROUP BY ORDER_ID)
-GROUP  BY ROWS_PER_ORDER ORDER BY ROWS_PER_ORDER;
+-- I3. Stages per tranche (a full film = several rows per tranche).
+SELECT STAGES, COUNT(*) AS TRANCHES_
+FROM  (SELECT DEAL_TRANCHE_ID, COUNT(*) AS STAGES FROM DGSTREAM.OB_TRANCHE_PRICING
+       GROUP BY DEAL_TRANCHE_ID)
+GROUP  BY STAGES ORDER BY STAGES;
 
--- H3. ECM IOI curve (OB_ECM_ORDER_IOI): limit types and multi-point share.
-SELECT LIMIT_TYPE, COUNT(*) AS IOI_ROWS, COUNT(DISTINCT ORDER_ID) AS ORDERS_,
-       COUNT(LIMIT_VALUE) AS HAS_LIMIT_VALUE
-FROM   DGSTREAM.OB_ECM_ORDER_IOI
-GROUP  BY LIMIT_TYPE ORDER BY IOI_ROWS DESC;
+-- I4. One known deal end to end: txn 75043505's tranches, every stage in time
+--     order (this is what the agent would narrate as "IPT T+150a → guidance
+--     T+130 → priced T+120").
+SELECT P.DEAL_TRANCHE_ID, P.PRICING_TYPE, P.PRICING_STATUS, P.DEFINITION,
+       P.VALUE, P.LOWER_BOUND, P.UPPER_BOUND, P.AREA_RANGE, P.OTHER, P.CREATED_TS
+FROM   DGSTREAM.OB_TRANCHE_PRICING P
+WHERE  P.DEAL_TRANCHE_ID IN (SELECT DEAL_ID || '-' || TRANCHE_ID
+                             FROM DGSTREAM.OB_DEAL_TRANCHE
+                             WHERE ORIGINATION_TRANSACTION_ID = '75043505')
+ORDER  BY P.DEAL_TRANCHE_ID, P.CREATED_TS;
 
-SELECT POINTS, COUNT(*) AS ORDERS_
-FROM  (SELECT ORDER_ID, COUNT(*) AS POINTS FROM DGSTREAM.OB_ECM_ORDER_IOI GROUP BY ORDER_ID)
-GROUP  BY POINTS ORDER BY POINTS;
+-- I5. Coverage by pricing year: how many DCM tranches have ANY film, and how
+--     many have 2+ stages (a progression, not just a final print).
+SELECT EXTRACT(YEAR FROM T.PRICING_TS) AS YR,
+       COUNT(DISTINCT T.DEAL_ID || '-' || T.TRANCHE_ID) AS TRANCHES_,
+       COUNT(DISTINCT P.DEAL_TRANCHE_ID) AS WITH_FILM_,
+       COUNT(DISTINCT CASE WHEN P.N >= 2 THEN P.DEAL_TRANCHE_ID END) AS WITH_2PLUS_STAGES_
+FROM   DGSTREAM.OB_DEAL_TRANCHE T
+LEFT JOIN (SELECT DEAL_TRANCHE_ID, COUNT(*) AS N FROM DGSTREAM.OB_TRANCHE_PRICING
+           GROUP BY DEAL_TRANCHE_ID) P
+       ON P.DEAL_TRANCHE_ID = T.DEAL_ID || '-' || T.TRANCHE_ID
+WHERE  T.PRICING_TS >= DATE '2023-01-01'
+GROUP  BY EXTRACT(YEAR FROM T.PRICING_TS) ORDER BY YR;
 
--- H4. ECM order timing + price context on OB_ECM_ORDER (names from the
---     2026-08-31 desc; a failure here = a name to correct, not a finding).
-SELECT COUNT(*) AS ORDERS_,
-       COUNT(IOI_ACT_DATE_TIME) AS HAS_IOI_TS,
-       COUNT(ACTIVE_PRICE)      AS HAS_ACTIVE_PRICE,
-       COUNT(LIMIT_DISCOUNT_POT) AS HAS_LIMIT_DISCOUNT,
-       COUNT(RELATIVE_INDICATION) AS HAS_RELATIVE_INDICATION
+-- I6. What ECM LIMIT_DISCOUNT_POT holds (97.7 % filled — a default or a real
+--     limit?): top values.
+SELECT LIMIT_DISCOUNT_POT, COUNT(*) AS ORDERS_
 FROM   DGSTREAM.OB_ECM_ORDER
-WHERE  ORDER_STATUS NOT IN ('CANCELLED','DELETED','PASS');
-
--- H5. ECM pricing context at tranche grain (OPUS_ECM_TRANSACTION_TRANCHE):
---     discount-to-last-close and upsizing inputs. Name check first (no rows =
---     names compile), then fill.
-SELECT LAST_TRADE_PRICE_BEFORE_OFFER, LAST_TRADE_PRICE_BEFORE_LAUNCH,
-       LAST_TRADE_PRICE_BEFORE_FILING, INITIAL_DEAL_AMOUNT, REVISED_PAR_VALUE
-FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE WHERE 1 = 0;
-
-SELECT COUNT(*) AS TRANCHES_,
-       COUNT(LAST_TRADE_PRICE_BEFORE_OFFER)  AS HAS_LAST_CLOSE_BEFORE_OFFER,
-       COUNT(LAST_TRADE_PRICE_BEFORE_LAUNCH) AS HAS_LAST_CLOSE_BEFORE_LAUNCH,
-       COUNT(INITIAL_DEAL_AMOUNT)            AS HAS_INITIAL_DEAL_AMOUNT,
-       COUNT(REVISED_PAR_VALUE)              AS HAS_REVISED_PAR
-FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE;
-
--- H6. DCM pricing progression at tranche grain: what PRICE_GUIDANCE looks
---     like (sample), and fill of guidance / yield / coupon / book size.
-SELECT COUNT(*) AS TRANCHES_,
-       COUNT(PRICE_GUIDANCE) AS HAS_GUIDANCE, COUNT(YIELD) AS HAS_YIELD,
-       COUNT(COUPON) AS HAS_COUPON, COUNT(PRICE) AS HAS_PRICE,
-       COUNT(BOOK_SIZE) AS HAS_BOOK_SIZE, COUNT(ORDER_BOOK_SIZE_USD) AS HAS_BOOK_USD
-FROM   DGSTREAM.OB_DEAL_TRANCHE;
-
-SELECT PRICE_GUIDANCE, COUNT(*) AS TRANCHES_
-FROM   DGSTREAM.OB_DEAL_TRANCHE
-WHERE  PRICE_GUIDANCE IS NOT NULL
-GROUP  BY PRICE_GUIDANCE ORDER BY TRANCHES_ DESC FETCH FIRST 25 ROWS ONLY;
-
--- H7. The unexplored OB_TRANCHE_PRICING table — columns and row count.
-SELECT column_name, data_type FROM all_tab_columns
-WHERE  owner = 'DGSTREAM' AND table_name = 'OB_TRANCHE_PRICING' ORDER BY column_id;
-SELECT COUNT(*) AS ROWS_ FROM DGSTREAM.OB_TRANCHE_PRICING;
+WHERE  ORDER_STATUS NOT IN ('CANCELLED','DELETED','PASS')
+GROUP  BY LIMIT_DISCOUNT_POT ORDER BY ORDERS_ DESC FETCH FIRST 10 ROWS ONLY;
