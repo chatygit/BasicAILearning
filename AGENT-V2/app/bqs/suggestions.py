@@ -465,7 +465,7 @@ def build_disambiguation(
                     "matched_multiple": matched,
                     "truncated": len(names) > _DISAMBIG_MAX,
                     "hint": (
-                        f"Your filter on '{ef.field}' matched {len(matched)} distinct "
+                        f"Your filter on '{ef.field}' matched {len(names)} distinct "
                         f"entities; the result covers all of them combined. Answer "
                         f"with the combined figure AND a per-entity breakdown (name"
                         + (" + id" if has_ids else "")
