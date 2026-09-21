@@ -23,15 +23,18 @@ A failure becomes a gate-1 pin wherever it can be mechanised.
 
 ## Promote order
 1. **Views first** — configs name columns only the new views have. Before
-   the handover: `views/_checks/db-asks.sql` S1 (source-name validation —
-   every statement "no rows selected" on the target environment) and any
-   open pre-handover asks listed there. Files go over verbatim
+   the handover: the S1 source-name validation script (every source column
+   referenced by the views in `SELECT … WHERE 1 = 0` statements — regenerate
+   from the view files; last full version in git at 2026-09-21, section S1 of
+   db-asks.sql) — every statement "no rows selected" on the target environment. Files go over verbatim
    and comment-free; a failed Flyway script aborts every later script.
 2. **After the view deploy, before any prompt** — `views/_deploy-check.sql`:
    A0 shows nine LAST_DDL_TIMEs of today; structure rows 17, 1y, 1z, 18 PASS;
    grain rows 7, 8, 9, 10b, 11b, 12b PASS; population rows 15, 15b, 20b, 21,
-   21b; section K timings screenshotted. Then db-asks S3 through Starburst —
-   the Oracle-side check cannot see a stale connector metadata cache.
+   21b; section K timings screenshotted. Then the S3 Trino check through
+   Starburst (SELECT one row of each new column from each changed view +
+   SHOW COLUMNS; git 2026-09-21 db-asks S3) — the Oracle-side check cannot see
+   a stale connector metadata cache.
    Lesson 2026-09-16: a "deployed" batch was partial; "done" is unverified
    until A0 is screenshotted.
 3. **Environment** — BQS_ENABLED_SOURCES must list all nine objects
@@ -55,11 +58,13 @@ ships that way first.
       oracle.number.rounding-mode=HALF_UP (ASKS-external.md §3). The view
       CASTs make this optional for cast columns; keep it as the safety net.
       PROD must run the ROUND-bounded view release before relying on it.
-- [ ] Scale re-census on PROD: db-asks S2 (DEV/UAT counts are not expectations).
+- [ ] Scale re-census on PROD: S2 (git 2026-09-21 db-asks S2; DEV/UAT counts are
+      not expectations).
 - [ ] Deploy-check A0 + structure + grain on PROD after every view release,
-      then db-asks S3 through Starburst.
-- [ ] PROD census pack: db-asks S4 (counts + vocabularies only, no rows) — its
-      results replace every UAT-labelled number in SKILL/yaml prose.
+      then the S3 Trino check through Starburst.
+- [ ] PROD census pack S4 (counts + vocabularies only, no rows; git 2026-09-21
+      db-asks S4, 12 statements) — its results replace every UAT-labelled
+      number in SKILL/yaml prose.
 - [ ] PROD behaviour evidence without DB access: after each release, request a
       week of the OCP query log (timings, error classes, zero-row rate,
       generated SQL) and the ADK traces of PROD sessions — behaviour is

@@ -228,7 +228,8 @@ our push lands — coordinate timing (a mid-cycle change invalidates the sample)
 ## 6. Where the rest lives
 - Asks to other teams: ASKS-external.md
 - PROD-side items, promotion order: PROMOTE-CHECKLIST.md
-- SQL checks for the user (open + standing): views/_checks/db-asks.sql
+- SQL checks for the user (OPEN asks only): views/_checks/db-asks.sql — standing
+  scripts S1-S4 live in git history (2026-09-21) and PROMOTE-CHECKLIST.md
 - Prompts + run results: QA-PROMPTS.md
 - The analysis report itself (byte budgets, pin lists, per-item proofs):
   scratchpad analysis-2026-09-17.md (ephemeral) — conclusions in memory.
