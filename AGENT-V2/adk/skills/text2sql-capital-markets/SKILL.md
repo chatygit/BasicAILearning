@@ -220,12 +220,9 @@ honest thing — a plausible wrong answer is worse than a clear "not supported".
 |---|---|---|
 | **"one/top X for EACH Y"** — top deal per product type, best investor per sector, largest tranche per currency | **SUPPORTED — `partition_by`** | ONE request: put Y **and** the identifying fields in `dimensions`, set `partition_by: [Y]` and `per_partition_limit: N` (default 1); ranking follows `order` (default: the metric desc) and each row returns its `rank_in_group`. Example — top deal per product type by tranche size: source tranche, metric `largest_tranche_size`, dimensions `[product_type, deal_name, deal_id]`, `partition_by [product_type]`. **Never** fetch a global top-N and de-duplicate by Y — the top-N is dominated by one group, so rarer groups never appear |
 | **A OR B across two different fields** — "Citi B&D or Citi bookrunner" | filters are ANDed; there is no OR and no predicate grouping | Ask which axis they mean, or run the two and say you combined them |
-| **Two figures in one request** — "count AND total size" | one metric per request | Answer with the primary figure, offer the second as a follow-up |
+| **Two figures in one request** | one metric per request | Answer the primary figure, offer the second as a follow-up |
 | **Set difference** — "deals that were B&D but NOT solo" | `HAVING` thresholds one metric; it cannot compare two populations | Two requests, and say you compared them |
 | **Anything needing a join between objects** | there are no joins | Two requests, ids from the first — **the ids two-step IS the supported answer, run it yourself (§3d)**; it remains ONLY for tranche-grain attributes (coupon, seniority, ESG label, ratings, exchange, identifiers). "Say which half you can answer" is reserved for asks where step 1 itself cannot be expressed |
-
-**Self-check before sending:** a header that promises variety the rows lack
-is wrong even though the query succeeded — say what actually varied.
 
 **A SUPERLATIVE ask ("the biggest X", "who has the max", "the top investor")
 = VALUE FIRST, THEN MEMBERS (user ruling 2026-09-15). Never `limit 1` and never
@@ -410,10 +407,11 @@ deal size is not currency-scoped; no FX column). ECM: **the unit of an order
 figure is the row's `demand_unit`** — SHARES on common stock, BOND on
 convertibles and converts preferred; a CURRENCY / PERCENT / FACE bid stays
 labelled as that — every ECM order listing projects `demand_unit` and reads
-the unit from it, never assumed shares. **ECM
-DEAL SIZE is a share count for common equity but a PAR AMOUNT for convertibles
-and exchangeables** — never divide or compare a convertible's deal size with
-its book.
+the unit from it. Where it is blank, the PO's table decides: Common Stock /
+Equity Units / Warrants → shares; Convertible Bonds / Convertible Preferred /
+Exchangeable Notes → bonds. **ECM DEAL SIZE is a share count for the first
+group and a PAR AMOUNT for the second** — never divide or compare a
+convertible's deal size with its book.
 Never total across products, `demand_unit` values or equity types: `product`
 (and, on ECM, `equity_type` + `demand_unit`) go in `dimensions`; every
 size/allocation/demand metric REQUIRES a `product` filter.
@@ -568,7 +566,7 @@ returns rows — have no safety net at all:
 | The user says | Filter it as |
 |---|---|
 | "energy" | `in ['Energy','Oil & Gas']` — separate sectors; state which you included |
-| "refinancing / repay debt" | `in ['Refinance','Debt Repayment','Repay Outstanding Borrowings']` |
+| "refinancing" | `in ['Refinance','Debt Repayment','Repay Outstanding Borrowings']` |
 | "M&A" | `like '%M & A%'` — the literal HAS SPACES; `%M&A%` matches nothing |
 | "priced / announced deals" | case-insensitive; `priced`/`Priced` and `announced`/`Announced` are distinct stored values — **merge the variants when grouping or the buckets will not sum** |
 | "US investors" | `in ['United States','US']` — **never `like '%US%'`**: it matches RUSSIA, AUSTRIA, AUSTRALIA |

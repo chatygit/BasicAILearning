@@ -2621,7 +2621,7 @@ for _srv in (ROOT / "app" / "mcpserver.py", ROOT / "app" / "bqs" / "ontology.py"
 # digits, commas, never "3.0mm shares"); mixed-class tables carry a Security
 # column. A convertible's allocation printed as shares was the reported defect.
 check(has(SKILL, "figure is the row's `demand_unit`") and has(SKILL, "COUNTS ARE EXACT")
-      and has(SKILL, "PAR AMOUNT for convertibles"),
+      and has(SKILL, "Convertible Preferred /\nExchangeable Notes → bonds") and has(SKILL, "PAR AMOUNT for the second"),
       "[units] SKILL lost the demand_unit / par-size / exact-count doctrine (PO + census J, 2026-09-21)")
 check(not has(SKILL, "mm shares"),
       "[units] SKILL abbreviates a share count again ('mm shares') — counts are exact")

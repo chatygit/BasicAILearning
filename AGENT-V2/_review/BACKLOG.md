@@ -53,12 +53,10 @@ refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
 - [ ] Placeholder-table behaviour (agent narrates a query it never ran, then
       emits '...' rows) — budget-exhaustion doctrine; watch on UAT.
 - [ ] Company-profile hallucination on unsupported asks — routing, open.
-- [ ] PO units feedback — DONE in config, census J done (UAT 2026-09-21):
-      order-figure unit = the row's demand_unit (BOND on convertibles, SHARES on
-      common, currency/percent bids labelled as such); convertible DEAL SIZE is a
-      par amount, never comparable to the book; counts exact; mixed tables carry
-      Security + unit. Retest QA 33/34. Open for the PO: is "bonds" also the
-      label they want for Convertible Preferred (stored bids are mostly BOND)?
+- [ ] PO units — CLOSED 2026-09-21 (PO table: Common stocks / Equity Units /
+      Warrants = Shares; Convertible Bond / Convertible Preferred / Exchangeable
+      Notes = Bonds). In config: row unit = demand_unit, PO mapping as the
+      fallback and for deal size (par for the bonds group). Retest QA 33/34/35.
 - [ ] PROD, under the freeze: ship the SKILL-only "LIMIT IS NOT DEMAND" rule
       now; the value half needs the view release (IOI rebuild).
 - [ ] Interim guards until the train: SKILL 284 (VALUE FIRST) and 641 (DCM members) byte-exact — the only layer overriding the stale order/tranche catalog notes in PROD (gate 524, 1988) — SKILL-2
@@ -118,11 +116,12 @@ Batch B:
       Additive (OPUS_ECM allowed); DCM NULL; expose as dimension + like filter
       (merge the two PIPE spellings). Until exposed the catalogs say "not
       available yet" for these, never "not stored".
-- [ ] SIZE_UNIT on the deal/tranche ECM branches: CASE on equity_type → 'shares'
-      (common, ADR/GDR, units, warrants) / 'par' (Convertible Bonds, Exchangable
-      Notes, Convertible Preferred) — the source SIZE_UNIT is empty on 99.9 % of
-      deals (J2), so the class is the only signal; DCM = 'currency'. Additive.
-      (Order-level unit needs no view change: demand_unit already carries it.)
+- [ ] SIZE_UNIT on the deal/tranche ECM branches (PO mapping 2026-09-21):
+      CASE equity_type — Common Stock / Equity Units / Warrants / ADR / GDR /
+      Equity / IPO / NULL → 'shares'; Convertible Bonds / Convertible Preferred /
+      Exchangable Notes → 'bonds' (deal size = par); DCM = 'currency'. Also a
+      DEMAND_UNIT fallback on the order view where the stored unit is NULL.
+      Additive; rides the Ipreo batch if the census allows, else the next.
 - [ ] DCM DEAL_PRODUCT_TYPE_LIST (OB_DEAL_TRANCHE) on the deal view as
       dcm_deal_class — far better populated than DEAL_PRODUCT (26k Investment
       Grade, 7k High Grade, 3k High Yield, EM, ABS, LevFin …) and a deal-level
@@ -147,6 +146,26 @@ Batch B:
       qty_at_lowest_limit on the order view.
       Dead ends: PRICE_GUIDANCE (0.7 % filled), ECM IOI timestamps (39 rows),
       LIMIT_DISCOUNT_POT (a boolean). All approval-gated; OPUS_BASE untouched.
+- [ ] IPREO — SECOND ECM SOURCE as a third UNION ALL branch (PRODUCT 'ECM';
+      the agent sees no difference; catalogs unchanged) in vw_deal_summary /
+      vw_tranche_summary / vw_order_detail — THIS WEEK's batch. Draft deal
+      branch reviewed 2026-09-21 (MCP repo views/v2/vw_deal_summary_v2.sql):
+      REBUILD, not patch — (1) the IOI-limit demand fallback is back (PROD
+      ticket; banned): demand = IOI_QTY only, unit-gated; (2) two spines joined
+      on the unproven DEAL_TRANSACTION_ID = TO_CHAR(ISS_ID); (3) every Ipreo
+      column name unvalidated; (4) no overlap rule for deals in both ECM
+      sources; (5) NVL of two tranche counts, DEAL_STATE_CD code as status,
+      order exclusion inert (only DELETED/UPDATED derived). Census db-asks N
+      (N1 tables, N2 DDL as text, N3 the key equality, N4 candidate key
+      columns, N5 overlap, N6 code vocabularies, N7 grains, N8 fill) decides the
+      spine; then: rebuilt branches x3, S1 statements for every Ipreo column,
+      deploy-check A0/structure/grain/population rows per branch, view-notes
+      addendum, contract test green, [opusbase] count unchanged. Decisions
+      needed: overlap policy (OPUS wins? Ipreo only where OPUS absent?),
+      whether Ipreo issues share the OPUS transaction id at all.
+      vw_entity_search needs NO edit (it reads the three views) — it inherits
+      the Ipreo rows; but the staged V3 rewrite (entity from base tables) must
+      then include the Ipreo tables, and K4's 147 s grows with the Ipreo book.
 - [ ] STATUS EXCLUSION (Vinit 2026-09-21) — censused UAT (db-asks K, closed):
       TRANCHES: DCM only (ECM tranche status is NULL on 50,510/50,518) — exclude
       UPPER(STATUS) IN (ARCHIVED 975, CANCELLED 335, POSTPONED 54, DELETED 3;
