@@ -2620,12 +2620,13 @@ for _srv in (ROOT / "app" / "mcpserver.py", ROOT / "app" / "bqs" / "ontology.py"
 # SECURITY's unit — equity_type decides shares vs bonds; counts are exact (full
 # digits, commas, never "3.0mm shares"); mixed-class tables carry a Security
 # column. A convertible's allocation printed as shares was the reported defect.
-check(has(SKILL, "`equity_type` decides which") and has(SKILL, "COUNTS ARE EXACT"),
-      "[units] SKILL lost the security-unit / exact-count doctrine (PO 2026-09-18)")
+check(has(SKILL, "figure is the row's `demand_unit`") and has(SKILL, "COUNTS ARE EXACT")
+      and has(SKILL, "PAR AMOUNT for convertibles"),
+      "[units] SKILL lost the demand_unit / par-size / exact-count doctrine (PO + census J, 2026-09-21)")
 check(not has(SKILL, "mm shares"),
       "[units] SKILL abbreviates a share count again ('mm shares') — counts are exact")
-check(has(ORDER, "shares for common stock, bonds for convertibles"),
-      "[units] order card lost the security-unit note on order_allocation")
+check(has(ORDER, "in the row's demand_unit — SHARES on common stock, BOND on convertibles"),
+      "[units] order card lost the demand_unit note on order_allocation")
 
 # SIZE RATCHET (RT-6, 2026-09-17): pay-every-turn (SKILL, agents) and
 # pay-per-fetch (catalog) files may only SHRINK. Lower a cap in the same commit

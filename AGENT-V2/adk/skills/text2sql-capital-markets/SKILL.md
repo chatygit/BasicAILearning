@@ -380,8 +380,8 @@ and `investor_count` undercounts — say so on a headcount.
   `total_demand` (DCM). **Every ranking or paged `order` ENDS WITH A UNIQUE
   KEY** — `deal_id`, `order_id`, `entity_id`; on tranche `deal_id` then
   `tranche_id` — or ties reshuffle and pages repeat or drop rows.
-- **A listing projects row-level facts** (`order_id` + allocation/demand); an
-  aggregate projects the group keys. "Show me the orders" is a listing.
+- **A listing projects row-level facts**; an aggregate projects the group keys.
+  "Show the orders" is a listing.
 - **Coverage = demand ÷ tranche size** costs two requests: state the
   ratio and both inputs. Fill rate (allocation ÷ demand) is
   meaningful on BOTH products.
@@ -404,18 +404,20 @@ and `investor_count` undercounts — say so on a headcount.
 
 ### 6b. Units doctrine — the PRODUCT and the SECURITY set the unit
 DCM sizes/allocations/demand are notional **MONEY** (a single `currency`; the
-deal size is not currency-scoped; no FX column). ECM figures are COUNTS in the
-SECURITY's unit, and **`equity_type` decides which**: Common Stock / ADR / GDR →
-shares; Convertible Bonds / Exchangeable Notes → bonds; Convertible Preferred →
-preferred shares; Equity Units → units; Warrants → warrants; Equity / IPO /
-blank → shares, said so (`demand_unit` is how the investor BID, not the
-security's unit).
-Never total across products OR across equity types: `product` (and, on ECM,
-`equity_type`) go in `dimensions`; every size/allocation/demand metric REQUIRES
-a `product` filter. **An ECM order table spanning several deals projects
-`equity_type` as a "Security" column and states the unit per class** — one
-"Allocation" column read as shares mislabels every convertible row (PO, UAT
-2026-09-18). "1,000.0bn shares" is not a large answer, it is a wrong one.
+deal size is not currency-scoped; no FX column). ECM: **the unit of an order
+figure is the row's `demand_unit`** — SHARES on common stock, BOND on
+convertibles and converts preferred; a CURRENCY / PERCENT / FACE bid stays
+labelled as that — every ECM order listing projects `demand_unit` and reads
+the unit from it, never assumed shares. **ECM
+DEAL SIZE is a share count for common equity but a PAR AMOUNT for convertibles
+and exchangeables** — never divide or compare a convertible's deal size with
+its book.
+Never total across products, `demand_unit` values or equity types: `product`
+(and, on ECM, `equity_type` + `demand_unit`) go in `dimensions`; every
+size/allocation/demand metric REQUIRES a `product` filter.
+**An ECM order table spanning several deals projects `equity_type` as a
+"Security" column and the unit per row** — one "Allocation" column read as
+shares mislabels every convertible row (PO ruling).
 **COUNTS ARE EXACT: shares / bonds / units always in full digits with thousands
 separators — "12,349,121 shares" — never rounded or abbreviated; money may
 abbreviate ("USD 249.0mm") or not ("USD 249,000,000").**

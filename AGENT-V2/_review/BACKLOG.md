@@ -48,11 +48,12 @@ refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
 - [ ] Placeholder-table behaviour (agent narrates a query it never ran, then
       emits '...' rows) — budget-exhaustion doctrine; watch on UAT.
 - [ ] Company-profile hallucination on unsupported asks — routing, open.
-- [ ] PO units feedback (2026-09-18, via user): DONE in config — ECM unit follows
-      equity_type (shares / bonds / preferred shares / units), counts exact in
-      full digits, mixed-class tables carry a Security column; money may
-      abbreviate. Census db-asks J proves the equity_type → unit mapping and the
-      deal-size unit (SIZE_UNIT at source) before any view work; retest QA 33/34.
+- [ ] PO units feedback — DONE in config, census J done (UAT 2026-09-21):
+      order-figure unit = the row's demand_unit (BOND on convertibles, SHARES on
+      common, currency/percent bids labelled as such); convertible DEAL SIZE is a
+      par amount, never comparable to the book; counts exact; mixed tables carry
+      Security + unit. Retest QA 33/34. Open for the PO: is "bonds" also the
+      label they want for Convertible Preferred (stored bids are mostly BOND)?
 - [ ] PROD, under the freeze: ship the SKILL-only "LIMIT IS NOT DEMAND" rule
       now; the value half needs the view release (IOI rebuild).
 - [ ] Interim guards until the train: SKILL 284 (VALUE FIRST) and 641 (DCM members) byte-exact — the only layer overriding the stale order/tranche catalog notes in PROD (gate 524, 1988) — SKILL-2
@@ -112,11 +113,15 @@ Batch B:
       Additive (OPUS_ECM allowed); DCM NULL; expose as dimension + like filter
       (merge the two PIPE spellings). Until exposed the catalogs say "not
       available yet" for these, never "not stored".
-- [ ] SECURITY_UNIT derived column (after db-asks J): order/tranche/deal views,
-      ECM = CASE on equity_type (shares / bonds / preferred shares / units /
-      warrants), DCM = 'currency' — one authoritative unit per row instead of a
-      doctrine mapping; exposed as a dimension. Additive; approval-gated.
-Still staged from before:
+- [ ] SIZE_UNIT on the deal/tranche ECM branches: CASE on equity_type → 'shares'
+      (common, ADR/GDR, units, warrants) / 'par' (Convertible Bonds, Exchangable
+      Notes, Convertible Preferred) — the source SIZE_UNIT is empty on 99.9 % of
+      deals (J2), so the class is the only signal; DCM = 'currency'. Additive.
+      (Order-level unit needs no view change: demand_unit already carries it.)
+- [ ] DCM DEAL_PRODUCT_TYPE_LIST (OB_DEAL_TRANCHE) on the deal view as
+      dcm_deal_class — far better populated than DEAL_PRODUCT (26k Investment
+      Grade, 7k High Grade, 3k High Yield, EM, ABS, LevFin …) and a deal-level
+      class beside tranche product_class; comma list. Additive.
 - [ ] PRICING & SENTIMENT batch — censused UAT 2026-09-18 (H + I), ranked:
       (1) ADDITIVE on vw_order_detail, DCM branch, from OB_ORDER_SIZE's latest
       row per order: order_price_basis (TYPE: reOffer 99 % / benchmark /

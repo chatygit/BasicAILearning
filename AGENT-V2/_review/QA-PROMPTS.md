@@ -186,3 +186,16 @@ five-beat shape added to agents.yaml. Still to run: 18, 24; ⚡ args for 16 and 
       5 years" — PASS: ONE table with a Security column (Common Stock /
       Convertible Bonds …) and the unit per class; no total that mixes shares
       and bonds; counts in full digits.
+- [ ] 35. "Total demand across all ECM deals this year" — PASS: split by
+      demand_unit (shares / bonds / currency / percent), never one number.
+- [ ] 36. "top 5 investors that indicated in origination transaction id
+      75076736" (TC1 retest, failed 3x) — PASS: ONE query, the per-tranche
+      matrix: Investor · GP id · Transaction ID · Deal · Tranche · Indication ·
+      Allocation · Tranche Currency, five rows PER TRANCHE, no Product column;
+      headline + at-a-glance line above. Capture the ⚡ run_bqs_query args
+      whatever the outcome.
+
+## Run 4 order (UAT, fresh session each, after the 2026-09-21 promotion)
+36 (with ⚡ args) · 15 · 3 · 20 — each must be ONE turn with no "which one?"
+menu — then 18 · 24 · 33 · 34 · 35. Screenshot the answer and the session
+Total Prompt Tokens.
