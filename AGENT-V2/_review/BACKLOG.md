@@ -147,6 +147,25 @@ Batch B:
       qty_at_lowest_limit on the order view.
       Dead ends: PRICE_GUIDANCE (0.7 % filled), ECM IOI timestamps (39 rows),
       LIMIT_DISCOUNT_POT (a boolean). All approval-gated; OPUS_BASE untouched.
+- [ ] STATUS EXCLUSION, both products (Vinit 2026-09-21: no cancelled /
+      discarded / archived / postponed tranches at deal+tranche grain; no
+      cancelled / deleted orders). Today: DCM filters NOTHING; ECM excludes only
+      Confidential/Withdrawn/Terminated deals + CANCELLED/DELETED/PASS orders —
+      neither drops cancelled/postponed tranches. Design (after db-asks K):
+      case-insensitive and NULL-SAFE (`STATUS IS NULL OR UPPER(STATUS) NOT IN
+      (…)` — a bare NOT IN silently drops NULL-status rows); DCM tranche filter
+      inside the deduped ODT block (deal/tranche/order views) so a deal with
+      every tranche excluded disappears and its roll-ups shrink; DCM orders by
+      own status AND by parent tranche (NOT EXISTS against the excluded set —
+      the deal view's OC block has no tranche join); ECM: same tranche rule on
+      OPUS_ECM_TRANSACTION_TRANCHE.TRANCHE_STATUS if K6 shows a vocabulary,
+      deal-level Cancelled/Postponed/Archived/Deleted added to the existing
+      exclusion. EVERY count changes → record deploy-check B/C/D counts before
+      and after; new deploy-check row "excluded statuses present = 0"; doctrine:
+      §7b "excluded by construction" widens, the "row-exclusion differs by
+      product" note dies, QA 28 (cancelled orders) flips to structurally zero.
+      PO to confirm Postponed (a postponed deal can relaunch) and Discarded (a
+      stored value? K1/K3 decide). Approval-gated, PROD-visible.
 - [ ] vw_tranche_summary: ORDER_COUNT / INVESTOR_COUNT roll-ups (additive), so
       tranche-level rankings can filter bookless shells like the deal object.
       (UAT 2026-09-17: 19,804 of 21,009 ECM Citi-solo tranches in 2024 sit on

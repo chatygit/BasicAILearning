@@ -337,3 +337,59 @@ SELECT TYPE, COUNT(*) AS ROWS_, COUNT(PRICE_DEMAND) AS HAS_PRICE_LIMIT,
        COUNT(AMT_CHANGE) AS HAS_AMT_CHANGE, COUNT(CREATED_TS) AS HAS_CREATED_TS
 FROM   DGSTREAM.OB_ORDER_SIZE
 GROUP  BY TYPE ORDER BY ROWS_ DESC;
+
+
+-- ===========================================================================
+-- K. 2026-09-21 — STATUS EXCLUSION CENSUS (Vinit: drop cancelled / discarded /
+-- archived / postponed tranches at deal+tranche grain, and cancelled / deleted
+-- orders). Today DCM has NO status filter anywhere; ECM excludes only
+-- Confidential / Withdrawn / Terminated deals and CANCELLED / DELETED / PASS
+-- orders — neither product drops cancelled or postponed tranches. Size the
+-- rule per product before the view change is designed. UAT. Screenshot each.
+-- ===========================================================================
+
+-- K1. DCM tranche STATUS vocabulary, case-folded, with the rule's verdict.
+SELECT UPPER(STATUS) AS STATUS_, COUNT(*) AS TRANCHES_, COUNT(DISTINCT DEAL_ID) AS DEALS_,
+       CASE WHEN UPPER(STATUS) IN ('CANCELLED','DISCARDED','ARCHIVED','POSTPONED') THEN 'EXCLUDE' END AS RULE_
+FROM   DGSTREAM.OB_DEAL_TRANCHE
+GROUP  BY UPPER(STATUS) ORDER BY TRANCHES_ DESC;
+
+-- K2. DCM deals that would DISAPPEAR (every tranche excluded) vs shrink.
+SELECT CASE WHEN EXCL_ = TOT_ THEN 'ALL TRANCHES EXCLUDED (deal disappears)'
+            WHEN EXCL_ > 0 THEN 'SOME TRANCHES EXCLUDED' ELSE 'UNAFFECTED' END AS EFFECT_,
+       COUNT(*) AS DEALS_
+FROM  (SELECT DEAL_ID, COUNT(*) AS TOT_,
+              SUM(CASE WHEN UPPER(STATUS) IN ('CANCELLED','DISCARDED','ARCHIVED','POSTPONED') THEN 1 ELSE 0 END) AS EXCL_
+       FROM   DGSTREAM.OB_DEAL_TRANCHE GROUP BY DEAL_ID)
+GROUP  BY CASE WHEN EXCL_ = TOT_ THEN 'ALL TRANCHES EXCLUDED (deal disappears)'
+               WHEN EXCL_ > 0 THEN 'SOME TRANCHES EXCLUDED' ELSE 'UNAFFECTED' END;
+
+-- K3. DCM order STATUS vocabulary (OB_ORDER.STATUS), case-folded.
+SELECT UPPER(STATUS) AS STATUS_, COUNT(*) AS ORDERS_,
+       CASE WHEN UPPER(STATUS) IN ('CANCELLED','DELETED') THEN 'EXCLUDE' END AS RULE_
+FROM   DGSTREAM.OB_ORDER
+GROUP  BY UPPER(STATUS) ORDER BY ORDERS_ DESC;
+
+-- K4. DCM orders sitting on tranches the rule would exclude (they must go too).
+SELECT COUNT(*) AS ORDERS_ON_EXCLUDED_TRANCHES
+FROM   DGSTREAM.OB_ORDER O
+WHERE  EXISTS (SELECT 1 FROM DGSTREAM.OB_DEAL_TRANCHE T
+               WHERE T.DEAL_ID = O.ROOT_ID AND T.TRANCHE_ID = O.PARENT_ID
+               AND   UPPER(T.STATUS) IN ('CANCELLED','DISCARDED','ARCHIVED','POSTPONED'));
+
+-- K5. ECM: the execution-status vocabulary (deal level) — what the current
+--     Confidential/Withdrawn/Terminated exclusion leaves in.
+SELECT STATUS_VALUE, COUNT(DISTINCT ECM_TRANSACTION_ID) AS TXNS_
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_STATUS
+WHERE  STATUS_TYPE = 'Execution_Status'
+GROUP  BY STATUS_VALUE ORDER BY TXNS_ DESC;
+
+-- K6. ECM tranche-level status (never read by any view today).
+SELECT TRANCHE_STATUS, COUNT(*) AS TRANCHES_
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE
+GROUP  BY TRANCHE_STATUS ORDER BY TRANCHES_ DESC;
+
+-- K7. ECM order status vocabulary — what remains after CANCELLED/DELETED/PASS.
+SELECT ORDER_STATUS, COUNT(*) AS ORDERS_
+FROM   DGSTREAM.OB_ECM_ORDER
+GROUP  BY ORDER_STATUS ORDER BY ORDERS_ DESC;
