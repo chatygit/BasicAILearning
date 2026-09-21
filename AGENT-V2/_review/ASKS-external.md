@@ -167,3 +167,54 @@ Ask, in order of preference:
    (`views/_checks/db-asks.sql` S4) on PROD at each release and return the
    screenshots — no rows leave PROD.
 3. Read access to PROD OCP query logs and ADK traces (behaviour, not data).
+
+---
+
+## 6. Vinit — status exclusion: what we need before building it (status: drafted 2026-09-21, not sent)
+
+Hi Vinit — on "exclude cancelled / discarded / archived / postponed tranches and
+cancelled / deleted orders": agreed, and it is a view change we can build. Here
+is what the data says today and the four things we need from you to finish it.
+
+**Where the views stand today**
+- DCM: no status filter anywhere (deal, tranche or order).
+- ECM: deal-level Confidential / Withdrawn / Terminated excluded; orders with
+  CANCELLED / DELETED / PASS excluded. Tranche level: ECM tranches carry no
+  status (50,510 of 50,518 NULL on UAT), so a tranche rule is DCM-only.
+
+**What the rule touches (UAT counts, for shape only)**
+| Layer | Stored values | Would be excluded | Effect |
+|---|---|---|---|
+| DCM tranche status | SETTLED 24,244 · ANNOUNCED 22,417 · DRAFT 17,740 · PRICED 6,381 · ALLOCATED 1,310 · FREETOTRADE 1,185 · ARCHIVED 975 · CANCELLED 335 · SUBJECT 304 · POSTPONED 54 · DELETED 3 · FINAL SETTLED 2 | ARCHIVED, CANCELLED, POSTPONED, DELETED = 1,367 tranches | 972 deals disappear (every tranche excluded), 264 shrink, 46,071 untouched |
+| ECM deal execution status | Settled 11,205 · Confidential 8,076 · Live 7,224 · Priced 2,917 · Terminated 92 · NULL 60 · Withdrawn 13 · Postponed 12 · Announced 11 | add Postponed to the existing three | 12 deals |
+| DCM order status | XB 1,900,384 · B 1,622,649 · NEW 794,435 · UPDATED 439,994 · NULL 119,998 · D 96,108 · DELETED 28,871 · BOOKED 14,930 · CANCELLED 4,137 · R 3,638 · FR 2,638 · PN 2,384 · A 1,323 · ACCEPTED 593 · F 110 · XR 80 | DELETED + CANCELLED for sure; the codes are the question | plus 10,966 orders that sit on excluded tranches |
+| ECM order status | NEW 39,544 · UPDATED 31,406 · DELETED 25,454 · CANCELLED 454 · REINSTATED 382 · PASS 82 | already excluded today | no change |
+
+"Discarded" is not a stored value on any of these; if it is a UI label for one
+of the above, tell us which.
+
+**What we need from you**
+1. **The DCM order status codes.** OB_ORDER.STATUS holds workflow codes beside
+   the plain words. What do XB, B, D, R, FR, PN, A, F and XR mean, and is a
+   NULL status a live order? The two that decide the rule: is **D** deleted,
+   and are **XB / XR** cancelled? Excluding only the spelled-out values may
+   leave most deleted orders in; guessing the codes would drop live ones.
+2. **Postponed.** A postponed deal can relaunch. Confirm you want postponed
+   tranches out of every result, or only out of "priced / settled" style
+   asks.
+3. **ECM scope.** Confirm the same rule applies to ECM (deal-level Postponed
+   added; orders already handled), or DCM only.
+4. **Deleted (3 tranches) and Final Settled.** Deleted joins the excluded set
+   unless you say otherwise; Final Settled stays in.
+
+**What happens when it ships (so nobody is surprised)**
+- Every count in every view changes: deal counts, tranche counts, order and
+  investor roll-ups, total demand. We snapshot the deploy-check counts before
+  and after and record the deltas.
+- A deal whose tranches are all excluded disappears from the deal object.
+- The filter is case-insensitive and NULL-safe (rows with no status stay in).
+- It is a view change, so it rides the next approval batch and reaches PROD
+  on the release train; the agent's doctrine ("cancelled orders are excluded
+  by construction") updates with it.
+
+Reply on the four points and we build it into the next batch.
