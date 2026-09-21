@@ -102,6 +102,16 @@ Batch B:
 - [ ] V6 DEAL_SHARING_TYPE folded into the syndicate member block per product — two scans of a 377k-row table for one ask (rows 8, 1q, 18, 20 recorded before, 20b, ad-hoc ECM SOLO count; `_CITI_RX` count 3; QA 23)
 - [ ] V5 ECM deal branch in the lever-C shape (D = T⋈S grouped; deal-keyed blocks top-level; 41 aliases) — uniform shape + cheaper entity branches, not a latency claim (rows 7, 1e, 1o, 1w, 4, 4b, 15b, 15c; K10 vs K2; multi-transaction issuer hash probe; QA 2, 4, 11; T PARTITION BY unchanged pending census)
 - [ ] Standing check S3 gains a Starburst EXPLAIN of `WHERE product = 'DCM'` on vw_deal_summary — CHAR(3) literal pushdown unverified (type change if it fails; own decision)
+- [ ] DEAL_CLASS on the deal/tranche/order ECM branches (OPUS_ECM_TRANSACTION.
+      PRODUCT_EQUITY_CLASS_VALUE — censused UAT 2026-09-18): the EXECUTION
+      FORMAT / VEHICLE axis, not a unit axis. Values: Fully Marketed, Marketed,
+      Accelerated Bookbuild, Bought Deal, Overnight, Blocktrade, Dutch Auction,
+      Registered Direct, PIPE (two spellings), Rights, SPAC, REIT, MLP, BDC,
+      Closed End Fund, Registered, Unregistered, Retail, NULL. Unlocks "block
+      trades / bought deals / ABBs / SPAC IPOs / REIT follow-ons" as ONE filter.
+      Additive (OPUS_ECM allowed); DCM NULL; expose as dimension + like filter
+      (merge the two PIPE spellings). Until exposed the catalogs say "not
+      available yet" for these, never "not stored".
 - [ ] SECURITY_UNIT derived column (after db-asks J): order/tranche/deal views,
       ECM = CASE on equity_type (shares / bonds / preferred shares / units /
       warrants), DCM = 'currency' — one authoritative unit per row instead of a
