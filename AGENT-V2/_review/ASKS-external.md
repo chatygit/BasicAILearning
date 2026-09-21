@@ -105,6 +105,21 @@ EXEC DBMS_STATS.GATHER_TABLE_STATS('DGSTREAM','OB_ORDER',      cascade=>TRUE);
 EXEC DBMS_STATS.GATHER_TABLE_STATS('DGSTREAM','OB_ORDER_SIZE', cascade=>TRUE);
 ```
 A recurring stats job on the DGSTREAM OB_/OPUS_ tables would be welcome.
+
+**Added 2026-09-21 — the IPREO tables (new ECM source going into the same views).**
+Stats on every IPREO_* table were last gathered 01-AUG-25 (IPREO_ORDER 18-OCT-25):
+```sql
+EXEC DBMS_STATS.GATHER_SCHEMA_STATS('DGSTREAM', cascade=>TRUE);  -- or per IPREO_* table
+```
+Indexes for the filter shapes the views use (investor-scoped asks on the Ipreo
+book have none today):
+```sql
+CREATE INDEX IX_IPREO_OB_ECM_ORDER_GPNUM ON DGSTREAM.IPREO_OB_ECM_ORDER (INVESTOR_GPNUM) ONLINE;
+CREATE INDEX IX_IPREO_OB_ECM_ORDER_NAME  ON DGSTREAM.IPREO_OB_ECM_ORDER (INVESTOR_NAME) ONLINE;
+CREATE INDEX IX_IPREO_OPUS_TXN_TRANCHE_PRICING ON DGSTREAM.IPREO_OPUS_ECM_TRANSACTION_TRANCHE (PRICING_TS) ONLINE;
+```
+(DEAL_ID / TRANCHE_ID / ORDER_ID / ORDER_STATUS on IPREO_OB_ECM_ORDER and the
+ECM_TRANSACTION_ID keys already exist.)
 Verification: our deal-scoped trade/hedge probes go from full-scan seconds to
 index-probe milliseconds; no application change on your side.
 
@@ -216,5 +231,16 @@ of the above, tell us which.
 - It is a view change, so it rides the next approval batch and reaches PROD
   on the release train; the agent's doctrine ("cancelled orders are excluded
   by construction") updates with it.
+
+**What we found since (UAT, helps question 1):** the codes are a one-day
+legacy load — every XB / B / D / R / FR / PN / A / F / XR row and every NULL
+status carries SOURCE_SYSTEM = 'RQ' and was published 10–11 Jan 2022 (3.75M
+orders, three quarters of the DCM book); the live ONEBOOK feed (ISN / SBB / GSP
+/ GB / DRB) uses the plain words NEW / UPDATED / BOOKED / ACCEPTED / DELETED /
+CANCELLED. Within the RQ load: B 1.62M with 1.24M allocated (reads as booked),
+XB 1.90M with 130 allocated (reads as cancelled or unbooked), D 96k with none
+(deleted?), NULL 120k with no size and no allocation. So the question is really:
+how should the RQ migration codes map, and should XB / D / NULL (2.1M orders)
+leave the book?
 
 Reply on the four points and we build it into the next batch.

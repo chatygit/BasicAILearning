@@ -146,26 +146,23 @@ Batch B:
       qty_at_lowest_limit on the order view.
       Dead ends: PRICE_GUIDANCE (0.7 % filled), ECM IOI timestamps (39 rows),
       LIMIT_DISCOUNT_POT (a boolean). All approval-gated; OPUS_BASE untouched.
-- [ ] IPREO — SECOND ECM SOURCE as a third UNION ALL branch (PRODUCT 'ECM';
-      the agent sees no difference; catalogs unchanged) in vw_deal_summary /
-      vw_tranche_summary / vw_order_detail — THIS WEEK's batch. Draft deal
-      branch reviewed 2026-09-21 (MCP repo views/v2/vw_deal_summary_v2.sql):
-      REBUILD, not patch — (1) the IOI-limit demand fallback is back (PROD
-      ticket; banned): demand = IOI_QTY only, unit-gated; (2) two spines joined
-      on the unproven DEAL_TRANSACTION_ID = TO_CHAR(ISS_ID); (3) every Ipreo
-      column name unvalidated; (4) no overlap rule for deals in both ECM
-      sources; (5) NVL of two tranche counts, DEAL_STATE_CD code as status,
-      order exclusion inert (only DELETED/UPDATED derived). Census db-asks N
-      (N1 tables, N2 DDL as text, N3 the key equality, N4 candidate key
-      columns, N5 overlap, N6 code vocabularies, N7 grains, N8 fill) decides the
-      spine; then: rebuilt branches x3, S1 statements for every Ipreo column,
-      deploy-check A0/structure/grain/population rows per branch, view-notes
-      addendum, contract test green, [opusbase] count unchanged. Decisions
-      needed: overlap policy (OPUS wins? Ipreo only where OPUS absent?),
-      whether Ipreo issues share the OPUS transaction id at all.
-      vw_entity_search needs NO edit (it reads the three views) — it inherits
-      the Ipreo rows; but the staged V3 rewrite (entity from base tables) must
-      then include the Ipreo tables, and K4's 147 s grows with the Ipreo book.
+- [ ] IPREO — SECOND ECM SOURCE, third UNION ALL branch (PRODUCT 'ECM') in
+      vw_deal_summary / vw_tranche_summary / vw_order_detail — THIS WEEK.
+      Census N done 2026-09-21 (memory: ipreo-ecm-source). DESIGN: the
+      IPREO_OPUS_ECM_* / IPREO_OB_ECM_ORDER* MIRROR tables are the spine — each
+      branch is the existing ECM branch with table names swapped, same status
+      exclusion (Live/Settled/Priced only exist), demand = IOI_QTY unit-gated
+      (never LIMIT_VALUE), no home/away guard (no such columns), NULL stubs for
+      what the mirrors lack, identical CASTs. The two ECM id families are
+      disjoint (hex vs 10-digit) → no overlap rule needed. After db-asks N2 (the
+      last run): enrich from raw tables where the key proves (investor type,
+      country, billed-by, tranche name/size, currency, fees), decide PCM/OBT
+      (only if they carry Ipreo ids; the [opusbase] count pin must be adjusted
+      deliberately if the branch repeats those joins). Deliverables: three view
+      files, S1 statements for every Ipreo column used, deploy-check A0 + a
+      per-branch population row + grain rows re-verified, view-notes addendum,
+      contract test green, index/stats ask (ASKS-external §2). 10,802 Ipreo
+      orders reference no tranche → dropped by the inner join, disclosed.
 - [ ] STATUS EXCLUSION (Vinit 2026-09-21) — censused UAT (db-asks K, closed):
       TRANCHES: DCM only (ECM tranche status is NULL on 50,510/50,518) — exclude
       UPPER(STATUS) IN (ARCHIVED 975, CANCELLED 335, POSTPONED 54, DELETED 3;
@@ -174,9 +171,12 @@ Batch B:
       Confidential/Withdrawn/Terminated exclusion. ORDERS: ECM already right
       (NEW/UPDATED/REINSTATED stay; DELETED/CANCELLED/PASS go). DCM: exclude
       DELETED 28,871 + CANCELLED 4,137 + the 10,966 orders on excluded tranches;
-      BLOCKED on the workflow codes (XB 1.9M, B 1.6M, NEW, UPDATED, NULL 120k,
-      D 96k, R, FR, PN, A, F, XR) — D may be deleted, XB/XR may be cancelled;
-      db-asks L + a feed-owner question decide. Build: NULL-safe UPPER() filter
+      BLOCKED on the workflow codes: db-asks L (2026-09-21) shows they are ONE
+      legacy load — SOURCE_SYSTEM 'RQ', published 10-11 Jan 2022, 3.75M orders
+      (75 % of the DCM book); B 1.62M / 1.24M allocated (booked?), XB 1.90M /
+      130 allocated (cancelled?), D 96k / 0 (deleted?), NULL 120k / no size;
+      live ONEBOOK rows use plain words. Vinit decides the RQ mapping
+      (ASKS-external §6). Build: NULL-safe UPPER() filter
       inside the deduped ODT block (deal/tranche/order views); order filter in
       the order view AND the deal view's OC block (+ NOT EXISTS vs excluded
       tranches); deploy-check B/C/D snapshot before/after + "excluded statuses
