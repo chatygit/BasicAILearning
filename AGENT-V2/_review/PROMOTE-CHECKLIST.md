@@ -31,7 +31,8 @@ A failure becomes a gate-1 pin wherever it can be mechanised.
 2. **After the view deploy, before any prompt** — `views/_deploy-check.sql`:
    A0 shows nine LAST_DDL_TIMEs of today; structure rows 17, 1y, 1z, 18 PASS;
    grain rows 7, 8, 9, 10b, 11b, 12b PASS; population rows 15, 15b, 20b, 21,
-   21b; section K timings screenshotted. Then the S3 Trino check through
+   21b, and from the Ipreo release 22, 23, 24, 24c; section K timings
+   screenshotted (K8 / K9 = the Ipreo branch). Then the S3 Trino check through
    Starburst (SELECT one row of each new column from each changed view +
    SHOW COLUMNS; git 2026-09-21 db-asks S3) — the Oracle-side check cannot see
    a stale connector metadata cache.

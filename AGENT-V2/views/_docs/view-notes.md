@@ -662,3 +662,46 @@ ADDENDUM 8 — VERIFIED on UAT 2026-09-15: REGEXP_LIKE compiles; label split exa
 (Citizens / CITIC → not Citi; all Citi entities → Citi); PO's deal
 I-260914-233059921862 → SOLO on both tranches; all-time SOLO 14,250 (old rule
 4,025). CLEARED for the handover.
+
+## ADDENDUM 9 — 2026-09-21 IPREO, the second ECM source (third UNION ALL branch)
+Ipreo deals, tranches and orders arrive in DGSTREAM as MIRROR tables shaped
+like the OPUS/OB tables the ECM branch already reads (IPREO_OPUS_ECM_TRANSACTION,
+_STATUS, _TRANCHE, _TRANCHE_PRODUCT_DETAIL, _TRANCHE_SYNDICATE, IPREO_OB_ECM_ORDER,
+IPREO_OB_ECM_ORDER_IOI) plus the raw Ipreo tables (IPREO_ISSUE, IPREO_TRANCHE,
+IPREO_ORDER, IPREO_PRODUCT*, IPREO_SYNDMEMBER). Each of the three views gained a
+branch between the ECM and DCM branches: PRODUCT 'ECM', same alias list, same
+CASTs, so the catalogs and the agent see one ECM product. Rules:
+- Spine = the mirrors, deduped ROW_NUMBER() OVER (PARTITION BY key ORDER BY
+  ROWID) exactly like the ECM branch; the id families are disjoint (Ipreo ids
+  are 10-digit numerics, DEAL_TRANSACTION_ID = TO_CHAR(ISS_ID); OPUS ids are
+  8-char hex; ECM_TRANSACTION_ID = 1e15 + ISS_ID), so no overlap rule exists.
+- Same status exclusions: execution status Confidential / Withdrawn /
+  Terminated at deal level (a no-op today — Ipreo carries Live / Settled /
+  Priced only, kept for symmetry), ORDER_STATUS CANCELLED / DELETED / PASS on
+  orders, NULL-safe.
+- Demand: the mirrors have no DEMAND_QTY. ORDER_DEMAND_QTY = IOI_QTY when
+  IOI_UNIT is SHARES / BOND, else NULL; DEMAND_AS_SUBMITTED = IOI_QTY;
+  ORDER_AMOUNT = the IOI limit (NVL 0) — never a limit as demand (the PROD
+  ticket). Deal TOTAL_DEMAND sums the unit-gated IOI_QTY.
+- No home/away guard (no IS_MATCHED / IS_DOMINANT); ORDER_OWNERSHIP NULL.
+- Enrichment from the raw tables where census N2 proved the key: investor
+  category ← IPREO_ORDER.INV_TYPE_NM and region ← CNTRY_CODE (ISO-3: USA,
+  GBR, CHE …; 'UNK' is a stored value) and billed-by ← BILLED_BY_BRK_CD on
+  ORD_ID = TO_NUMBER(ORDER_ID DEFAULT NULL ON CONVERSION ERROR); tranche
+  name / size / greenshoe ← IPREO_TRANCHE on TRN_ID = ECM_TRANSACTION_TRANCHE_ID;
+  currency ← NVL(mirror CURRENCY_CODE, IPREO_ISSUE.CCY_CD).
+- Issuer name = SYNDICATE_DEAL_NAME with a trailing "(… Tranche)" stripped
+  (the Ipreo deal name IS the issuer name: "FirstEnergy Corp. (3.5 Year
+  Tranche)"). No GFCID / LEI / ticker / sector / region / use of proceeds in
+  the source → NULL stubs; ISSUER_COUNTRY from the mirror.
+- Tranche: PRODUCT_TYPE = product-detail EQUITY_TYPE; PRICE = FINAL_PRICE;
+  SETTLEMENT_TS / TRADE_TS / SELLING_CONCESSION_FEE from the mirror tranche;
+  syndicate LISTAGGs and the Citi SOLO / SHARED regex over the mirror
+  syndicate table (ordered by member name — no B&D flag in the source);
+  identifiers, ratings, DCM-only economics NULL.
+- Catalog consequence: tranche price and settlement_ts now fill on ECM for
+  Ipreo rows → declared for both products (contract test enforces it).
+- Dropped by construction and to disclose: 10,802 Ipreo orders that
+  reference no tranche (inner join on the mirror tranche).
+- Deploy-check rows 22 / 23 / 24 (+ b / c) and timing probes K8 / K9 cover
+  the branch; db-asks N3 is the pre-handover name validation.

@@ -30,8 +30,12 @@ VIEWS = ROOT / "views"
 # exact wording; keep this set in sync with BACKLOG §2 "products: matches the DDL".
 KNOWN_DRIFTS: set[tuple[str, str, str, str]] = set()
 
-# Two-branch views: branch 0 = ECM, branch 1 = DCM (the UNION ALL order).
-TWO_BRANCH_PRODUCTS = ("ECM", "DCM")
+# Products a branch can carry. A view may have several branches per product
+# (deal / tranche / order carry ECM twice since the Ipreo source, 2026-09-21):
+# a column is live for a product when ANY branch of that product fills it.
+PRODUCTS = ("ECM", "DCM")
+EXPECTED_BRANCHES = {"vw_deal_summary": 3, "vw_tranche_summary": 3,
+                     "vw_order_detail": 3, "vw_trade_detail": 2}
 
 
 def _view_branches(path: Path) -> list[list[tuple[str, str]]]:
@@ -46,6 +50,21 @@ def _view_branches(path: Path) -> list[list[tuple[str, str]]]:
     i = 0
     while i < len(body):
         ch = body[i]
+        if ch == "'":
+            # Skip a single-quoted literal ('' is the escaped quote) so a
+            # regex such as '\s*\([^)]*\)' cannot unbalance the paren depth
+            # (the Ipreo branches' issuer-name strip, 2026-09-21).
+            j = i + 1
+            while j < len(body):
+                if body[j] == "'":
+                    if j + 1 < len(body) and body[j + 1] == "'":
+                        j += 2; continue
+                    break
+                j += 1
+            if not infrom:
+                cur.append(body[i:j + 1])
+            i = j + 1
+            continue
         if ch == "(":
             depth += 1
         elif ch == ")":
@@ -133,22 +152,23 @@ def _drifts() -> set[tuple[str, str, str, str]]:
         for br in branches:
             pm = re.search(r"'(ECM|DCM)'", dict(br).get("PRODUCT", ""))
             branch_products.append(pm.group(1) if pm else None)
-        two = len(branches) == 2 and all(branch_products)
+        labelled = len(branches) >= 2 and all(branch_products)
         for key, spec in fields.items():
             kind, name = key.split(":", 1)
             col = spec["column"]
             if col not in aliases:
                 found.add((ypath.name, kind, name, f"column {col} is not projected by {vpath.name}"))
                 continue
-            if not two:
+            if not labelled:
                 continue
-            stubbed = []
+            filled = set()
             for prod, br in zip(branch_products, branches):
                 expr = dict(br).get(col, "")
-                if re.match(r"CAST\s*\(\s*NULL\s+AS", expr, re.I):
-                    stubbed.append(prod)
+                if not re.match(r"CAST\s*\(\s*NULL\s+AS", expr, re.I):
+                    filled.add(prod)
+            stubbed = [p for p in PRODUCTS if p in branch_products and p not in filled]
             declared = spec["products"]
-            live = tuple(p for p in TWO_BRANCH_PRODUCTS if p in branch_products and p not in stubbed)
+            live = tuple(p for p in PRODUCTS if p in filled)
             if stubbed and not declared:
                 found.add((ypath.name, kind, name, f"NULL on {'/'.join(stubbed)} but declared for both products"))
             elif declared and tuple(sorted(declared)) != tuple(sorted(live)):
@@ -158,11 +178,15 @@ def _drifts() -> set[tuple[str, str, str, str]]:
 
 
 def test_view_parser_finds_every_branch_and_alias():
-    for v in ("vw_deal_summary", "vw_tranche_summary", "vw_order_detail", "vw_trade_detail"):
+    for v, want in EXPECTED_BRANCHES.items():
         br = _view_branches(VIEWS / f"{v}.sql")
-        assert len(br) == 2, f"{v}: expected 2 UNION branches, parsed {len(br)}"
-        assert [a for a, _ in br[0]] == [a for a, _ in br[1]], f"{v}: branch alias lists differ"
-        assert len(br[0]) >= 20, f"{v}: parsed only {len(br[0])} projected columns"
+        assert len(br) == want, f"{v}: expected {want} UNION branches, parsed {len(br)}"
+        first = [a for a, _ in br[0]]
+        for n, other in enumerate(br[1:], 1):
+            assert [a for a, _ in other] == first, f"{v}: branch {n} alias list differs from branch 0"
+        assert len(first) >= 20, f"{v}: parsed only {len(first)} projected columns"
+        prods = [re.search(r"'(ECM|DCM)'", dict(b).get("PRODUCT", "")) for b in br]
+        assert all(prods), f"{v}: a branch has no PRODUCT literal"
 
 
 def test_catalog_columns_match_the_views():

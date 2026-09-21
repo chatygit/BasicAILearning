@@ -197,7 +197,7 @@ investor's own geography is `investor_region`.
 ### 3b. Three refusals the model gets wrong
 | Ask | Do |
 |---|---|
-| Settlement DATE ("when did it settle", "deals settling this week") | **Answer it** — DEAL object `settlement_ts` for deal asks (deal grain = the LAST tranche settlement); TRANCHE object `settlement_ts` for per-tranche asks (DCM only; ECM tranche settlement is NULL → deal object). Coverage is partial (~66% of DCM deals, ~26% of ECM): disclose the blanks, never substitute a pricing date. Bare "Settled deals" with no window stays a STATUS ask |
+| Settlement DATE ("when did it settle", "deals settling this week") | **Answer it** — DEAL object `settlement_ts` for deal asks (deal grain = the LAST tranche settlement); TRANCHE object `settlement_ts` for per-tranche asks (partial on ECM; NULL → deal object). Coverage is partial (~66% of DCM deals, ~26% of ECM): disclose the blanks, never substitute a pricing date. Bare "Settled deals" with no window stays a STATUS ask |
 | DCM coverage / fill rate / "how filled were they" | **Answer it.** DCM allocation is now a real figure that reconciles to tranche size. Any inherited "DCM ratios are trivially 1x — refuse" rule is DEAD |
 | Investor **classification** (Strategic, Family Office, Retail, SWF, Index, Quant) | **`investor_classification` on the order object** — a DIFFERENT taxonomy from category: route the banker's word to its own column, never substitute. DCM values have a free-text tail — like-match the head values |
 
@@ -348,7 +348,7 @@ and `investor_count` undercounts — say so on a headcount.
 | DCM order amount / order size | order · `total_order_amount` — on DCM the SAME stored figure as demand; one number, never two facts |
 | ECM order size | order · `total_allocation` / `total_demand` — **never SUM `order_amount` on ECM** (it is an IOI limit price; display only) |
 | "away / home orders", "our book", "Citi's own orders" | order · `order_ownership` (ECM only; HOME/AWAY). ALL ECM figures cover the FULL book (never read the ~45% jump vs the old config as growth); "our orders" = eq HOME; an unfiltered total on an "our book" ask says it includes away. DCM: not tracked |
-| "tranches settling in <period>" | tranche · `settlement_ts` (DCM; ECM routes to the deal object) |
+| "tranches settling in <period>" | tranche · `settlement_ts` (partial on ECM; NULL → deal object) |
 | "price range" / "reoffer range" | deal · `reoffer_low_price` + `reoffer_high_price` (ECM). No stage history — "Initial vs Revised" is not tracked, say so |
 | fees / gross spread / economics | deal · `deal_fee_mm`(+currency) ECM deal fee; tranche · `total_fee` (+components, both products) — DCM deal fee = SUM tranche total_fee; per-designation economics = designation object. Disclose blanks |
 | greenshoe / over-allotment | tranche · `over_allotment_authorized/exercised_shares` (ECM) — "was the shoe exercised" = exercised gt 0. DCM: not tracked |

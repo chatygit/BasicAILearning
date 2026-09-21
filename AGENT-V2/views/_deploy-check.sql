@@ -198,7 +198,11 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'ECM' AND TOTAL_ALLOCATION > 0
                     THEN 1 END) AS ecm_alloc_deals,
          COUNT(CASE WHEN SUBSCRIPTION_RATIO IS NOT NULL
-                    THEN 1 END) AS subs_ratio_deals
+                    THEN 1 END) AS subs_ratio_deals,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN 1 END) AS ecm_ipreo_rows,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                     AND ORDER_COUNT > 0 THEN 1 END) AS ecm_ipreo_ordered
   FROM DGSTREAM.VW_DEAL_SUMMARY
 )
 SELECT '1e. ECM deals with issuer name (INFO, expect ~6,892 UAT)' AS check_,
@@ -255,6 +259,14 @@ SELECT '15b. ECM deals still carry allocation (unchanged branch sanity)', 'Y',
 UNION ALL
 SELECT '15c. deals with SUBSCRIPTION_RATIO (INFO — helper wave)', '(info)',
        TO_CHAR(subs_ratio_deals), 'INFO' FROM agg
+UNION ALL
+SELECT '22. ECM deals from the Ipreo source landed (10-digit ids; UAT ~19,654)', 'Y',
+       CASE WHEN ecm_ipreo_rows > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN ecm_ipreo_rows > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '22b. Ipreo ECM deals with orders (INFO — the OD join; 0 = key mismatch)',
+       '(info)', TO_CHAR(ecm_ipreo_ordered) || ' of ' || TO_CHAR(ecm_ipreo_rows),
+       'INFO' FROM agg
 ORDER BY 1;
 
 -- C. TRANCHE VIEW — ONE scan. Dies alone if VW_TRANCHE_SUMMARY is old.
@@ -274,7 +286,13 @@ WITH agg AS (
          COUNT(CASE WHEN IDENTIFIER_TYPE <> UPPER(IDENTIFIER_TYPE)
                     THEN 1 END) AS lowercase_idtypes,
          COUNT(CASE WHEN PRODUCT = 'DCM' AND DEAL_SHARING_TYPE = 'SOLO'
-                    THEN 1 END) AS dcm_solo
+                    THEN 1 END) AS dcm_solo,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN 1 END) AS ecm_ipreo_rows,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN TRANCHE_NAME END) AS ecm_ipreo_named,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN SYNDICATE_MEMBER_NAME END) AS ecm_ipreo_synd
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
@@ -311,6 +329,15 @@ UNION ALL
 SELECT '20b. SOLO rule landed (plain Citigroup counted)', 'Y',
        CASE WHEN dcm_solo > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_solo > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '23. ECM tranches from the Ipreo source landed (UAT ~20,044)', 'Y',
+       CASE WHEN ecm_ipreo_rows > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN ecm_ipreo_rows > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '23b. Ipreo tranches w/ name (raw IPREO_TRANCHE join) / syndicate (INFO)',
+       '(info)', TO_CHAR(ecm_ipreo_named) || ' named / ' ||
+       TO_CHAR(ecm_ipreo_synd) || ' syndicate of ' || TO_CHAR(ecm_ipreo_rows),
+       'INFO' FROM agg
 ORDER BY 1;
 
 -- D. ORDER VIEW — ONE scan. Dies alone if VW_ORDER_DETAIL is old (DEV
@@ -328,7 +355,16 @@ WITH agg AS (
          COUNT(SALES_PERSON) AS sales_,
          COUNT(CASE WHEN PRODUCT = 'ECM' THEN ORDER_DEMAND_QTY END) AS ecm_demand,
          COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_rows,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN PRODUCT_CLASS END) AS dcm_class
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN PRODUCT_CLASS END) AS dcm_class,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN 1 END) AS ecm_ipreo_rows,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN ORDER_DEMAND_QTY END) AS ecm_ipreo_demand,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN INVESTOR_CATEGORY END) AS ecm_ipreo_cat,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                     AND ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS')
+                    THEN 1 END) AS ecm_ipreo_excluded
   FROM DGSTREAM.VW_ORDER_DETAIL
 )
 SELECT '1d. orders with billed_by (INFO, ~90/74% UAT)' AS check_,
@@ -365,6 +401,19 @@ UNION ALL
 SELECT '9. order grain (rows = PRODUCT+ORDER_ID)', 'Y',
        CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
        CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '24. ECM orders from the Ipreo source landed (UAT ~640k live)', 'Y',
+       CASE WHEN ecm_ipreo_rows > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN ecm_ipreo_rows > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '24b. Ipreo orders w/ share-equivalent demand / investor type (INFO)',
+       '(info)', TO_CHAR(ecm_ipreo_demand) || ' demand / ' ||
+       TO_CHAR(ecm_ipreo_cat) || ' typed of ' || TO_CHAR(ecm_ipreo_rows),
+       'INFO' FROM agg
+UNION ALL
+SELECT '24c. Ipreo cancelled/deleted/pass orders excluded', 'Y',
+       CASE WHEN ecm_ipreo_excluded = 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN ecm_ipreo_excluded = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 ORDER BY 1;
 
 -- E. HEDGE ORDER VIEW — ONE scan (new in V3).
@@ -510,3 +559,20 @@ SELECT 'K1b deal-scoped DCM orders, literal id' AS probe_,
 FROM DGSTREAM.VW_ORDER_DETAIL
 WHERE PRODUCT = 'DCM'
 AND   DEAL_ID = 'I-260831-113859365632';
+
+-- K8. Ipreo ECM branch, the agent's deal-card shape: one Ipreo deal's orders
+-- by a LITERAL 10-digit id (Caris Life Sciences on UAT, census N2-5). The
+-- dedupe window is partitioned by DEAL_ID so the predicate must push in —
+-- expect the K1b class (sub-second), not the K1 class.
+SELECT 'K8 deal-scoped Ipreo ECM orders, literal id' AS probe_,
+       TO_CHAR(COUNT(*)) || ' rows / ' || TO_CHAR(ROUND(SUM(ORDER_DEMAND_QTY))) || ' demand' AS actual_
+FROM DGSTREAM.VW_ORDER_DETAIL
+WHERE PRODUCT = 'ECM'
+AND   DEAL_ID = '1448094247';
+
+-- K9. Ipreo ECM deal count with no demand columns (the K2 shape on the new
+-- branch — join elimination should skip the 677k-row order aggregate).
+SELECT 'K9 ECM deal count, no demand cols (both ECM branches)' AS probe_,
+       TO_CHAR(COUNT(*)) || ' ECM deals' AS actual_
+FROM DGSTREAM.VW_DEAL_SUMMARY
+WHERE PRODUCT = 'ECM';

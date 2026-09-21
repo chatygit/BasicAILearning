@@ -1676,7 +1676,10 @@ _PRODUCT_PINS = [
     ("capital_markets_order.yaml", "order_ownership", "ECM"),
     ("capital_markets_deal.yaml", "issuer_lei", "ECM"),
     ("capital_markets_tranche.yaml", "issuer_lei", "ECM"),
-    ("capital_markets_tranche.yaml", "settlement_ts", "DCM"),
+    # (tranche, settlement_ts, DCM) and (tranche, price, DCM) RETIRED
+    # 2026-09-21: the Ipreo ECM branch fills both (mirror tranche
+    # SETTLEMENT_TS, product-detail FINAL_PRICE), so the declarations were
+    # widened ON PURPOSE; the contract test pins the view↔yaml agreement.
     ("capital_markets_deal.yaml", "base_price", "ECM"),
     ("capital_markets_deal.yaml", "reoffer_low_price", "ECM"),
     ("capital_markets_deal.yaml", "reoffer_high_price", "ECM"),
@@ -1688,7 +1691,6 @@ _PRODUCT_PINS = [
     ("capital_markets_deal.yaml", "deal_size_mm", "ECM"),
     ("capital_markets_tranche.yaml", "coupon", "DCM"),
     ("capital_markets_tranche.yaml", "yield", "DCM"),
-    ("capital_markets_tranche.yaml", "price", "DCM"),
     ("capital_markets_tranche.yaml", "order_book_size_usd", "DCM"),
     ("capital_markets_tranche.yaml", "issue_ts", "DCM"),
     ("capital_markets_tranche.yaml", "target_market", "DCM"),
@@ -2063,9 +2065,13 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
     if _m is None:
         continue
     _depth, _branches, _aliases, _infrom = 0, [], [], False
-    for _tok in re.finditer(r"\(|\)|\bUNION\s+ALL\b|\bFROM\b|\bSELECT\b|"
+    # A quoted literal is ONE token so a regex such as '\s*\([^)]*\)' (the
+    # Ipreo issuer-name strip, 2026-09-21) cannot unbalance the depth.
+    for _tok in re.finditer(r"'(?:[^']|'')*'|\(|\)|\bUNION\s+ALL\b|\bFROM\b|\bSELECT\b|"
                             r"AS\s+\"?([A-Z_][A-Z0-9_]*)\"?", _src[_m.end():]):
         _t = _tok.group(0)
+        if _t.startswith("'"):
+            continue
         if _t == "(":
             _depth += 1
         elif _t == ")":

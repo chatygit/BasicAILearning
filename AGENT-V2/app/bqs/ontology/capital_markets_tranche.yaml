@@ -267,12 +267,12 @@ dimensions:
   tranche_size: {column: tranche_size, description: "Tranche size as a NUMBER (ECM shares / DCM notional money). 0 means NO size recorded at source; NULL means a size was recorded but could not be parsed. The currency-comparable money figure for DCM."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field)."}
   currency: {column: currency, description: "Pricing/denomination currency (scalar at this grain). Required alongside any DCM money figure. Since release 2 the ECM value carries a global name fallback, matching the deal list; a residual NULL means genuinely not recorded."}
-  settlement_ts: {column: settlement_ts, products: ["DCM"], description: "DCM. The tranche's OWN settlement timestamp (release 2) — 'tranches settling in <period>' filters here. NULL on ECM at this grain: ECM settlement asks go to the deal object's settlement_ts."}
+  settlement_ts: {column: settlement_ts, description: "The tranche's OWN settlement timestamp — 'tranches settling in <period>' filters here. DCM ~two thirds filled; ECM partial (NULL = not recorded at this grain → the deal object's settlement_ts)."}
   transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: origination transaction id — FORWARD-POPULATED (recent Ipreo deals; NULL = predates the link). TEXT."}
   issuer_lei: {column: issuer_lei, products: ["ECM"], description: "ECM (release 3, ~83%). Issuer LEI. NULL on DCM — no source column; offer GFCID/ticker instead."}
   coupon: {column: coupon, products: ["DCM"], description: "DCM (V3). The tranche COUPON as stored text ('5.25%'-style variants) — this is the RATE; coupon_type is the structure. Population unmeasured."}
   yield: {column: yield, products: ["DCM"], description: "DCM (V3). Yield as stored text. Population unmeasured."}
-  price: {column: price, products: ["DCM"], description: "DCM (V3). Tranche price (NUMBER). Population unmeasured."}
+  price: {column: price, description: "Tranche price (NUMBER): DCM stored price; ECM final offer price where recorded (partial, NULL = not recorded)."}
   price_guidance: {column: price_guidance, products: ["DCM"], description: "DCM (V3). Price guidance text (display)."}
   order_book_size_usd: {column: order_book_size_usd, products: ["DCM"], description: "DCM (V3). USD-normalized order book size — STORED AS TEXT; display only, never SUM it (a numeric conversion is a future batch)."}
   total_fee: {column: total_fee, description: "Tranche TOTAL fee (NUMBER, both products since V3; populations unmeasured — blanks = not captured). Deal-level fee = SUM this per deal; component fees are separate columns."}
@@ -415,9 +415,10 @@ filters:
       is not possible on text, say so for 'coupons above X' asks.
   price:
     column: price
-    products: ["DCM"]
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
-    description: DCM tranche price threshold (unmeasured population).
+    description: >-
+      Tranche price threshold (both products; partial population — a
+      NULL is 'not recorded', disclose it).
   announcement_ts:
     column: announcement_ts
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
@@ -471,16 +472,15 @@ filters:
       (no source column); offer GFCID/ticker.
   settlement_ts:
     column: settlement_ts
-    products: ["DCM"]
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
     description: >-
-      DCM. The tranche's OWN settlement timestamp (release 2) — the natural
-      grain for "tranches settling in <period>" / "when does this tranche
-      settle". Partial coverage (~two thirds of DCM tranches in UAT) —
-      disclose blanks; never substitute a pricing date. NULL on every ECM
-      row at this grain: an ECM settlement ask routes to the DEAL object's
-      settlement_ts (deal grain = LAST tranche settlement). Trailing windows
-      need BOTH bounds (gte start, lt tomorrow-midnight).
+      The tranche's OWN settlement timestamp — the natural grain for
+      "tranches settling in <period>" / "when does this tranche settle".
+      Partial coverage (~two thirds of DCM tranches in UAT; ECM partial) —
+      disclose blanks; never substitute a pricing date. A NULL ECM row is
+      'not recorded at this grain': route that ask to the DEAL object's
+      settlement_ts (deal grain = LAST tranche settlement). Trailing
+      windows need BOTH bounds (gte start, lt tomorrow-midnight).
   settlement_currency:
     column: settlement_currency
     operators: [eq, ne, in, not_in, is_null, is_not_null]

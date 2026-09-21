@@ -146,23 +146,21 @@ Batch B:
       qty_at_lowest_limit on the order view.
       Dead ends: PRICE_GUIDANCE (0.7 % filled), ECM IOI timestamps (39 rows),
       LIMIT_DISCOUNT_POT (a boolean). All approval-gated; OPUS_BASE untouched.
-- [ ] IPREO — SECOND ECM SOURCE, third UNION ALL branch (PRODUCT 'ECM') in
-      vw_deal_summary / vw_tranche_summary / vw_order_detail — THIS WEEK.
-      Census N done 2026-09-21 (memory: ipreo-ecm-source). DESIGN: the
-      IPREO_OPUS_ECM_* / IPREO_OB_ECM_ORDER* MIRROR tables are the spine — each
-      branch is the existing ECM branch with table names swapped, same status
-      exclusion (Live/Settled/Priced only exist), demand = IOI_QTY unit-gated
-      (never LIMIT_VALUE), no home/away guard (no such columns), NULL stubs for
-      what the mirrors lack, identical CASTs. The two ECM id families are
-      disjoint (hex vs 10-digit) → no overlap rule needed. After db-asks N2 (the
-      last run): enrich from raw tables where the key proves (investor type,
-      country, billed-by, tranche name/size, currency, fees), decide PCM/OBT
-      (only if they carry Ipreo ids; the [opusbase] count pin must be adjusted
-      deliberately if the branch repeats those joins). Deliverables: three view
-      files, S1 statements for every Ipreo column used, deploy-check A0 + a
-      per-branch population row + grain rows re-verified, view-notes addendum,
-      contract test green, index/stats ask (ASKS-external §2). 10,802 Ipreo
-      orders reference no tranche → dropped by the inner join, disclosed.
+- [ ] IPREO — SECOND ECM SOURCE: BUILT 2026-09-21 (third UNION ALL branch,
+      PRODUCT 'ECM', in vw_deal_summary 164-275 / vw_order_detail 177-330 /
+      vw_tranche_summary 219-389; view-notes addendum 9; deploy-check rows
+      22/23/24 + K8/K9; contract test 3-branch aware; tranche price +
+      settlement_ts widened to both products; investor_region notes ISO-3).
+      LEFT: (1) db-asks N3 on UAT — name validation (nine columns are still
+      OCR-derived: ISSUER_COUNTRY_NAME, PRICING_TS / SETTLEMENT_TS / TRADE_DATE /
+      SELLING_CONCESSION_FEE, SYNDICATE_MEMBER_NAME, IOI_QTY / LIMIT_VALUE,
+      TRN_NM, ACTIVE_TRANCHE_SIZE_QTY, OVERALLOTMENT_QTY, CCY_CD), key types,
+      feature compile, branch dry run, the five missing census items; fix any
+      ORA-00904 before handover. (2) Handover with the index/stats ask
+      (ASKS-external §2). (3) After deploy: A0, rows 22-24, grain 7/8/9, K8/K9,
+      S3 through Trino. (4) Later enrichment when N3-5 shows fill: fees from
+      IPREO_PRODUCTFEE, offer/file price range from IPREO_PRODUCT. Disclose:
+      10,802 Ipreo orders reference no tranche → dropped by the inner join.
 - [ ] STATUS EXCLUSION (Vinit 2026-09-21) — censused UAT (db-asks K, closed):
       TRANCHES: DCM only (ECM tranche status is NULL on 50,510/50,518) — exclude
       UPPER(STATUS) IN (ARCHIVED 975, CANCELLED 335, POSTPONED 54, DELETED 3;
@@ -224,8 +222,11 @@ our push lands — coordinate timing (a mid-cycle change invalidates the sample)
 - [ ] RT-5 remainder: extend the [names] scan to yaml how_to_use/usage_notes prose and validate routed rows against THAT object's keys (the slot-aware metric-in-dimensions half shipped 2026-09-17)
 - [ ] Server tests that pin new behaviour before it ships: tests/test_suggestion_budget.py, stub-connector timeout test, single-entitlement-call test, discovery pruning trio, XL-4 planner cases, importorskip FastMCP client test (each named in §2) — SRV-1/2/5/6, CAT-3, XL-4
 - [ ] SKILL-6 leading-token check; CAT-2 no-provenance check; XL-*/CAT-4 negative pins — phrase-named failures (gate)
+- [ ] Contract test: assert per-branch that every NULL stub's CAST type equals the type the other branches project for that alias (the Ipreo branch copied the DCM stub types by hand — a mismatch is ORA-01790 at deploy, invisible today)
 
 ## 6. Where the rest lives
+- The Iceberg migration plan (tabled 2026-09-22): ICEBERG-PLAN.md — after
+  Phase 1, every §3 view item becomes core/serve SQL there, not an Oracle handover
 - Asks to other teams: ASKS-external.md
 - PROD-side items, promotion order: PROMOTE-CHECKLIST.md
 - SQL checks for the user (OPEN asks only): views/_checks/db-asks.sql — standing
