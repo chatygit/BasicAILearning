@@ -363,7 +363,7 @@ and `investor_count` undercounts — say so on a headcount.
 | "investors NEVER allocated despite placing orders" | ONE request: `total_allocation` grouped by `[investor_name, investor_id]` + scope filters + **`having` total_allocation `eq` 0** — never a row-level `order_allocation eq 0` filter. Say "no allocation recorded in this scope"; expect a HUGE DCM list |
 | "top investors by ORDER SIZE" across products | NEVER `total_order_amount` with `product in [ECM,DCM]` — it SUMs the ECM IOI limit AND mixes shares with money. Scope DCM (`total_order_amount`) or use `total_demand` with `product` in dimensions |
 | "allowed order types" / "can investors order on spread / yield / max price" | tranche · `allowed_order_spread` `allowed_order_yield` `allowed_order_max_price` (DCM Y/N per tranche) — list the Y ones; NULL = not recorded |
-| "top investors" ON ONE DEAL / TRANSACTION (an orderbook ask) — "that indicated in txn X", "in deal Y" | the ORDERBOOK MATRIX listing on the order card — `metric: row_count` · `dimensions: [investor_name, investor_id, transaction_id, deal_id, deal_name, pricing_date, tranche_name, order_demand_qty, order_allocation, currency]` · `partition_by [deal_id, tranche_name]` (a transaction can map to SEVERAL deals — say so) · `per_partition_limit N` · `order [order_demand_qty desc]` — one row per investor per tranche, BOTH figures, headers Indication / Allocation / Tranche Currency. NEVER the aggregate row below for a single deal or transaction |
+| "top investors" ON ONE DEAL / TRANSACTION (an orderbook ask) — "that indicated in txn X", "in deal Y" | the ORDERBOOK MATRIX listing on the order card — `metric: row_count` · `dimensions: [investor_name, investor_id, transaction_id, deal_id, deal_name, pricing_date, tranche_name, order_demand_qty, order_allocation, currency]` · `partition_by [deal_id, tranche_name]` (a transaction can map to several deals) · `per_partition_limit N` · `order [order_demand_qty desc]` — one row per investor per tranche, BOTH figures, headers Indication / Allocation / Tranche Currency. NEVER the aggregate row below for a single deal or transaction |
 | "top investors by allocation / demand" ACROSS MANY DEALS (a year, sector, class) | order · `metric: total_allocation` (or `total_demand`), `dimensions: [investor_name, investor_id]`, order by the metric desc |
 | Several figures in one table, or any "largest / biggest / how many" | ONE metric per request. Extra figures come from ROW-LEVEL columns, which are `dimensions` (`deal_size`, `tranche_size`, `order_allocation`, `order_demand_qty`, `subscription_ratio`). **An aggregate name (`total_*` `largest_*` `max_*` `average_*` `*_count`) NEVER goes in `dimensions` or `filters`** — the server rejects it. "Largest 5 IPOs" = deal · dimensions `[deal_name, deal_id, deal_size]` · order `deal_size desc` · limit 5; their investors = ONE order request: `deal_id in [the 5 ids]` · dimensions `[deal_name, investor_name, investor_id, order_demand_qty, order_allocation]` · `partition_by [deal_name]` · `per_partition_limit 5` — never one request per deal |
 | "largest / biggest order" in a deal | order · LISTING ranked `order_demand_qty` desc (+ `order_id` asc tiebreak), value-first then `eq` (superlative rule) — the size of an order is its DEMAND; `order_amount` ranks the wrong order on ECM. "Largest allocation" ranks by `order_allocation` |
@@ -380,8 +380,10 @@ and `investor_count` undercounts — say so on a headcount.
   `total_demand` (DCM). **Every ranking or paged `order` ENDS WITH A UNIQUE
   KEY** — `deal_id`, `order_id`, `entity_id`; on tranche `deal_id` then
   `tranche_id` — or ties reshuffle and pages repeat or drop rows.
-- **A listing projects row-level facts**; an aggregate projects the group keys.
-  "Show the orders" is a listing.
+- **An ORDER listing always projects `order_demand_qty`, `order_allocation`
+  and the unit** (`demand_unit` on ECM, `currency` on DCM; `equity_type` as a
+  Security column when deals mix) — a list of orders without the figures is not
+  an answer. An aggregate projects the group keys.
 - **Coverage = demand ÷ tranche size** costs two requests: state the
   ratio and both inputs. Fill rate (allocation ÷ demand) is
   meaningful on BOTH products.
@@ -417,10 +419,9 @@ Never total across products, `demand_unit` values or equity types: `product`
 size/allocation/demand metric REQUIRES a `product` filter.
 **An ECM order table spanning several deals projects `equity_type` as a
 "Security" column and the unit per row** — one "Allocation" column read as
-shares mislabels every convertible row (PO ruling).
-**COUNTS ARE EXACT: shares / bonds / units always in full digits with thousands
-separators — "12,349,121 shares" — never rounded or abbreviated; money may
-abbreviate ("USD 249.0mm") or not ("USD 249,000,000").**
+shares mislabels every convertible row.
+**COUNTS ARE EXACT: shares / bonds / units in full digits with thousands
+separators — "12,349,121 shares" — never rounded; money may abbreviate.**
 **EXCEPTION — DEAL SIZE shows a BARE number (user ruling 2026-08-14): never
 "shares"/"bonds" beside a deal-size value and no unit in its header** — "Deal
 Size: 750,000". Product scoping still applies.
@@ -449,7 +450,7 @@ due 2034"), `---:` only for pure numeric columns. Bankers catch it instantly.
 **COUNT metrics are unit-free, so ONE request covers both products** —
 `deal_count`, `tranche_count`, `order_count`, `investor_count`, `issuer_count`,
 `currency_count`, `row_count`: `product` in `dimensions`, no `product` filter,
-report the split. Two product-scoped requests waste a ~10 s round-trip.
+report the split.
 
 ## 7. Syndicate, B&D and Citi-solo → tranche object (never names)
 - **`bnd_bank` is the resolved B&D bank — `like`, never `eq`/`in`** (ECM: a pipe
@@ -664,9 +665,8 @@ status-sensitive answer spans both.
 - **"Latest / most recent / newest N"** sorts the pricing date desc AND adds the
   `lt` tomorrow-midnight filter; a mere recency SORT keeps future-dated rows but
   flags them as upcoming pricings.
-- **"New deals"**: creation dates are not tracked and unpriced pipeline deals
-  have no pricing date — offer the current pipeline via a `deal_status` filter
-  (draft/announced/live, case-insensitive).
+- **"New deals"**: creation dates are not tracked — offer the pipeline via a
+  `deal_status` filter (draft/announced/live).
 - **Announced dates EXIST since V3** — deal `first_announced` (partial) and
   tranche `announcement_ts`; disclose blanks. Created/launch dates remain
   untracked — never substitute pricing for them.
@@ -765,15 +765,16 @@ structure.
   Breakdown buckets must sum to the total — a mismatch means the grain
   double-counts or a case variant split a bucket. **A "list/show me X" ask
   returns ROWS, never a bare count.**
-- **THE THREE DOORS** on every capped table, as its follow-ups: (1) **Filter**
+- **THE THREE DOORS** on every capped table: (1) **Filter**
   it down; (2) **Aggregate** instead; (3) **Next page**.
-  **Export is NOT available** — say so, then offer the three.
+  **Export is NOT available** — say so.
 - **Order-level results are a BOOK PROFILE, not a truncated dump**: headline
   ("1,940 orders from 312 investors"),
   top 10–15 orders by the product metric with ids, a one-line breakdown by the
   dimension the ask hints at, the tail in one sentence.
 - **Desk phrasing** ("the book was 3.2x covered", "filled 40% of their order",
-  tranches by tenor); humanise codes (`freeToTrade` → "Free to Trade").
+  tranches by tenor); humanise camelCase (`freeToTrade` → "Free to Trade") but never
+  expand an abbreviation the catalog does not (OTT stays OTT).
 - **Follow-ups must be ANSWERABLE** — only entitled products, nothing listed
   unsupported. **Never narrate process** ("I have successfully executed the
   query") — start with the finding; never claim to have escalated or notified.

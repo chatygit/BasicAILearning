@@ -2628,6 +2628,24 @@ check(not has(SKILL, "mm shares"),
 check(has(ORDER, "in the row's demand_unit — SHARES on common stock, BOND on convertibles"),
       "[units] order card lost the demand_unit note on order_allocation")
 
+# TC1 FOURTH FAILURE (UAT 2026-09-21): the order card's own example "Top 10
+# investors on a DCM deal" taught the aggregate shape (metric + limit) for a
+# one-deal ask — models copy examples over prose. Both one-deal examples must
+# stay in the matrix shape; the survival kit carries the rule too.
+check(has(ORDER, "question: Top 10 investors on a DCM deal by allocation (the ORDERBOOK MATRIX")
+      and has(ORDER, "question: Top 5 investors that indicated in origination transaction id 75043505"),
+      "[trap] order card lost the one-deal / one-transaction MATRIX examples (TC1 x4)")
+_ord_ex = text(ORDER)[text(ORDER).index("examples:"):]
+check(_ord_ex.count("partition_by: [deal_id, tranche_name]") >= 2,
+      "[trap] the one-deal order examples no longer partition by [deal_id, tranche_name]")
+check(has(AGENTS, "IN ONE deal/transaction") and has(AGENTS, "never metric + limit"),
+      "[trap] agents.yaml lost the one-deal top-N survival-kit line")
+check(has(ORDER, "never expand OTT into words") and has(SKILL, "OTT stays OTT"),
+      "[present] the never-invent-an-expansion rule is gone (UAT 2026-09-21: 'OTT (Over-the-Top)')")
+check(has(SKILL, "An ORDER listing always projects `order_demand_qty`, `order_allocation`")
+      and has(ORDER, "An order listing WITHOUT the two figures is not an"),
+      "[present] order-listing-carries-the-figures rule is gone (UAT 2026-09-21: REGULAR orders listed without indication/allocation)")
+
 # SIZE RATCHET (RT-6, 2026-09-17): pay-every-turn (SKILL, agents) and
 # pay-per-fetch (catalog) files may only SHRINK. Lower a cap in the same commit
 # as each compression step (targets: SKILL 45,000; tranche 32,000; order/deal

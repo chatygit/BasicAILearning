@@ -33,11 +33,16 @@ refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
   K7 regression = no handover.
 
 ## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
-- [ ] UAT run 4 after the 2026-09-18 config push (fresh sessions): TC1 on
-      75076736 WITH the ⚡ run_bqs_query args (failed 3x — the args decide whether
-      it is routing or the request shape), 15 Fidelity (must be ONE turn, the
-      matrix, no menu), 3 BlackRock (family table, no menu), 20 CUSIP (all three
-      tranches in one turn, no "test" wording, share bars), then 18 and 24.
+- [ ] UAT run 5 after the NEXT SERVER PUSH (the matrix examples + disambiguation
+      hint ride it): 36 (TC1, ⚡ args again), 34 (REGULAR orders — must carry
+      indication/allocation/unit/Security), 24, 35, 33 (a convertible deal).
+      Then 15/3/20 once more for the token line.
+- [ ] Server nudge (release train, not yet written): when a request has a
+      demand/allocation metric + ONE deal_id/transaction_id eq filter + no
+      tranche_name/deal_id dimension + limit ≤ 25, attach a response hint
+      "single-deal top-N: use the per-tranche matrix (partition_by
+      [deal_id, tranche_name], both figures)". Prose failed 4x; the catalog
+      example is the fix most likely to hold, the hint is the backstop.
 - [ ] 15 matrix: issuer_name + tenors columns missing from the Fidelity answer
       although the ORDERBOOK MATRIX note lists them — check it is applied.
 - [ ] Per-tranche listings must carry tranche_name ("three indications" for

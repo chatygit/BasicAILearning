@@ -87,11 +87,7 @@ how_to_use:
      investor_category LEFT this list in release 3 — DCM carries country
      names ~95% and investor types ~67%.) sales_person is the one
      DCM-only field (NULL on ECM).
-     Everything else works on BOTH products: deal_id, deal_name, tranche_id,
-     tranche_name, order_id, investor_name, investor_id, order_allocation,
-     order_demand_qty, order_amount, currency, pricing_date, billed_by (the
-     order-level billing bank — full names on both products). NOTHING here is
-     DCM-only. Combining product 'DCM' with an ECM-only field returns ZERO rows —
+     Everything else works on BOTH products. NOTHING here is DCM-only. Combining product 'DCM' with an ECM-only field returns ZERO rows —
      that is an empty answer, not a narrow one. DO NOT RUN IT: say the field is
      not captured for bonds, and offer either the same ask on ECM or an
      equivalent built from the both-product fields (investor_name / investor_id /
@@ -102,28 +98,25 @@ how_to_use:
      investor_id is NULLABLE at source, so investor_count (COUNT DISTINCT) skips
      those orders and grouping by investor_id drops them — group by
      investor_name alongside it when the total has to reconcile."
-  - "Investor region mixes full names and codes plus stored typos. The values
-     seen so far are 'United States', Germany, France, Belgium, Sweden, Brazil,
-     Mexico, Canada, 'Columbia' (sic, for Colombia), and the codes US, UK, JP,
-     EU, AP, LA, CA, AZ, CEEMEA/CEEMA — treat that list as indicative, not
-     closed. USA is in ['United States','US']. NEVER like '%US%' — it matches
-     RUSSIA, AUSTRIA and AUSTRALIA. Filters are ANDed, so an OR of two patterns
-     is not expressible: use 'in' with every spelling that qualifies. A
-     NOT-region predicate drops null-region rows — count them with is_null and
-     say how many were excluded. WHEN A REGION GUESS RETURNS 0 ROWS: did_you_mean fires
+  - "Investor region mixes full names, codes and stored typos (the filter lists
+     them). USA is in ['United States','US']. NEVER like '%US%' — it matches
+     RUSSIA, AUSTRIA and AUSTRALIA. Use 'in' with every spelling that qualifies. A
+     NOT-region predicate drops null-region rows — count them with is_null.
+     WHEN A REGION GUESS RETURNS 0 ROWS: did_you_mean fires
      ONLY on a 0-row result AND only when the value is a SINGLE string, and it
-     ranks values that share a word-stem with your guess. So the multi-value
-     'in' above gets NO suggestions, and neither do not_in or is_null. To
-     recover, re-ask with ONE spelling (eq or a single-item in)."
+     ranks values sharing a word-stem with your guess — so a multi-value 'in',
+     not_in or is_null gets NO suggestion; re-ask with ONE spelling."
   - "Metric routing: demand/indication → total_demand; allocation/'got shares' →
      total_allocation; DCM order size/amount → total_order_amount; ECM order size
      → total_allocation (NOT total_order_amount — see the next note)."
-  - "ORDERBOOK MATRIX (banker ruling 2026-09-15). Any indications/allocations
-     listing, investor-given OR issuer-given, projects: investor_name ·
+  - "ORDERBOOK MATRIX (banker ruling 2026-09-15). Any listing of ORDERS —
+     'list the orders', 'top investors in deal X', indications/allocations,
+     investor-given OR issuer-given — projects: investor_name ·
      issuer_name · pricing_date · deal_name · tenors · tranche_name ·
      order_demand_qty · order_allocation · currency, plus transaction_id when
-     the ask names one (issuer-given puts issuer_name, pricing_date, deal_name
-     first, then investor_name). ONE ROW PER TRANCHE — DCM deals are
+     the ask names one, and on ECM demand_unit (+ equity_type as a Security
+     column when deals mix). An order listing WITHOUT the two figures is not an
+     answer (issuer-given puts issuer_name, pricing_date, deal_name first). ONE ROW PER TRANCHE — DCM deals are
      multi-tranche; never collapse to deal grain. Sort: investor-given →
      issuer_name asc; issuer-given → investor_name asc; top-N →
      order_demand_qty desc, then name asc. KEEP zero-indication and
@@ -140,29 +133,23 @@ how_to_use:
      the answer showed Investor · GP Id · Product · Demand)."
   - "TOP-N INVESTORS ON A MULTI-TRANCHE DEAL = top N PER TRANCHE: partition_by
      tranche_name (or tenors) with per_partition_limit N, ordered
-     order_demand_qty desc. A flat limit N across the deal mixes tranches and
-     under-counts (UAT 2026-09-15: 'top 5' returned 4 investors out of ~100
-     indications over 2 tranches)."
-  - "ORDER_AMOUNT IS NOT AN ORDER SIZE ON ECM. It is the HIGHEST limit point on
-     that order's IOI curve, and 14,341 ECM orders carry several points, so the
-     figure is one reading of a curve, not a total. CONFIRMED 2026-09-14: it IS the
-     IOI limit PRICE (USD per share), not an amount. Never SUM it
-     on ECM and never call it 'the order size' there: use total_allocation or
-     total_demand. Showing it row-by-row beside allocation is fine if you label
-     it 'highest IOI limit'. On DCM it is a plain order amount and totals
-     normally."
+     order_demand_qty desc — see the two worked examples. A flat limit N across
+     the deal mixes tranches and under-counts."
+  - "ORDER_AMOUNT IS NOT AN ORDER SIZE ON ECM. CONFIRMED 2026-09-14: it IS the
+     IOI limit PRICE (USD per share), the highest point of the order's limit
+     curve, not an amount. Never SUM it on ECM and never call it 'the order
+     size' there: use total_allocation or total_demand; label it 'IOI limit
+     price' if shown. On DCM it is a plain order amount and totals normally."
   - "'LARGEST/BIGGEST ORDER' RANKS BY order_demand_qty, NEVER order_amount
      (user ruling 2026-08-19). An order's size is what was DEMANDED; on ECM
      order_amount is an IOI limit reading, so ranking by it returns the wrong
-     order. Shape: listing ordered order_demand_qty desc + order_id asc,
-     project order_id/investor_name/order_demand_qty, limit 3 (superlative
-     tie check — say if several tie). 'Largest ALLOCATION' is the only ask
-     that ranks by order_allocation instead. On DCM demand equals
-     order_amount, so this rule costs nothing there."
+     order. Shape = VALUE FIRST: request 1 max_demand under the ask's scope →
+     V; request 2 the listing with order_demand_qty eq V (default limit) → the
+     exact set; answer by the tie count. 'Largest ALLOCATION' ranks by
+     order_allocation the same way."
   - "ON DCM, total_demand AND total_order_amount ARE THE SAME NUMBER (both read
      the order's amount), and max_demand equals max_order_amount. Report ONE of
-     them. Presenting demand and order amount as two DCM facts is a fabricated
-     distinction."
+     them."
   - "FILL RATE (allocation ÷ demand) IS NOW MEANINGFUL ON DCM — allocation stopped
      being a copy of demand and is real allocation data. Any inherited rule that
      says DCM fill rate is trivially 1x, or refuses it, is obsolete. It costs two
@@ -577,8 +564,8 @@ filters:
     suggestable: true
     case_insensitive: true
     description: >-
-      ECM-ONLY (hard NULL on DCM). Order HANDLING type — 'OTT' or 'Regular'.
-      LIMIT / MARKET / SCALED
+      ECM-ONLY (hard NULL on DCM). Order HANDLING type — 'OTT' or 'Regular',
+      stored labels: never expand OTT into words. LIMIT / MARKET / SCALED
       are ioi_type values and return nothing here — that mis-route is the
       commonest error on this field.
   ioi_type:
@@ -929,20 +916,32 @@ examples:
         # other than 1x1'), and say so.
         - {field: meeting_type, op: not_in, value: ["1:1"]}
       order: [{field: order_count, direction: desc}, {field: investor_id, direction: asc}]
-  - question: Top 10 investors on a DCM deal by allocation, USD only
+  - question: Top 10 investors on a DCM deal by allocation (the ORDERBOOK MATRIX — one row per investor per tranche)
     request:
       source: capital_markets_order
-      metric: total_allocation
-      dimensions: [investor_name, investor_id]
+      metric: row_count
+      dimensions: [investor_name, investor_id, deal_id, deal_name, pricing_date, tranche_name,
+                   order_demand_qty, order_allocation, currency]
       filters:
         - {field: product, op: eq, value: DCM}
         - {field: deal_id, op: eq, value: "REPLACE_WITH_DEAL_ID"}
-        # No FX column — one currency per money total.
-        - {field: currency, op: eq, value: USD}
-        # Excludes the structural zeros so the ranking is of real allocations.
-        - {field: order_allocation, op: gt, value: 0}
-      order: [{field: total_allocation, direction: desc}, {field: investor_id, direction: asc}]
-      limit: 10
+      # Top N PER TRANCHE (a DCM deal is multi-tranche; a flat limit mixes them);
+      # deal_id in partition_by too because a transaction can map to several deals.
+      partition_by: [deal_id, tranche_name]
+      per_partition_limit: 10
+      order: [{field: order_allocation, direction: desc}, {field: investor_name, direction: asc}, {field: investor_id, direction: asc}]
+  - question: Top 5 investors that indicated in origination transaction id 75043505 (per tranche, both figures)
+    request:
+      source: capital_markets_order
+      metric: row_count
+      dimensions: [investor_name, investor_id, transaction_id, deal_id, deal_name, pricing_date,
+                   tranche_name, order_demand_qty, order_allocation, currency]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        - {field: transaction_id, op: eq, value: "75043505"}
+      partition_by: [deal_id, tranche_name]
+      per_partition_limit: 5
+      order: [{field: order_demand_qty, direction: desc}, {field: investor_name, direction: asc}, {field: investor_id, direction: asc}]
   - question: DCM fill rate for an investor — request 1 of 2 (allocation)
     request:
       source: capital_markets_order

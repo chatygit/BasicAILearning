@@ -199,3 +199,15 @@ five-beat shape added to agents.yaml. Still to run: 18, 24; ⚡ args for 16 and 
 36 (with ⚡ args) · 15 · 3 · 20 — each must be ONE turn with no "which one?"
 menu — then 18 · 24 · 33 · 34 · 35. Screenshot the answer and the session
 Total Prompt Tokens.
+
+## Run 4 — UAT 2026-09-21 (SKILL + agents promoted that morning; server = 09-18 build)
+| Prompt | final call | session | Result |
+|---|---|---|---|
+| 15 Fidelity | 64,889 | 184,988 | PASS — ONE turn, all four entities, matrix with tranche/currency/pricing date (issuer + tenor columns still missing); headline splits USD/EUR |
+| 3 BlackRock | 57,577 | 234,474 | one turn (was 621k over 3 menu turns); "Allocation (Shares)" header; filler "what stands out" bullets |
+| 36 TC1 75076736 | 57,664 | 123,754 | FAIL #4 — args: dimensions [investor_name, investor_id], transaction_id eq, product eq DCM, limit 5; demand aggregated across currencies. ROOT CAUSE: the order card's "Top 10 investors on a DCM deal" EXAMPLE taught this shape — rewritten + txn example added (server push) |
+| 20 CUSIP | 99,668 | 425,839 | PASS behaviour — one turn, three tranches, no menu, no "test" wording, 26.75M reconciles; no share bars; two catalogs = the token cost |
+| 18 Travelers | 57,867 | 177,983 | PASS — one turn, no product guess (product projected), top 5 with ids; constant Product column shown (should be prose) |
+| 34 REGULAR orders 5y | 64,688 | 130,717 | FAIL — 50 rows with NO indication/allocation/unit/Security column; raw timestamps → order-listing rule added |
+| 31 OTT orders ECM 1m | 64,242 | ~135k | PASS shape — full-digit figures, dates formatted; unit not stated; "OTT (Over-the-Top)" invented expansion → rule added |
+Not run: 24, 35 (the file named 35 is a second shot of 18), 33 as written.

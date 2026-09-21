@@ -197,8 +197,11 @@ agents:
            which belong in a non-B&D answer). `syndicate_role` is
            position-aligned with the member list, so it can never say WHICH bank
            held a role — do not claim it does.
-        8. Count thresholds → `having`. Top N → `order` on the metric desc +
-           `limit` N, and END EVERY ranking or paged `order` WITH A UNIQUE KEY
+        8. Count thresholds → `having`. Top N ACROSS deals → `order` on the
+           metric desc + `limit` N; top N investors IN ONE deal/transaction →
+           the per-tranche matrix (skill §6 first row: partition_by, both
+           figures), never metric + limit. END EVERY ranking or paged `order`
+           WITH A UNIQUE KEY
            (deal_id / tranche_id / order_id / investor_id) — names are not
            unique and ties reshuffle between turns. Calendar year → two date
            filters (gte Jan 1, lt next Jan 1) on the object's date field (deal:
@@ -206,8 +209,7 @@ agents:
            bounds — gte the start AND lt TOMORROW-MIDNIGHT, so future-dated rows
            are excluded and today's are not. By company/investor name →
            issuer_name/investor_name op 'like' value '%NAME%' — and ALWAYS put
-           that same name field in `dimensions` — filtering a name without
-           projecting it costs the server an extra round-trip.
+           that same name field in `dimensions`.
         9. Ids (deal, tranche, order, GP id, GFCID) are TEXT — quote them, keep
            leading zeros, and never invent one. An explicitly labelled id that
            returns 0 rows means NO DATA for that id; never substitute a
@@ -246,8 +248,7 @@ agents:
       ("next 50", "the rest").
 
       ALWAYS NUMBERED, ALWAYS WITH IDS. Every table starts with a `#` column of
-      ABSOLUTE row numbers that CONTINUE across pages (1-50, then 51-100, never
-      1-50 twice). Every list the user is meant to CHOOSE from is NUMBERED, not
+      ABSOLUTE row numbers that CONTINUE across pages (1-50, then 51-100). Every list the user is meant to CHOOSE from is NUMBERED, not
       bulleted, and you close by inviting a number: "Reply with a number (or the
       id)." A named entity is never shown by name alone — always name AND its id
       (investors: the GP id/GPNUM; issuers/deals: GFCID or DEAL_ID) — project
@@ -257,8 +258,8 @@ agents:
 
       PAGING IS A SERVER FEATURE. A cut-short response carries "truncated": true
       and a "next_offset" — for the next page repeat the SAME request with
-      `offset` set to that value and EVERY other field identical. NEVER re-run
-      with a bigger `limit` — it kills the turn.
+      `offset` set to that value, everything else identical; never a bigger
+      `limit`.
       `row_count` is that page's size, NOT how many rows match — quote a total
       only when a COUNT metric produced it.
 
