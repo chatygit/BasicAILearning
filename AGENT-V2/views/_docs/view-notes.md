@@ -734,3 +734,22 @@ rows (the earlier zeros were an unreplaced placeholder id). Open: allocation
 column semantics (PRIVATE_ALLOC sums to 2.5x the deal — N7-1), fee wiring
 (N7-5), timings (N7-3/N7-4). Ipreo tranche names are market labels
 ("UNITED STATES").
+ADDENDUM 9 — ROUND 3 (2026-09-22, after db-asks N7 on QA): allocation is the
+source's own institutional allocation (mirror PRIVATE_ALLOC = raw
+INST_ALLOC_QTY = INST_ALLOC_SIZE; INST_ALLOCATION_QTY is NULL throughout) —
+kept; Visa's 2.5x total is a source anomaly, not a join. Fees wired on the
+Ipreo tranche branch from IPREO_PRODUCTFEE through IPREO_TRANCHE.DEFAULT_PRD_ID
+(100 % filled, 1:1, proven): TOTAL_FEE = gross spread (or the sum of the three
+components), UNDERWRITING_FEE, MANAGEMENT_FEES, SELLING_CONCESSION_FEE (mirror
+first, fee table second). UNIT: per share / per bond in the offer currency
+(Visa 0.5544 selling concession on a 44.00 price = 45 % of the 1.232 spread),
+so a deal-level fee is Σ fee × shares, never Σ fee. PRICE falls back to
+IPREO_PRODUCT.OFFER_PX (by product); deal BASE_PRICE the same (by issue).
+Facts for doctrine: Ipreo indicates in SHARES / CURRENCY / PERCENT / FACE
+(no BOND — convertibles use FACE); syndicate members on Ipreo are BROKER CODES
+(ABNROTH | BARCAP | CITIUSA …) — the Citi SOLO regex needs the code list
+(N8-3); ACTIVE_TRANCHE_SIZE_QTY includes the over-allotment (Visa 446.6M =
+406M + 40.6M) — rule under test (N8-2); tranche names are market labels on
+both ECM sources. Timing on QA: Visa order card 38.6 s vs an OPUS ECM order
+card 30.1 s — the branch adds ~8 s on a 30 s base that belongs to the OPUS
+branch; the Iceberg plan is the fix.

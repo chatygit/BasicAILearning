@@ -182,24 +182,42 @@ Batch B:
       already a share-equivalent, so ORDER_DEMAND_QTY / TOTAL_DEMAND now
       include IOI_UNIT 'CURRENCY' and DEMAND_AS_SUBMITTED takes the raw money
       amount (IPREO_ORDERIOI.IOI_AMT, correlated scalar on ORD_ID) — N7-2
-      confirms. Redeploy the three files. OPEN DOUBT: ORDER_ALLOCATION =
-      PRIVATE_ALLOC (mirrors OPUS) sums to 1,009,616,809 on Visa's 406M-share
-      deal and seven top orders carry exactly 19,000,000 — looks like an
-      investor-level figure stamped per order; N7-1 compares PRIVATE_ALLOC vs
-      INST_ALLOCATION_QTY vs the raw INST_ALLOC_QTY. Ipreo tranche names are
-      market labels ('UNITED STATES') — a tranche_region candidate (catalog
-      products change). N6-6 OPUS fee sample: 0 rows on QA (no OPUS ECM
-      tranche carries TOTAL_FEE + PRICE) — the OPUS unit is unknowable here;
-      wire the Ipreo per-share fees once N7-5 proves DEFAULT_PRD_ID and the
-      1:1 tranche→fee mapping, and document the unit per source. LEFT: (1)
-      db-asks N7 (allocation, currency demand, timing pair Visa 1447528575 vs
-      OPUS 25255410 — N6 timings were cropped; ECM deal listing itself is
-      61 s on QA, N5-1 and N6-4 — the deal view's Ipreo OD/IQ aggregates run
-      on every ECM deal ask that touches order counts). Not re-asking for the
-      Trino row — PROMOTE-CHECKLIST step 2 (S3) covers it. (2) If slow:
-      V7 — RO as a direct join on ORD_ID (census: one row per ORD_ID; grain row
-      9 guards it) and the IOI MAX as a correlated scalar so Oracle can probe
-      the (ORDER_ID) index on deal-scoped asks. (3) Handover + index/stats ask
+      confirms (N7-2a errored on my IOI_AMT_TYPE guess; N8-1 re-asks without
+      it). ROUND 3 (N7, 2026-09-22): ALLOCATION RESOLVED — PRIVATE_ALLOC in the
+      mirror = the raw IPREO_ORDER.INST_ALLOC_QTY = INST_ALLOC_SIZE (all three
+      sum to 1,009,616,809 on Visa; INST_ALLOCATION_QTY / retention are NULL
+      throughout), i.e. the view carries the source's own figure; Visa (2.5x
+      the deal, eight accounts at exactly 19,000,000) is a source anomaly —
+      Qualtrics 1.11x and Kraft 0.72x are plausible; N8-4 counts how many
+      deals are Visa-like, for the data owner. FEES WIRED (repo): N7-5 proved
+      IPREO_TRANCHE.DEFAULT_PRD_ID (22,159 / 22,159 filled, 12,266 map to
+      exactly one IPREO_PRODUCTFEE row, none to several) → TOTAL_FEE ←
+      NVL(GROSS_SPREAD_AMT, UW + MGMT + SELL), UNDERWRITING_FEE, MANAGEMENT_FEES,
+      SELLING_CONCESSION_FEE ← NVL(mirror, PF); PRICE ← NVL(FINAL_PRICE,
+      IPREO_PRODUCT.OFFER_PX by PRD_ID); deal BASE_PRICE ← NVL(FINAL_PRICE,
+      OFFER_PX by ISS_ID); deploy-check 23c. Unit: PER SHARE (Visa's mirror
+      SELLING_CONCESSION_FEE 0.5544 on a 44.00 price = the real 45 % of the
+      1.232 spread) — the OPUS columns carry the same mirror-mapped semantics;
+      the catalog's "deal fee = SUM this per deal" is wrong for per-share fees
+      (CAT item). IOI_UNIT vocabulary: SHARES 614,082 · CURRENCY 41,418 ·
+      PERCENT 12,313 · FACE 1,669 (no BOND — convertibles indicate in FACE);
+      N8-1 samples PERCENT / FACE to decide whether IOI_QTY is a share-
+      equivalent there too. SYNDICATE MEMBERS ON IPREO ARE BROKER CODES
+      (ABNROTH | BARCAP | CITIUSA | … 35 on Visa) → the Citi SOLO regex misses
+      CITIUSA; N8-3 censuses the CITI* codes and roles, then the Ipreo DST
+      block gets a code list. TRANCHE_SIZE on Visa = 446,600,000 = deal
+      406,000,000 + shoe 40,600,000 (ACTIVE size includes the over-allotment;
+      N8-2 tests the rule before subtracting). Tranche names are market labels
+      on BOTH sources ('UNITED STATES' on OPUS 25255410 too). TIMINGS (QA):
+      Visa order card 38.6 s vs OPUS 25255410 order card 30.1 s → the Ipreo
+      branch adds ~8.5 s; the OPUS ECM order branch itself costs 30 s (PCM /
+      OBT / currency windows — the V1/V2 latency items + ICEBERG-PLAN Phase 0
+      are the fix, not an Ipreo rewrite); Visa tranche card 47.4 s (OPUS
+      tranche card not in the set); ECM deal listing 61 s. Redeploy the three
+      files, then deploy-check B/C/D (22c, 23c, 24) and N8. Not re-asking for
+      the Trino row — PROMOTE-CHECKLIST step 2 (S3) covers it. (2) Dropped:
+      the RO direct-join idea (V7) — worth ≤ 8 s on a 30 s base; Iceberg
+      instead. (3) Handover + index/stats ask
       (ASKS-external §2). (4) Enrichment now proven at source (QA): fees on
       11,956 of 19,583 issues (IPREO_PRODUCTFEE: selling concession 11,095, UW
       9,544, mgmt 9,468, gross spread 259 — but N5-4 shows GROSS_SPREAD_AMT

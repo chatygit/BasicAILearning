@@ -298,7 +298,11 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                     THEN TRANCHE_NAME END) AS ecm_ipreo_named,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN SYNDICATE_MEMBER_NAME END) AS ecm_ipreo_synd
+                    THEN SYNDICATE_MEMBER_NAME END) AS ecm_ipreo_synd,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN TOTAL_FEE END) AS ecm_ipreo_fee,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN PRICE END) AS ecm_ipreo_price
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
@@ -344,6 +348,10 @@ SELECT '23b. Ipreo tranches w/ name (raw IPREO_TRANCHE join) / syndicate (INFO)'
        '(info)', TO_CHAR(ecm_ipreo_named) || ' named / ' ||
        TO_CHAR(ecm_ipreo_synd) || ' syndicate of ' || TO_CHAR(ecm_ipreo_rows),
        'INFO' FROM agg
+UNION ALL
+SELECT '23c. Ipreo tranches w/ fee (IPREO_PRODUCTFEE, QA ~12,266) / price (INFO)',
+       '(info)', TO_CHAR(ecm_ipreo_fee) || ' fee / ' || TO_CHAR(ecm_ipreo_price) ||
+       ' price of ' || TO_CHAR(ecm_ipreo_rows), 'INFO' FROM agg
 ORDER BY 1;
 
 -- D. ORDER VIEW — ONE scan. Dies alone if VW_ORDER_DETAIL is old (DEV
