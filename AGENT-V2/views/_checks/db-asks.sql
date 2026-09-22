@@ -1,101 +1,57 @@
 -- ===========================================================================
 -- DB ASKS — only what still has to run. Run as a SCRIPT (F5) on the
 -- environment where the views are deployed and screenshot into ~/Desktop/ADK.
--- A section is deleted once its results are recorded.
+-- A section is deleted once its results are recorded. (N4 smoke + N3-5
+-- census of 2026-09-22 are recorded.)
 -- ===========================================================================
 
 
 -- ===========================================================================
--- N4. 2026-09-22 — SMOKE ON THE DEPLOYED IPREO VIEWS (deal / tranche / order
--- with the third ECM branch; deployed to QA 2026-09-22). A successful CREATE
--- closes the N3 name validation (Oracle rejects unknown columns at CREATE
--- unless FORCE was used). Eight statements; note ELAPSED on N4-5.
+-- N5. 2026-09-22 — IPREO FOLLOW-UPS. Five statements; ELAPSED matters on
+-- N5-2 / N5-3 (the zero-row runs of N4-4 / N4-5 took 85 s and 34 s, which
+-- says the deal predicate is not reaching the big Ipreo blocks).
 -- ===========================================================================
 
--- N4-1. The branch landed: Ipreo rows per view (10-digit ids).
-SELECT 'deal' AS VIEW_, COUNT(*) AS IPREO_ROWS_
-FROM   DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-UNION ALL SELECT 'tranche', COUNT(*)
-FROM   DGSTREAM.VW_TRANCHE_SUMMARY WHERE PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-UNION ALL SELECT 'order', COUNT(*)
-FROM   DGSTREAM.VW_ORDER_DETAIL WHERE PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$');
-
--- N4-2. Grain still holds and DCM is untouched (ROWS_ must equal KEYS_).
-SELECT 'deal' AS VIEW_, PRODUCT, COUNT(*) AS ROWS_, COUNT(DISTINCT DEAL_ID) AS KEYS_
-FROM   DGSTREAM.VW_DEAL_SUMMARY GROUP BY PRODUCT
-UNION ALL
-SELECT 'order', PRODUCT, COUNT(*), COUNT(DISTINCT ORDER_ID)
-FROM   DGSTREAM.VW_ORDER_DETAIL GROUP BY PRODUCT
-ORDER  BY 1, 2;
-
--- N4-3. Three Ipreo deal cards — every column here should fill.
+-- N5-1. Three Ipreo deal cards (N4-3 was not in the set) — pick DEAL_ID for
+--       N5-2 / N5-3 from row 1.
 SELECT DEAL_ID, DEAL_NAME, ISSUER_NAME, EQUITY_TYPE, DEAL_STATUS, DEAL_SIZE, CURRENCIES,
        TRANCHE_COUNT, ORDER_COUNT, INVESTOR_COUNT, TOTAL_DEMAND, TOTAL_ALLOCATION, LAST_PRICED
 FROM   DGSTREAM.VW_DEAL_SUMMARY
 WHERE  PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') AND ORDER_COUNT > 0
 ORDER  BY ORDER_COUNT DESC FETCH FIRST 3 ROWS ONLY;
 
--- N4-4. That deal's tranches (paste a DEAL_ID from N4-3).
+-- N5-2. Its tranches, then the SAME statement with an OPUS ECM deal id
+--       (8-char, e.g. from SELECT DEAL_ID FROM DGSTREAM.VW_DEAL_SUMMARY WHERE
+--       PRODUCT = 'ECM' AND NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') AND
+--       TRANCHE_COUNT > 0 FETCH FIRST 1 ROW ONLY). Two elapsed times: the
+--       difference is what the Ipreo branch adds to an ECM deal card.
 SELECT TRANCHE_ID, TRANCHE_NAME, TRANCHE_SIZE, PRODUCT_TYPE, PRICE, PRICING_TS, SETTLEMENT_TS,
        SYNDICATE_MEMBER_NAME, DEAL_SHARING_TYPE, SELLING_CONCESSION_FEE, OVER_ALLOTMENT_AUTHORIZED_SHARES
 FROM   DGSTREAM.VW_TRANCHE_SUMMARY
-WHERE  PRODUCT = 'ECM' AND DEAL_ID = '<DEAL_ID from N4-3>';
+WHERE  PRODUCT = 'ECM' AND DEAL_ID = '<DEAL_ID from N5-1 row 1>';
 
--- N4-5. Its top 10 orders — the agent's deal-card shape; note ELAPSED
---       (expect sub-second, the K1b class).
+-- N5-3. Its top 10 orders, same two runs (Ipreo id, then OPUS id).
 SELECT INVESTOR_NAME, INVESTOR_GP_ID, INVESTOR_CATEGORY, INVESTOR_REGION, IOI_TYPE, DEMAND_UNIT,
        ORDER_DEMAND_QTY, DEMAND_AS_SUBMITTED, ORDER_AMOUNT, ORDER_ALLOCATION, ORDER_STATUS,
        BILLED_BY, SALES_PERSON, TRANCHE_NAME
 FROM   DGSTREAM.VW_ORDER_DETAIL
-WHERE  PRODUCT = 'ECM' AND DEAL_ID = '<DEAL_ID from N4-3>'
+WHERE  PRODUCT = 'ECM' AND DEAL_ID = '<DEAL_ID from N5-1 row 1>'
 ORDER  BY ORDER_ALLOCATION DESC FETCH FIRST 10 ROWS ONLY;
 
--- N4-6. Enrichment fill across the whole Ipreo book (one scan); LEAK_ must be 0.
-SELECT COUNT(*) AS ORDERS_, COUNT(INVESTOR_CATEGORY) AS TYPED_, COUNT(INVESTOR_REGION) AS REGION_,
-       COUNT(BILLED_BY) AS BILLED_, COUNT(ORDER_DEMAND_QTY) AS DEMAND_, COUNT(TRANCHE_NAME) AS TRANCHE_NAMED_,
-       COUNT(CURRENCY) AS CCY_,
-       SUM(CASE WHEN ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS') THEN 1 ELSE 0 END) AS LEAK_
-FROM   DGSTREAM.VW_ORDER_DETAIL
-WHERE  PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$');
+-- N5-4. Fee unit — five priced issues with their fee rows (per-share amounts
+--       or totals? decides how IPREO_PRODUCTFEE maps onto the tranche fee
+--       columns). Column names beyond those censused may need adjusting.
+SELECT * FROM (
+  SELECT F.ISS_ID, F.PRD_ID, F.GROSS_SPREAD_AMT, F.U_W_FEE_AMT, F.MGMT_FEE_AMT, F.SELLING_CONC_FEE_AMT,
+         P.OFFER_PX, P.PAR_VALUE, I.ISSUE_SIZE_AMT, I.ISSUE_NM
+  FROM   DGSTREAM.IPREO_PRODUCTFEE F
+  JOIN   DGSTREAM.IPREO_PRODUCT P ON P.PRD_ID = F.PRD_ID
+  JOIN   DGSTREAM.IPREO_ISSUE   I ON I.ISS_ID = F.ISS_ID
+  WHERE  F.SELLING_CONC_FEE_AMT IS NOT NULL AND P.OFFER_PX IS NOT NULL
+  ORDER  BY I.PRICING_DT DESC NULLS LAST) WHERE ROWNUM <= 5;
 
--- N4-7. Entity search inherits the Ipreo issuers (name-only rows, no GFCID).
-SELECT ENTITY_NAME, ENTITY_ID, PRODUCT
-FROM   DGSTREAM.VW_ENTITY_SEARCH
-WHERE  ENTITY_TYPE = 'ISSUER' AND PRODUCT = 'ECM' AND ENTITY_ID IS NULL
-FETCH  FIRST 5 ROWS ONLY;
-
--- N4-8. Through Starburst (the agent's path) — run in the Trino client:
+-- N5-5. Through Starburst (the agent's path; run in the Trino client — N4-8
+--       was not in the set):
 --   SELECT deal_id, deal_name, issuer_name, tranche_count, order_count
 --   FROM bds_dg_oraas.dgstream.vw_deal_summary
 --   WHERE product = 'ECM' AND regexp_like(deal_id, '^[0-9]{10}$') LIMIT 3;
-
-
--- ===========================================================================
--- N3-5. THE FIVE CENSUS ITEMS WHOSE SCREENSHOTS WERE MISSING (still open —
--- they decide the later fees / price-range enrichment, not the deploy).
--- ===========================================================================
--- (a) currency sources (mirror CURRENCY_CODE is 1.8 % filled).
-SELECT 'ISSUE.CCY_CD' AS COL, CCY_CD AS VAL, COUNT(*) AS N FROM DGSTREAM.IPREO_ISSUE GROUP BY CCY_CD
-UNION ALL SELECT 'PRODUCT.PRD_CCY_CD', PRD_CCY_CD, COUNT(*) FROM DGSTREAM.IPREO_PRODUCT GROUP BY PRD_CCY_CD
-ORDER  BY 1, 3 DESC;
--- (b) fees and prices in the raw product tables.
-SELECT COUNT(*) AS FEE_ROWS_, COUNT(DISTINCT ISS_ID) AS ISSUES_WITH_FEES_, COUNT(GROSS_SPREAD_AMT) AS HAS_GROSS_,
-       COUNT(U_W_FEE_AMT) AS HAS_UW_, COUNT(MGMT_FEE_AMT) AS HAS_MGMT_, COUNT(SELLING_CONC_FEE_AMT) AS HAS_SELL_
-FROM   DGSTREAM.IPREO_PRODUCTFEE;
-SELECT COUNT(*) AS PRODUCTS_, COUNT(DISTINCT ISS_ID) AS ISSUES_, COUNT(OFFER_PX) AS HAS_OFFER_PX_,
-       COUNT(PAR_VALUE) AS HAS_PAR_, COUNT(FILE_PX) AS HAS_FILE_PX_, COUNT(INIT_FILE_PX_LO) AS HAS_RANGE_
-FROM   DGSTREAM.IPREO_PRODUCT;
--- (c) raw tranche: fill + status vocabulary.
-SELECT COUNT(*) AS TRANCHES_, COUNT(TRN_NM) AS HAS_NAME_, COUNT(ACTIVE_TRANCHE_SIZE_QTY) AS HAS_ACTIVE_SIZE_,
-       COUNT(OVERALLOTMENT_QTY) AS HAS_GREENSHOE_, COUNT(STATUS) AS HAS_STATUS_
-FROM   DGSTREAM.IPREO_TRANCHE;
-SELECT STATUS, COUNT(*) AS N FROM DGSTREAM.IPREO_TRANCHE GROUP BY STATUS ORDER BY N DESC;
--- (d) investor type vocabulary alone.
-SELECT INV_TYPE_NM, COUNT(*) AS N FROM DGSTREAM.IPREO_ORDER GROUP BY INV_TYPE_NM ORDER BY N DESC;
--- (e) does the OPUS_BASE party master / base transaction know Ipreo ids?
-SELECT (SELECT COUNT(DISTINCT T.DEAL_TRANSACTION_ID) FROM DGSTREAM.IPREO_OPUS_ECM_TRANSACTION T
-         WHERE EXISTS (SELECT 1 FROM DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES P
-                       WHERE P.TRANSACTION_ID = T.DEAL_TRANSACTION_ID AND P.PARTY_ROLE = 'Primary Client')) AS TXNS_IN_PARTY_MASTER_,
-       (SELECT COUNT(DISTINCT T.DEAL_TRANSACTION_ID) FROM DGSTREAM.IPREO_OPUS_ECM_TRANSACTION T
-         WHERE EXISTS (SELECT 1 FROM DGSTREAM.OPUS_BASE_TRANSACTION B WHERE B.TRANSACTION_ID = T.DEAL_TRANSACTION_ID)) AS TXNS_IN_BASE_TXN_
-FROM   DUAL;

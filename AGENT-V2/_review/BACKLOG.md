@@ -161,16 +161,34 @@ Batch B:
       vw_tranche_summary 219-389; view-notes addendum 9; deploy-check rows
       22/23/24 + K8/K9; contract test 3-branch aware; tranche price +
       settlement_ts widened to both products; investor_region notes ISO-3).
-      LEFT: (1) db-asks N3 on UAT — name validation (nine columns are still
-      OCR-derived: ISSUER_COUNTRY_NAME, PRICING_TS / SETTLEMENT_TS / TRADE_DATE /
-      SELLING_CONCESSION_FEE, SYNDICATE_MEMBER_NAME, IOI_QTY / LIMIT_VALUE,
-      TRN_NM, ACTIVE_TRANCHE_SIZE_QTY, OVERALLOTMENT_QTY, CCY_CD), key types,
-      feature compile, branch dry run, the five missing census items; fix any
-      ORA-00904 before handover. (2) Handover with the index/stats ask
-      (ASKS-external §2). (3) After deploy: A0, rows 22-24, grain 7/8/9, K8/K9,
-      S3 through Trino. (4) Later enrichment when N3-5 shows fill: fees from
-      IPREO_PRODUCTFEE, offer/file price range from IPREO_PRODUCT. Disclose:
-      10,802 Ipreo orders reference no tranche → dropped by the inner join.
+      DEPLOYED TO QA 2026-09-22 (names compiled → N3 closed). Smoke N4: deal
+      19,583 / tranche 19,973 / order 658,680 Ipreo rows; grain holds on both
+      products (deal ECM 39,165, DCM 21,190; order ECM 728,793, DCM 5,826,467);
+      enrichment landed (tranche name 100 %, region 60 %, type 49 %, demand
+      77 %, billed-by 5 %, currency 11 %); exclusion leak 0; entity search shows
+      Ipreo issuers as id-less rows; party master / base txn know 0 Ipreo ids
+      (NULL stubs final). LEFT: (1) db-asks N5 — N4-3 deal cards + N4-4/N4-5 on
+      a REAL id (the zero-row runs took 85 s / 34 s: the deal predicate does not
+      reach the Ipreo order branch's RO window over 677k IPREO_ORDER rows nor
+      the 689k-row IOI aggregate — ECM deal cards likely got slower; split
+      OPUS-id vs Ipreo-id timing decides) and the S3 Trino check. (2) If slow:
+      V7 — RO as a direct join on ORD_ID (census: one row per ORD_ID; grain row
+      9 guards it) and the IOI MAX as a correlated scalar so Oracle can probe
+      the (ORDER_ID) index on deal-scoped asks. (3) Handover + index/stats ask
+      (ASKS-external §2). (4) Enrichment now proven at source (QA): fees on
+      11,956 of 19,583 issues (IPREO_PRODUCTFEE: selling concession 11,095, UW
+      9,544, mgmt 9,468, gross spread 259) → tranche fee columns via
+      IPREO_TRANCHE.DEFAULT_PRD_ID, AFTER a 5-row sample settles the unit
+      (per-share vs total); OFFER_PX 11,206 / PAR_VALUE 13,539 of 22,194
+      products (file price / range ~0 → reoffer stays NULL). (5) Catalog
+      (train): investor_category gains the Ipreo vocabulary (Hedge Fund 187k,
+      Investment Adviser 81k, None 39k = unclassified, Bank & Trusts, Pension
+      Fund, Research Firm, Corporation, Private Equity, Insurance Company,
+      Venture Capital; NULL 50 %) — "long only" asks on ECM must consider
+      Investment Adviser; currency on Ipreo rows is ~11 % filled (source
+      ISSUE.CCY_CD / PRD_CCY_CD both ~2–3 %) → a currency filter silently
+      drops Ipreo deals, disclose; tranche status on Ipreo = NULL / 'new' only
+      (stays NULL). Disclose: 10,802 Ipreo orders reference no tranche.
 - [ ] ECM ISSUER_NAME blank in PROD (first PROD datapoint 2026-09-21: five real
       2026 IPOs, deal name filled, issuer '—'; the same prompt on IST fills).
       NOT a regression — the OPUS ECM expression NVL(PCM.PARTY_NAME,
