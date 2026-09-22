@@ -753,3 +753,17 @@ Facts for doctrine: Ipreo indicates in SHARES / CURRENCY / PERCENT / FACE
 both ECM sources. Timing on QA: Visa order card 38.6 s vs an OPUS ECM order
 card 30.1 s — the branch adds ~8 s on a 30 s base that belongs to the OPUS
 branch; the Iceberg plan is the fix.
+ADDENDUM 9 — ROUND 4 (2026-09-22, after db-asks N8 on QA): indication units
+proven — CURRENCY: mirror IOI_QTY = raw amount / offer price (34,000,000 / 25 =
+1,360,000); FACE: face / par = bond count (50,000,000 / 1,000 = 50,000 on a
+750,000-bond convertible, whose DEAL_SIZE is in bonds) — so the Ipreo demand
+gate is SHARES / BOND / CURRENCY / FACE and "as submitted" is the raw money
+amount for CURRENCY and FACE; PERCENT stays out until sampled. Citi on Ipreo:
+the syndicate list holds broker codes, so Citi's codes (CITIUSA, CITIUS1,
+CITIUKE, CITIBRAS, CITICAN, CITIASIA, CITIAUS, CITISEC, CITIINVS, CITI1, CITI3;
+not CITIZENS, not CITICCML) render as "Citigroup (CITIUSA)" in the member list
+and count as Citi for SOLO/SHARED; the existing anchored regex then matches the
+label. Tranche size: the active size includes the over-allotment on 4,293
+tranches (when exercised) and equals the deal size on 5,711 — unchanged until
+the base-size column is found (N9-2). Allocation: 94 of 5,462 deals exceed
+1.2x their size (source figures; data-owner ask), 4,386 plausible.

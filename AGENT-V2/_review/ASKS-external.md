@@ -165,6 +165,13 @@ S3 stays our detector after every deploy.
 - Citi solo deal in the PO's restructured prompt priced 18-Sep-2026, not
   14-Sep (14-Sep is the deal id's creation date).
 - BlueFin does not exist in QA; the TC2 retest must run on UAT.
+- Ipreo syndicate lists carry broker CODES. Citi's own codes (CITIUSA 6,199
+  tranches, CITIUS1, CITIUKE, CITIBRAS, CITICAN, CITIASIA, CITIAUS, CITISEC,
+  CITIINVS, CITI1/CITI3) now count as Citi for the SOLO flag and are shown as
+  "Citigroup (CITIUSA)". Question: on deals before 2003 the Citi ECM franchise
+  ran as Salomon Smith Barney / Smith Barney (codes SSBINC 1,943, SBS 1,703;
+  MSSB 942 was the Morgan Stanley JV) — should those count as Citi for
+  "Citi-led" and SOLO/SHARED, or stay as they are (not Citi)?
 
 ---
 
@@ -182,6 +189,16 @@ Ask, in order of preference:
    (`views/_checks/db-asks.sql` S4) on PROD at each release and return the
    screenshots — no rows leave PROD.
 3. Read access to PROD OCP query logs and ADK traces (behaviour, not data).
+
+**Ipreo feed (added 2026-09-22, for the DataGlobe / Ipreo data owner):** on QA,
+94 of 5,462 allocated Ipreo deals carry institutional allocations above 1.2x the
+deal size (Visa 1447528575: 1,009,616,809 allocated on 406,000,000 shares, eight
+accounts at exactly 19,000,000); 4,386 are plausible, 982 below half. The mirror
+copies the raw INST_ALLOC_QTY faithfully, so the question is the source: are
+those allocations pre-release working figures? Ten largest in db-asks N9-3.
+Also: the mirror tranche's PRICING_TS is empty on every row and IPREO_ISSUE's
+PRICING_DT on 3 % — is the pricing timestamp available upstream? We fall back
+to the offer date and trade date today.
 
 ---
 

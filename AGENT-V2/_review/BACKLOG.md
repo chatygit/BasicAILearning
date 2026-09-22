@@ -215,7 +215,27 @@ Batch B:
       are the fix, not an Ipreo rewrite); Visa tranche card 47.4 s (OPUS
       tranche card not in the set); ECM deal listing 61 s. Redeploy the three
       files, then deploy-check B/C/D (22c, 23c, 24) and N8. Not re-asking for
-      the Trino row — PROMOTE-CHECKLIST step 2 (S3) covers it. (2) Dropped:
+      the Trino row — PROMOTE-CHECKLIST step 2 (S3) covers it. ROUND 4 (N8,
+      2026-09-22): CURRENCY confirmed (mirror IOI_QTY = raw IOI_AMT / OFFER_PX:
+      34,000,000 / 25 = 1,360,000) and FACE too (face / par = bond count:
+      50,000,000 / 1,000 = 50,000 on a 750,000-bond convertible) → FACE added
+      to the demand gate and to the raw-amount "as submitted" (repo); PERCENT
+      still unknown (N9-1). Tranche size: ACTIVE = DEAL on 5,711, ACTIVE −
+      SHOE = DEAL on 4,293, other 563 — the shoe is included when exercised;
+      base-size column hunt in N9-2 before changing TRANCHE_SIZE. Citi codes
+      censused: CITIUSA 6,199 · CITIUS1 119 · CITIUKE 66 · CITIBRAS 53 ·
+      CITICAN 45 · CITIASIA 25 · CITIAUS 7 · CITI1 5 · CITISEC 3 · CITIINVS 2 ·
+      CITI3 1; NOT Citi: CITIZENS 77, CITICCML 5 → Ipreo branch (repo): member
+      token 'Citigroup (CODE)' for ^CITI minus ^(CITIZ|CITICC), same test in
+      the SOLO block (the OPUS regex then matches the label unchanged);
+      SSBINC / SBS / MSSB (Salomon Smith Barney era) = PO question (ASKS §4).
+      Role vocabulary (28): Co-Manager 26,814 · Underwriter 12,095 · Joint
+      Bookrunner 12,074 · Selling Group 10,500 · Lead Manager/Bookrunner 6,240
+      · Joint Bookrunner - Passive 2,867 · Passive Bookrunner 2,504 · Joint
+      Lead Manager 1,375 · Senior Co-Manager 851 · … · Sole Bookrunner 136
+      (catalog syndicate_role note). Allocation census: 94 of 5,462 deals
+      > 1.2x size, 4,386 plausible, 982 < 0.5x → data-owner ask (ASKS §5);
+      the column stays. (2) Dropped:
       the RO direct-join idea (V7) — worth ≤ 8 s on a 30 s base; Iceberg
       instead. (3) Handover + index/stats ask
       (ASKS-external §2). (4) Enrichment now proven at source (QA): fees on
