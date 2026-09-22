@@ -170,18 +170,33 @@ Batch B:
       (NULL stubs final). Deal cards (N5-1, 61 s): Visa 1447528575 (406M shares,
       2,425 orders, 8.6x), Kraft Foods 1447488812, Qualtrics 1447834357 — real
       historical IPOs, every column filled EXCEPT LAST_PRICED (NULL on all
-      three: the mirror tranche's PRICING_TS is empty) → FIXED IN REPO
-      2026-09-22: FIRST/LAST_PRICED and tranche/order PRICING_TS now fall back
-      to IPREO_ISSUE.PRICING_DT (proven name); deploy-check 22c FAILs if Ipreo
-      deals have no LAST_PRICED. Redeploy the three files. LEFT: (1) db-asks
-      N6 — Visa's tranches/orders by LITERAL id (two placeholder runs came
-      back empty in 85→57 s / 34→19 s: the deal predicate does not reach the
-      RO window over 677k IPREO_ORDER rows nor the 689k-row IOI aggregate —
-      ECM deal cards likely got slower; N6-4 OPUS-id twin is the split), the
-      source-table diagnosis N6-3, pricing-date fill N6-5 (also validates
-      SETTLEMENT_DT / OFFER_DT for the same fallback), and the OPUS fee-unit
-      sample N6-6. Not re-asking for the Trino row — PROMOTE-CHECKLIST step 2
-      (S3) covers it before handover. (2) If slow:
+      three). N6 (same day) measured the source: mirror tranche PRICING_TS is
+      0 of 19,973 (SETTLEMENT_TS 10,173, TRADE_DATE 10,536, selling fee
+      10,464); IPREO_ISSUE PRICING_DT only 556 of 19,583 (2017–2025), OFFER_DT
+      10,253, SETTLEMENT_DT 10,030 → FIXED IN REPO 2026-09-22 (round 2):
+      FIRST/LAST_PRICED and tranche/order PRICING_TS = NVL chain PRICING_TS →
+      PRICING_DT → OFFER_DT → TRADE_DATE (~55 % of Ipreo deals dated; the rest
+      stay undated — disclose); SETTLEMENT_TS falls back to SETTLEMENT_DT;
+      deploy-check 22c FAILs if Ipreo deals have no LAST_PRICED. Also round 2:
+      Visa's currency orders show IOI_QTY = money / 44.00 (the offer price) →
+      already a share-equivalent, so ORDER_DEMAND_QTY / TOTAL_DEMAND now
+      include IOI_UNIT 'CURRENCY' and DEMAND_AS_SUBMITTED takes the raw money
+      amount (IPREO_ORDERIOI.IOI_AMT, correlated scalar on ORD_ID) — N7-2
+      confirms. Redeploy the three files. OPEN DOUBT: ORDER_ALLOCATION =
+      PRIVATE_ALLOC (mirrors OPUS) sums to 1,009,616,809 on Visa's 406M-share
+      deal and seven top orders carry exactly 19,000,000 — looks like an
+      investor-level figure stamped per order; N7-1 compares PRIVATE_ALLOC vs
+      INST_ALLOCATION_QTY vs the raw INST_ALLOC_QTY. Ipreo tranche names are
+      market labels ('UNITED STATES') — a tranche_region candidate (catalog
+      products change). N6-6 OPUS fee sample: 0 rows on QA (no OPUS ECM
+      tranche carries TOTAL_FEE + PRICE) — the OPUS unit is unknowable here;
+      wire the Ipreo per-share fees once N7-5 proves DEFAULT_PRD_ID and the
+      1:1 tranche→fee mapping, and document the unit per source. LEFT: (1)
+      db-asks N7 (allocation, currency demand, timing pair Visa 1447528575 vs
+      OPUS 25255410 — N6 timings were cropped; ECM deal listing itself is
+      61 s on QA, N5-1 and N6-4 — the deal view's Ipreo OD/IQ aggregates run
+      on every ECM deal ask that touches order counts). Not re-asking for the
+      Trino row — PROMOTE-CHECKLIST step 2 (S3) covers it. (2) If slow:
       V7 — RO as a direct join on ORD_ID (census: one row per ORD_ID; grain row
       9 guards it) and the IOI MAX as a correlated scalar so Oracle can probe
       the (ORDER_ID) index on deal-scoped asks. (3) Handover + index/stats ask

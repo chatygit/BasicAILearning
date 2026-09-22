@@ -720,3 +720,17 @@ settled from IPREO_PRODUCTFEE (N5-4): per share / per bond in the offer
 currency, GROSS_SPREAD_AMT = U_W + MGMT + SELLING_CONC (20/20/60); wiring
 waits for the OPUS unit (N6-6). Open: deal-scoped tranche/order timings on an
 Ipreo id (N6), the RO/IOI blocks as the suspected cost.
+ADDENDUM 9 — ROUND 2 (2026-09-22, after db-asks N6 on QA): the mirror
+tranche's PRICING_TS is empty on every row and IPREO_ISSUE.PRICING_DT on 3 %,
+so the pricing chain is now NVL(PRICING_TS, PRICING_DT, OFFER_DT, TRADE_DATE)
+in all three views (offer date = pricing date in ECM practice; trade date is
+the next morning — an approximation, disclosed) and SETTLEMENT_TS falls back
+to IPREO_ISSUE.SETTLEMENT_DT. Currency-unit orders: the mirror's IOI_QTY is
+money divided by the offer price (Visa: 340,909.0909 = 15,000,000 / 44), i.e.
+a share-equivalent, so ORDER_DEMAND_QTY / TOTAL_DEMAND include IOI_UNIT
+'CURRENCY' and DEMAND_AS_SUBMITTED takes the raw money amount from
+IPREO_ORDERIOI.IOI_AMT (correlated on ORD_ID). Order view for Visa returns
+rows (the earlier zeros were an unreplaced placeholder id). Open: allocation
+column semantics (PRIVATE_ALLOC sums to 2.5x the deal — N7-1), fee wiring
+(N7-5), timings (N7-3/N7-4). Ipreo tranche names are market labels
+("UNITED STATES").
