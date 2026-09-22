@@ -202,7 +202,9 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                     THEN 1 END) AS ecm_ipreo_rows,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                     AND ORDER_COUNT > 0 THEN 1 END) AS ecm_ipreo_ordered
+                     AND ORDER_COUNT > 0 THEN 1 END) AS ecm_ipreo_ordered,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                    THEN LAST_PRICED END) AS ecm_ipreo_priced
   FROM DGSTREAM.VW_DEAL_SUMMARY
 )
 SELECT '1e. ECM deals with issuer name (INFO, expect ~6,892 UAT)' AS check_,
@@ -267,6 +269,10 @@ UNION ALL
 SELECT '22b. Ipreo ECM deals with orders (INFO — the OD join; 0 = key mismatch)',
        '(info)', TO_CHAR(ecm_ipreo_ordered) || ' of ' || TO_CHAR(ecm_ipreo_rows),
        'INFO' FROM agg
+UNION ALL
+SELECT '22c. Ipreo ECM deals with LAST_PRICED (date windows need it; QA smoke 2026-09-22 showed NULL)', 'Y',
+       CASE WHEN ecm_ipreo_priced > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN ecm_ipreo_priced > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 ORDER BY 1;
 
 -- C. TRANCHE VIEW — ONE scan. Dies alone if VW_TRANCHE_SUMMARY is old.

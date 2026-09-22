@@ -167,20 +167,44 @@ Batch B:
       enrichment landed (tranche name 100 %, region 60 %, type 49 %, demand
       77 %, billed-by 5 %, currency 11 %); exclusion leak 0; entity search shows
       Ipreo issuers as id-less rows; party master / base txn know 0 Ipreo ids
-      (NULL stubs final). LEFT: (1) db-asks N5 — N4-3 deal cards + N4-4/N4-5 on
-      a REAL id (the zero-row runs took 85 s / 34 s: the deal predicate does not
-      reach the Ipreo order branch's RO window over 677k IPREO_ORDER rows nor
-      the 689k-row IOI aggregate — ECM deal cards likely got slower; split
-      OPUS-id vs Ipreo-id timing decides) and the S3 Trino check. (2) If slow:
+      (NULL stubs final). Deal cards (N5-1, 61 s): Visa 1447528575 (406M shares,
+      2,425 orders, 8.6x), Kraft Foods 1447488812, Qualtrics 1447834357 — real
+      historical IPOs, every column filled EXCEPT LAST_PRICED (NULL on all
+      three: the mirror tranche's PRICING_TS is empty) → FIXED IN REPO
+      2026-09-22: FIRST/LAST_PRICED and tranche/order PRICING_TS now fall back
+      to IPREO_ISSUE.PRICING_DT (proven name); deploy-check 22c FAILs if Ipreo
+      deals have no LAST_PRICED. Redeploy the three files. LEFT: (1) db-asks
+      N6 — Visa's tranches/orders by LITERAL id (two placeholder runs came
+      back empty in 85→57 s / 34→19 s: the deal predicate does not reach the
+      RO window over 677k IPREO_ORDER rows nor the 689k-row IOI aggregate —
+      ECM deal cards likely got slower; N6-4 OPUS-id twin is the split), the
+      source-table diagnosis N6-3, pricing-date fill N6-5 (also validates
+      SETTLEMENT_DT / OFFER_DT for the same fallback), and the OPUS fee-unit
+      sample N6-6. Not re-asking for the Trino row — PROMOTE-CHECKLIST step 2
+      (S3) covers it before handover. (2) If slow:
       V7 — RO as a direct join on ORD_ID (census: one row per ORD_ID; grain row
       9 guards it) and the IOI MAX as a correlated scalar so Oracle can probe
       the (ORDER_ID) index on deal-scoped asks. (3) Handover + index/stats ask
       (ASKS-external §2). (4) Enrichment now proven at source (QA): fees on
       11,956 of 19,583 issues (IPREO_PRODUCTFEE: selling concession 11,095, UW
-      9,544, mgmt 9,468, gross spread 259) → tranche fee columns via
-      IPREO_TRANCHE.DEFAULT_PRD_ID, AFTER a 5-row sample settles the unit
-      (per-share vs total); OFFER_PX 11,206 / PAR_VALUE 13,539 of 22,194
-      products (file price / range ~0 → reoffer stays NULL). (5) Catalog
+      9,544, mgmt 9,468, gross spread 259 — but N5-4 shows GROSS_SPREAD_AMT
+      filled on every sampled row, so the 259 is a COUNT artefact to re-check);
+      UNIT SETTLED by N5-4: PER SHARE / PER BOND in the offer currency, and
+      GROSS_SPREAD_AMT = U_W + MGMT + SELLING_CONC exactly (Alkami 27.5 = 5.5 +
+      5.5 + 16.5 on a 1,000 bond = 2.75 %; KKR 1.125 on 50.00 = 2.25 %; ADT
+      0.08 on 7.70; Rithm 0.20 on 10.00 = 2 %; the classic 20/20/60 split) →
+      map TOTAL_FEE ← GROSS_SPREAD_AMT, UNDERWRITING_FEE ← U_W_FEE_AMT,
+      MANAGEMENT_FEES ← MGMT_FEE_AMT, SELLING_CONCESSION_FEE ← SELLING_CONC_FEE_AMT,
+      GROSS_SPREAD_PER_FEE ← ROUND(100 * GROSS_SPREAD_AMT / OFFER_PX, 4), keyed
+      IPREO_TRANCHE.DEFAULT_PRD_ID = PRD_ID — ONLY after N6-6 shows the OPUS
+      columns are per-share too (if OPUS is total money the columns cannot be
+      shared; catalog says "deal fee = SUM this per deal"). Also from N5-4:
+      IPREO_ISSUE.ISSUE_SIZE_AMT is the MONEY size (300,000,000 on 300k bonds ×
+      1,000; 1.5bn on 30M × 50) → DEAL_SIZE_MM candidate with DEAL_SIZE_CURRENCY
+      = CCY_CD (mostly NULL — disclose, never assume USD); OFFER_PX (11,206 of
+      22,194 products) → PRICE / BASE_PRICE fallback when FINAL_PRICE is NULL;
+      PAR_VALUE 13,539 (1,000 / 50 / 0) confirms the convertible-vs-share unit
+      split. File price / range ~0 → reoffer stays NULL. (5) Catalog
       (train): investor_category gains the Ipreo vocabulary (Hedge Fund 187k,
       Investment Adviser 81k, None 39k = unclassified, Bank & Trusts, Pension
       Fund, Research Firm, Corporation, Private Equity, Insurance Company,

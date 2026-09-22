@@ -705,3 +705,18 @@ CASTs, so the catalogs and the agent see one ECM product. Rules:
   reference no tranche (inner join on the mirror tranche).
 - Deploy-check rows 22 / 23 / 24 (+ b / c) and timing probes K8 / K9 cover
   the branch; db-asks N3 is the pre-handover name validation.
+ADDENDUM 9 — QA SMOKE 2026-09-22 (deployed to QA; db-asks N4/N5): branch
+landed (19,583 / 19,973 / 658,680 Ipreo rows), grain holds, enrichment fills
+(tranche name 100 %, region 60 %, type 49 %, demand 77 %, billed-by 5 %,
+currency 11 %), exclusion leak 0, entity search lists Ipreo issuers id-less,
+OPUS_BASE knows 0 Ipreo ids. Deal cards are real history (Visa 1447528575
+406,000,000 shares / 2,425 orders / 8.6x; Kraft Foods; Qualtrics) — but
+LAST_PRICED was NULL on all three: the mirror tranche's PRICING_TS is empty,
+so every date window would drop Ipreo deals. FIX (repo 2026-09-22, redeploy):
+FIRST_PRICED / LAST_PRICED (deal) and PRICING_TS (tranche, order) fall back to
+IPREO_ISSUE.PRICING_DT through the II block (NVL; the OPUS branches untouched).
+Deploy-check 22c fails if Ipreo deals still have no LAST_PRICED. Fee unit
+settled from IPREO_PRODUCTFEE (N5-4): per share / per bond in the offer
+currency, GROSS_SPREAD_AMT = U_W + MGMT + SELLING_CONC (20/20/60); wiring
+waits for the OPUS unit (N6-6). Open: deal-scoped tranche/order timings on an
+Ipreo id (N6), the RO/IOI blocks as the suspected cost.
