@@ -235,7 +235,31 @@ Batch B:
       Lead Manager 1,375 · Senior Co-Manager 851 · … · Sole Bookrunner 136
       (catalog syndicate_role note). Allocation census: 94 of 5,462 deals
       > 1.2x size, 4,386 plausible, 982 < 0.5x → data-owner ask (ASKS §5);
-      the column stays. (2) Dropped:
+      the column stays. ROUND 5 (N9, 2026-09-22): PERCENT indications carry
+      IOI_QTY = 0 and nothing raw → stay out of the gate; Ipreo demand /
+      as-submitted now NULLIF 0 (a zero indication is "not recorded"). The
+      base tranche size column is TRN_UW_SIZE_QTY (underwritten; Visa
+      406,000,000 vs ACTIVE 446,600,000 — the OCR misread was TRN_UN) →
+      TRANCHE_SIZE = NVL(TRN_UW_SIZE_QTY, ACTIVE) (repo). Visa's raw tranche:
+      TRN_NM_CD 'USA' (a tranche_region candidate), TRN_OWNER_NM 'Citigroup
+      Virtual Subsidiary' (the feed is Citi's own Ipreo book view),
+      OVERALLOTMENT_QTY 40,600,000. Anomalies (N9-3 top ten): CONVERTIBLES are
+      allocated in FACE MONEY while size + demand are in bonds (Liberty
+      Interactive 675,000 / 750,000,000; Pluralsight 550,000 / 633,500,000;
+      Vonage 300,000 / 345,000,000 ≈ size × 1,000 par × 1.15) — if every
+      convertible did this the view would divide by par — CENSUSED: it does
+      not (Convertible Bonds 587 of 645 within 1.2x, 4 above 500x; Pluralsight
+      stores face money under a SHARES unit) → no rule, anomalies to the data
+      owner; ADR/GDR-style
+      deals (Telmex 415x, NTT 182x, Telecom Italia 104x, Beijing Yanhua
+      53x, Petrobras 4-5x) look allocated in a different unit than the size
+      → data-owner list (ASKS §5). The user asked to stop pre-deploy asks
+      (2026-09-22): from here, checks run AFTER a deploy only. PRE-DEPLOY REVIEW 2026-09-22 (four lenses): no CREATE or wrong-data
+      defect; Citi code test tightened to a positive list (a CITIC* code
+      could have passed the exclusion form); as-submitted NULLIF 0 on the
+      raw-amount arm; docs corrected (10,802 drop cause; UW/MGMT fees are
+      fee-table only). Optional later: RI LEFT JOIN instead of the scalar;
+      RT joined on O.TRANCHE_ID directly. (2) Dropped:
       the RO direct-join idea (V7) — worth ≤ 8 s on a 30 s base; Iceberg
       instead. (3) Handover + index/stats ask
       (ASKS-external §2). (4) Enrichment now proven at source (QA): fees on
@@ -265,7 +289,10 @@ Batch B:
       Investment Adviser; currency on Ipreo rows is ~11 % filled (source
       ISSUE.CCY_CD / PRD_CCY_CD both ~2–3 %) → a currency filter silently
       drops Ipreo deals, disclose; tranche status on Ipreo = NULL / 'new' only
-      (stays NULL). Disclose: 10,802 Ipreo orders reference no tranche.
+      (stays NULL). Disclose: 10,802 Ipreo orders are dropped because their deal has no
+      surviving mirror transaction row (tranche-less orders are KEPT with
+      NULL tranche attributes — review 2026-09-22 corrected the earlier
+      'inner join on the tranche' wording).
 - [ ] ECM ISSUER_NAME blank in PROD (first PROD datapoint 2026-09-21: five real
       2026 IPOs, deal name filled, issuer '—'; the same prompt on IST fills).
       NOT a regression — the OPUS ECM expression NVL(PCM.PARTY_NAME,

@@ -701,8 +701,11 @@ CASTs, so the catalogs and the agent see one ECM product. Rules:
   identifiers, ratings, DCM-only economics NULL.
 - Catalog consequence: tranche price and settlement_ts now fill on ECM for
   Ipreo rows → declared for both products (contract test enforces it).
-- Dropped by construction and to disclose: 10,802 Ipreo orders that
-  reference no tranche (inner join on the mirror tranche).
+- Dropped by construction and to disclose: 10,802 Ipreo orders whose deal
+  has no surviving mirror transaction row (the deal / status inner joins;
+  669,482 mirror orders with a unit → 658,680 in the view on QA). Orders
+  whose TRANCHE has no mirror row are KEPT with NULL tranche attributes
+  (the mirror-tranche join is LEFT, like the OPUS branch).
 - Deploy-check rows 22 / 23 / 24 (+ b / c) and timing probes K8 / K9 cover
   the branch; db-asks N3 is the pre-handover name validation.
 ADDENDUM 9 — QA SMOKE 2026-09-22 (deployed to QA; db-asks N4/N5): branch
@@ -740,8 +743,9 @@ INST_ALLOC_QTY = INST_ALLOC_SIZE; INST_ALLOCATION_QTY is NULL throughout) —
 kept; Visa's 2.5x total is a source anomaly, not a join. Fees wired on the
 Ipreo tranche branch from IPREO_PRODUCTFEE through IPREO_TRANCHE.DEFAULT_PRD_ID
 (100 % filled, 1:1, proven): TOTAL_FEE = gross spread (or the sum of the three
-components), UNDERWRITING_FEE, MANAGEMENT_FEES, SELLING_CONCESSION_FEE (mirror
-first, fee table second). UNIT: per share / per bond in the offer currency
+components; NULL if any component is missing), UNDERWRITING_FEE and
+MANAGEMENT_FEES from the fee table (the mirror tranche has no such columns),
+SELLING_CONCESSION_FEE mirror first, fee table second. UNIT: per share / per bond in the offer currency
 (Visa 0.5544 selling concession on a 44.00 price = 45 % of the 1.232 spread),
 so a deal-level fee is Σ fee × shares, never Σ fee. PRICE falls back to
 IPREO_PRODUCT.OFFER_PX (by product); deal BASE_PRICE the same (by issue).
@@ -767,3 +771,13 @@ label. Tranche size: the active size includes the over-allotment on 4,293
 tranches (when exercised) and equals the deal size on 5,711 — unchanged until
 the base-size column is found (N9-2). Allocation: 94 of 5,462 deals exceed
 1.2x their size (source figures; data-owner ask), 4,386 plausible.
+ADDENDUM 9 — PRE-DEPLOY REVIEW (2026-09-22, four read-only lenses over the
+three Ipreo branches): nothing fails the CREATE, nothing returns wrong data on
+the censused QA codes. Tightened anyway: the Citi code test is now a positive
+list — ^CITI(BANK|GROUP|USA|US[0-9]|UKE|BRAS|CAN|ASIA|AUS|SEC|INVS|G[A-Z]*|
+[0-9]+)?$ — so a future CITIC* code can never read as Citi (the earlier
+exclusion list would have let 'CITIC ' through); the raw-amount "as submitted"
+now NULLIFs zero like the other arm. Left as designed: the correlated
+IOI_AMT lookup (CASE-gated to the ~43k CURRENCY/FACE rows, index probe), the
+status NOT IN form (parity with the OPUS branch), the NULL-when-partial fee
+sum.
