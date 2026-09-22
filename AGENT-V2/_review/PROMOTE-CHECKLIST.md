@@ -63,6 +63,18 @@ ships that way first.
       not expectations).
 - [ ] Deploy-check A0 + structure + grain on PROD after every view release,
       then the S3 Trino check through Starburst.
+- [ ] ECM issuer names in PROD (screenshot 2026-09-21: five real 2026 IPOs with
+      no issuer name): run A0 (which view revision is live) and row 1e (ECM
+      deals with issuer name), plus this count — it says whether the party
+      master, the intended PROD source, carries names for ECM at all:
+      `SELECT COUNT(DISTINCT T.DEAL_TRANSACTION_ID) AS ECM_TXNS_, COUNT(DISTINCT
+      CASE WHEN P.PARTY_NAME IS NOT NULL THEN T.DEAL_TRANSACTION_ID END) AS NAMED_,
+      COUNT(DISTINCT CASE WHEN P.PARTY_GFCID IS NOT NULL THEN T.DEAL_TRANSACTION_ID
+      END) AS WITH_GFCID_, COUNT(DISTINCT CASE WHEN T.ISSUER_GFCID IS NOT NULL THEN
+      T.DEAL_TRANSACTION_ID END) AS TXN_GFCID_ FROM DGSTREAM.OPUS_ECM_TRANSACTION T
+      LEFT JOIN DGSTREAM.OPUS_BASE_TRANSACTION_RELATED_PARTIES P ON P.TRANSACTION_ID
+      = T.DEAL_TRANSACTION_ID AND P.PARTY_ROLE = 'Primary Client';` — counts only,
+      no rows leave PROD.
 - [ ] PROD census pack S4 (counts + vocabularies only, no rows; git 2026-09-21
       db-asks S4, 12 statements) — its results replace every UAT-labelled
       number in SKILL/yaml prose.

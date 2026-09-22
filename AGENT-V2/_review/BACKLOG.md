@@ -88,6 +88,16 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
 - [ ] TODO unmask fetch errors — surface the DB error text.
 - [ ] TODO DENSE_RANK for partition_by top-N (ties at the boundary).
 - [ ] TODO result cache — spec in cache-design.md; build on "build it".
+- [ ] CAT-7 stale issuer claim: capital_markets_deal.yaml:260 ("Populated on both
+      products … V14 measured … 42,203 of 44,829") and capital_markets_entity.yaml
+      :41-45 / :184-187 ("Treat ECM issuer resolution as WORKING") rest on a
+      2026-08-10 QA reading of ISSUER_NAME_FROM_SOURCE that three later QA
+      measurements refuted (0 of 21,195 named; view-notes ISSUER NAME FIX). Rewrite
+      as: partial on ECM (party master → orderbook issuer by GFCID; blank = not
+      recorded, the deal name carries the company), and drop the V14 sentence;
+      also entity.yaml:105-107 "order object carries NO issuer_name" is wrong
+      since release 3. Rides the train; the SKILL disclosure duty covers PROD
+      until then.
       Today every "next N" re-runs the same 62 s query.
 - [ ] TODO units guard, defence in depth: per-metric requires_single_value
       [product] — the entitlement gate replaces the agent's product filter
@@ -161,6 +171,23 @@ Batch B:
       S3 through Trino. (4) Later enrichment when N3-5 shows fill: fees from
       IPREO_PRODUCTFEE, offer/file price range from IPREO_PRODUCT. Disclose:
       10,802 Ipreo orders reference no tranche → dropped by the inner join.
+- [ ] ECM ISSUER_NAME blank in PROD (first PROD datapoint 2026-09-21: five real
+      2026 IPOs, deal name filled, issuer '—'; the same prompt on IST fills).
+      NOT a regression — the OPUS ECM expression NVL(PCM.PARTY_NAME,
+      NVL(OIN.ISSUER_NAME_BY_GFCID, T.ISSUER_NAME_FROM_SOURCE)) is byte-identical
+      from the 08-21 freeze to HEAD in all three views (only 78b3c4c..c8e002f,
+      never deployed, dropped PCM); the source column is dead, so a name exists
+      only if the party master has a named Primary Client row or OB_DEAL_ISSUER
+      knows T.ISSUER_GFCID. Two view edits for the next batch, both gate-tested
+      on a copy (1702/0, 118 tests): (a) join OIN on NVL(PCM.PARTY_GFCID,
+      T.ISSUER_GFCID) — today the projected GFCID can come from the party master
+      while the name lookup never uses it (UAT party master = GFCIDs with NULL
+      names); (b) last-resort fallback to SYNDICATE_DEAL_NAME with the Ipreo
+      '(… Tranche)' strip — ECM deal names are issuer names (the five PROD rows,
+      the Ipreo sample); UAT tester names would leak only where all three real
+      tiers are empty. Entity view: name-only issuers become id-less rows
+      (already a known class, entity_id is_not_null). Before building: PROD
+      A0 + row 1e + the party-master count (PROMOTE-CHECKLIST PROD-side).
 - [ ] STATUS EXCLUSION (Vinit 2026-09-21) — censused UAT (db-asks K, closed):
       TRANCHES: DCM only (ECM tranche status is NULL on 50,510/50,518) — exclude
       UPPER(STATUS) IN (ARCHIVED 975, CANCELLED 335, POSTPONED 54, DELETED 3;
