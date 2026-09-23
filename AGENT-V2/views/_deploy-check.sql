@@ -23,6 +23,11 @@
 -- stays slow UNTIL the requested OB_ORDER_TRADE(ROOT_ID) index lands.
 -- ===========================================================================
 
+-- Run this first. QA 2026-09-23: section B died with ORA-04036 (instance PGA
+-- limit) while materialising the deal view; parallel execution multiplies the
+-- memory a query takes, so every run starts serial.
+ALTER SESSION DISABLE PARALLEL QUERY;
+
 -- A0. WHICH REVISION IS DEPLOYED — recreation timestamps for the wave's
 -- five views. Expect today's date on all five; an old date = Flyway did
 -- not rerun that script.
