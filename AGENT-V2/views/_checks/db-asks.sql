@@ -1,9 +1,26 @@
 -- ===========================================================================
--- DB ASKS — only what still has to run. Run as a SCRIPT (F5) on the
--- environment where the views are deployed and screenshot into ~/Desktop/ADK
--- WITH the status bar. A section is deleted once its results are recorded.
+-- DB ASKS — only what still has to run. Run as a SCRIPT (F5) on QA and
+-- screenshot into ~/Desktop/ADK. A section is deleted once its results are
+-- recorded. SELECTs only, never session settings.
 -- ===========================================================================
 
--- NOTHING IS NEEDED BEFORE THE DEPLOY (2026-09-22). After the three views are
--- up: views/_deploy-check.sql sections A0, B, C, D (new rows 22c LAST_PRICED,
--- 23c fees/price, 24c exclusion), then K8/K9. That is the whole list.
+-- N11. 2026-09-23 — the three Visa cards (deal-scoped; they avoid the full
+-- scans that die with ORA-04036 on QA). Together they show every change in
+-- the 22-Sep redeploy.
+
+SELECT DEAL_ID, DEAL_NAME, ISSUER_NAME, EQUITY_TYPE, DEAL_STATUS, DEAL_SIZE, BASE_PRICE,
+       FIRST_PRICED, LAST_PRICED, SETTLEMENT_TS, ORDER_COUNT, INVESTOR_COUNT, TOTAL_DEMAND, TOTAL_ALLOCATION
+FROM   DGSTREAM.VW_DEAL_SUMMARY
+WHERE  PRODUCT = 'ECM' AND DEAL_ID = '1447528575';
+
+SELECT TRANCHE_ID, TRANCHE_NAME, TRANCHE_SIZE, PRODUCT_TYPE, PRICE, PRICING_TS, SETTLEMENT_TS, TRADE_TS,
+       TOTAL_FEE, UNDERWRITING_FEE, MANAGEMENT_FEES, SELLING_CONCESSION_FEE, OVER_ALLOTMENT_AUTHORIZED_SHARES,
+       DEAL_SHARING_TYPE, SYNDICATE_MEMBER_NAME
+FROM   DGSTREAM.VW_TRANCHE_SUMMARY
+WHERE  PRODUCT = 'ECM' AND DEAL_ID = '1447528575';
+
+SELECT INVESTOR_NAME, INVESTOR_CATEGORY, INVESTOR_REGION, DEMAND_UNIT, ORDER_DEMAND_QTY,
+       DEMAND_AS_SUBMITTED, ORDER_ALLOCATION, PRICING_TS, TRANCHE_SIZE, TRANCHE_NAME
+FROM   DGSTREAM.VW_ORDER_DETAIL
+WHERE  PRODUCT = 'ECM' AND DEAL_ID = '1447528575'
+ORDER  BY ORDER_ALLOCATION DESC FETCH FIRST 10 ROWS ONLY;

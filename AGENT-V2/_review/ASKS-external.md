@@ -123,6 +123,15 @@ ECM_TRANSACTION_ID keys already exist.)
 Verification: our deal-scoped trade/hedge probes go from full-scan seconds to
 index-probe milliseconds; no application change on your side.
 
+**Added 2026-09-23 — QA memory cap.** Since 23-Sep every full scan of
+VW_DEAL_SUMMARY on QA dies with ORA-04036 (PGA_AGGREGATE_LIMIT; the largest
+session is interrupted), including statements that ran the day before in
+61–257 s. The agent's whole-book questions ("total ECM demand this year")
+issue the same scans through Starburst, so they will fail on QA too while
+this holds. Ask: the current PGA_AGGREGATE_LIMIT / PGA_AGGREGATE_TARGET on QA,
+the top PGA consumers at the time, and whether the limit can be raised to what
+UAT runs. We run nothing but SELECTs and no session settings.
+
 ---
 
 ## 3. BDS / Starburst team — Oracle NUMBER mapping on bds_dg_oraas (status: drafted 2026-09-03; OPTIONAL since UAT 2026-09-17 — Trino SHOW COLUMNS now maps every cast metric as decimal(38,4)/(38,6); keep only as a safety net for unconstrained columns)
