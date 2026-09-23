@@ -781,3 +781,20 @@ now NULLIFs zero like the other arm. Left as designed: the correlated
 IOI_AMT lookup (CASE-gated to the ~43k CURRENCY/FACE rows, index probe), the
 status NOT IN form (parity with the OPUS branch), the NULL-when-partial fee
 sum.
+
+## ADDENDUM 10 — 2026-09-23 QA memory (ORA-04036) and the dedupe rewrite
+After the 22-Sep redeploy every query on the three views in QA — full scans
+and single-deal lookups alike — died with ORA-04036 (instance
+PGA_AGGREGATE_LIMIT), while base-table sorts ran. Cause: the ECM branches'
+transaction dedupe, ROW_NUMBER() OVER (PARTITION BY ECM_TRANSACTION_ID), was
+(a) SELECT ET.* — every column of OPUS_ECM_TRANSACTION (~150, several
+VARCHAR2(4000)) sorted for every query, and (b) keyed by a column a deal
+predicate cannot reach, so even one deal sorted the whole table. Yesterday it
+fitted the box; today it did not. Fix (all three views, both ECM branches):
+the dedupe projects only the columns the branch uses (deal view: 22 OPUS /
+10 Ipreo) and is PARTITION BY DEAL_TRANSACTION_ID, ECM_TRANSACTION_ID, so a
+deal-scoped ask sorts one deal (lever B on the transaction spine — the same
+trick that took DCM deal-scoped orders from 30 s to 0.6 s). Semantics are
+unchanged when a transaction maps to one deal (guard: db-asks N12-1, expect
+0; the grain rows 7/8/9 catch the other case). No session settings were used
+or may be used in any check (user's account is monitored).

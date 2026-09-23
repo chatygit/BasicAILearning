@@ -259,7 +259,14 @@ Batch B:
       could have passed the exclusion form); as-submitted NULLIF 0 on the
       raw-amount arm; docs corrected (10,802 drop cause; UW/MGMT fees are
       fee-table only). Optional later: RI LEFT JOIN instead of the scalar;
-      RT joined on O.TRANCHE_ID directly. (2) Dropped:
+      RT joined on O.TRANCHE_ID directly. QA 2026-09-23: ORA-04036 on every
+      view query (single-deal too) while base-table sorts ran → the wide
+      SELECT ET.* transaction dedupe keyed only by ECM_TRANSACTION_ID was the
+      hog → rewritten (repo, gate 1702/0): explicit columns + PARTITION BY
+      DEAL_TRANSACTION_ID, ECM_TRANSACTION_ID on all six ECM T blocks.
+      Redeploy, then db-asks N12 (guard + Visa cards). Also worth doing when
+      the next batch opens: EO.* / TTR.* dedupes narrowed the same way
+      (order 70k/677k rows, tranche 50k/20k). (2) Dropped:
       the RO direct-join idea (V7) — worth ≤ 8 s on a 30 s base; Iceberg
       instead. (3) Handover + index/stats ask
       (ASKS-external §2). (4) Enrichment now proven at source (QA): fees on

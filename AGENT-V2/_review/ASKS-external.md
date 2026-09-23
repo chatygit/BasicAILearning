@@ -123,7 +123,7 @@ ECM_TRANSACTION_ID keys already exist.)
 Verification: our deal-scoped trade/hedge probes go from full-scan seconds to
 index-probe milliseconds; no application change on your side.
 
-**Added 2026-09-23 — QA memory cap.** Since 23-Sep every full scan of
+**Added 2026-09-23 — QA memory cap (INC raised with the DB team 2026-09-23).** Since 23-Sep every full scan of
 VW_DEAL_SUMMARY on QA dies with ORA-04036 (PGA_AGGREGATE_LIMIT; the largest
 session is interrupted), including statements that ran the day before in
 61–257 s. The agent's whole-book questions ("total ECM demand this year")

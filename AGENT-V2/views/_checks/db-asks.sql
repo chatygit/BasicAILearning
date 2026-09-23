@@ -1,13 +1,19 @@
 -- ===========================================================================
 -- DB ASKS — only what still has to run. Run as a SCRIPT (F5) on QA and
--- screenshot into ~/Desktop/ADK. A section is deleted once its results are
--- recorded. SELECTs only, never session settings.
+-- screenshot into ~/Desktop/ADK. SELECTs only, never session settings.
 -- ===========================================================================
 
--- N11. 2026-09-23 — the three Visa cards (deal-scoped; they avoid the full
--- scans that die with ORA-04036 on QA). Together they show every change in
--- the 22-Sep redeploy.
+-- FIRST: redeploy the three views (vw_deal_summary, vw_order_detail,
+-- vw_tranche_summary — repo 2026-09-23: transaction dedupes narrowed to the
+-- columns used and keyed by deal id, so a single-deal lookup sorts one deal).
 
+-- N12-1. The guard for the new dedupe key: a transaction must map to ONE deal.
+--        Expect 0.
+SELECT COUNT(*) AS TXNS_WITH_SEVERAL_DEALS_
+FROM   (SELECT ECM_TRANSACTION_ID FROM DGSTREAM.OPUS_ECM_TRANSACTION
+        GROUP BY ECM_TRANSACTION_ID HAVING COUNT(DISTINCT DEAL_TRANSACTION_ID) > 1);
+
+-- N12-2. The three Visa cards.
 SELECT DEAL_ID, DEAL_NAME, ISSUER_NAME, EQUITY_TYPE, DEAL_STATUS, DEAL_SIZE, BASE_PRICE,
        FIRST_PRICED, LAST_PRICED, SETTLEMENT_TS, ORDER_COUNT, INVESTOR_COUNT, TOTAL_DEMAND, TOTAL_ALLOCATION
 FROM   DGSTREAM.VW_DEAL_SUMMARY
