@@ -70,6 +70,27 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       object's metrics first (E10; tests in tests/test_cross_object_error.py).
 - [ ] DONE config.py default BQS_ENABLED_SOURCES = nine sources.
 - [ ] DONE (in repo, undeployed) suggestions.py disambiguation hint no longer instructs a NUMBERED-list menu — it asks for the combined figure + per-entity breakdown in the same turn (UAT 2026-09-18: prompts 3, 15, 20 each burned 3 extra turns on the menu). Ships with the next server push; the SKILL/agents rule covers it meanwhile.
+- [ ] DONE (in repo 2026-09-24, undeployed) SRV-7 product narrowing: a both-
+      products scope + a single-product field (equity_type, offering_type,
+      investor_category_key, tenors…) is scoped to that product in the planner
+      (product filter rewritten to eq; plan.narrowed_product / narrowed_by) and
+      the response carries `product_note`; explicit single-product scopes and
+      ECM-only + DCM-only mixes still raise product_not_applicable. Closes the
+      class-2 retry loop (UAT run 5 prompt 37: 5 queries → 1). Tests: four cases
+      in test_planner_contract.py; gate [product] pins. Verify on the next
+      server push with prompt 37 (expect ONE run_bqs_query).
+- [ ] RELEASE EVIDENCE (UAT run 5, 2026-09-24, prompt 41 'Fees on the Visa
+      IPO'): the DEPLOYED tranche catalog (09-18 build) still declares 'fees /
+      gross spread / underwriting fee' an unsupported intent, so our agent ran
+      six queries, gave up, and the ROOT agent handed the question to
+      enterprise_web_search (answer from the 2008 prospectus — right numbers,
+      wrong source; our tranche row holds the same 1.232). The repo's
+      rewritten pricing_economics intent (2026-09-24) is the fix and needs the
+      server push; until then the promoted SKILL says fees exist and the server
+      says they do not — the SKILL/yaml split the 2026-09-17 analysis warned
+      about. Ask the platform whether a data sub-agent's 'not available' should
+      ever route to web search (MRM: an answer sourced outside the governed
+      data, presented as the agent's).
 - [ ] SRV-1 MCP result de-dup: `output_schema=None` + one compact TextContent, compact `tool_serializer`; lazy imports or extended test stubs — every result reaches the model twice (~16k tokens per tranche fetch) (test_entitlement_gate.py 15 cases; gate 1538/1210 on the wrapper; importorskip Client test; PROMOTE-CHECKLIST FastMCP/ADK check; exclusive with ASKS-external §1b)
 - [ ] SRV-4 tool schema via `Annotated[..., Field(description=...)]` with the metric-slot rule on dimensions/filters; docstrings < 1,500/800 chars; `question` signature untouched; tools.yaml:48 nine — −800 tokens/call, class-1 defence at the argument (gate 1111, 1210 moved, new textual pins; QA 2, 24)
 - [ ] SRV-3 `ECM_DCM_SQL_AUDIT` default off, one-line paging keeping "rows N-M", delete `scored`; SKILL 895 drops generated_sql only — 300-550 tokens/result (test_response_paging.py :144 rewritten; gate 1239/1243-1246/2496 moved)

@@ -1627,6 +1627,16 @@ check("_check_product_applicability" in text(PLANNER)
       "[product] planner.py: lost the per-product applicability check — an ECM-"
       "only field requested on DCM (or unscoped) now returns an empty result "
       "instead of a rejection, and the agent reads that as 'no data'")
+# NARROWING (2026-09-24, UAT run 5 prompt 37): a both-products scope plus a
+# single-product field is scoped to that product and the response says so —
+# without it the agent pays a rejection + retry per ECM-only field.
+check("narrowed_product" in text(PLANNER) and "narrowed_by" in text(PLANNER)
+      and "BQSFilter.model_validate" in text(PLANNER),
+      "[product] planner.py: lost the both-products → single-product narrowing — "
+      "prompt 37 goes back to five queries")
+check('result["product_note"]' in text(ROOT / "app" / "services" / "domain_query_service.py"),
+      "[product] domain_query_service.py: the narrowing is silent — the agent "
+      "cannot know which product answered")
 # CALL SITE, not just the def: the def's own signature contains the same
 # substring, so a presence check passes with the call deleted. Two occurrences
 # = definition + the call in plan_query.

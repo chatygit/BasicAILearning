@@ -131,6 +131,10 @@ class QueryPlan:
     partition: ResolvedPartition | None = None
     limit: int = 0
     offset: int = 0
+    # A both-products scope narrowed to the one product the request's
+    # single-product fields imply (planner, 2026-09-24) — and by which fields.
+    narrowed_product: str | None = None
+    narrowed_by: list[str] = field(default_factory=list)
 
 
 _VALID_GRAINS = {"day", "week", "month", "quarter", "year"}
@@ -452,8 +456,9 @@ def _resolve_derived_filter(spec: OntologySpec, name: str) -> ResolvedDerivedFil
     return ResolvedDerivedFilter(name, dspec.predicate, columns)
 
 
-def _check_product_applicability(req, spec) -> None:
-    """Reject a request that uses a field the requested product cannot have.
+def _check_product_applicability(req, spec) -> tuple[str | None, list[str]]:
+    """Reject a request that uses a field the requested product cannot have —
+    or NARROW the scope when the request itself says which product it means.
 
     23+ columns are HARD NULL on one product — CAST(NULL AS ...) in the view's
     other UNION branch. Asking for investor_category while scoped to DCM cannot
@@ -466,6 +471,20 @@ def _check_product_applicability(req, spec) -> None:
     single-product scoped by accident and this never fires. A DUAL-entitled
     caller is scoped to both, so the same question that worked on a
     single-product login returns nothing. Production is the dual case.
+
+    NARROWING (2026-09-24). UAT run 5, prompt 37 ("Show the Visa IPO deal
+    card"): the agent sent no product filter, the gate injected both, and
+    `equity_type` then `offering_type` were rejected here — five queries and
+    ~340k prompt tokens to learn that an ECM-only field means ECM. A scope that
+    covers BOTH products means "either"; when every single-product field in
+    the request agrees on ONE product inside that scope, the request is scoped
+    to it here (the product filter is rewritten to eq) and the plan records
+    which fields decided, so the response can say so. An explicit single-
+    product scope that contradicts a field still raises, and so does a request
+    mixing ECM-only and DCM-only fields — those are real contradictions.
+
+    Returns (narrowed_product, deciding_fields); (None, []) when nothing was
+    narrowed.
     """
     requested: set[str] = set()
     for f in req.filters:
@@ -488,6 +507,22 @@ def _check_product_applicability(req, spec) -> None:
         if fs is not None and getattr(fs, "products", None):
             used.append((f.field, fs.products))
 
+    narrowed: str | None = None
+    decided: list[str] = []
+    if len(requested) > 1:
+        singles = [(name, {p.upper() for p in allowed}) for name, allowed in used
+                   if len(allowed) == 1]
+        targets = {next(iter(ps)) for _, ps in singles}
+        if len(targets) == 1 and next(iter(targets)) in requested:
+            narrowed = next(iter(targets))
+            decided = sorted({name for name, _ in singles})
+            requested = {narrowed}
+            req.filters = [f for f in req.filters if f.field != "product"] + [
+                BQSFilter.model_validate(
+                    {"field": "product", "op": "eq", "value": narrowed}
+                )
+            ]
+
     for name, allowed in used:
         allow = {p.upper() for p in allowed}
         impossible = requested - allow
@@ -501,6 +536,7 @@ def _check_product_applicability(req, spec) -> None:
                 f"you want the {only} answer, or drop '{name}'.",
                 code="product_not_applicable",
             )
+    return narrowed, decided
 
 
 def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
@@ -509,7 +545,7 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
 
     _check_unsupported(spec, req)
 
-    _check_product_applicability(req, spec)
+    narrowed, narrowed_by = _check_product_applicability(req, spec)
     dims = _resolve_dimensions(req, spec)
     filters = [_validate_filter(spec, f) for f in req.filters]
     computed_filters = [
@@ -618,6 +654,8 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
         )
 
     return QueryPlan(
+        narrowed_product=narrowed,
+        narrowed_by=narrowed_by,
         spec=spec,
         metric=metric,
         dimensions=dims,

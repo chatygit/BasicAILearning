@@ -156,6 +156,76 @@ def test_same_field_on_ecm_is_accepted():
     assert plan.metric.business_name == "order_count"
 
 
+def test_dual_scope_with_ecm_only_field_narrows_to_ecm():
+    # UAT run 5 (2026-09-24), prompt 37: five queries because a both-products
+    # scope plus an ECM-only field was rejected twice. "Either product" plus a
+    # field that exists on one of them IS the product — scope to it and say so.
+    if not _deps():
+        SKIPPED.append("product narrowing (pydantic/yaml not installed)")
+        return
+    plan = _plan({
+        "source": "capital_markets_order",
+        "metric": "order_count",
+        "dimensions": ["investor_category_key"],
+        "filters": [{"field": "product", "op": "in", "value": ["ECM", "DCM"]}],
+    })
+    assert plan.narrowed_product == "ECM"
+    assert plan.narrowed_by == ["investor_category_key"]
+    prods = [f for f in plan.filters if f.business_name == "product"]
+    assert len(prods) == 1 and prods[0].op == "eq" and prods[0].value == "ECM", (
+        "the product filter must be rewritten to eq ECM — a scope that still "
+        "spans DCM would make the planner reject the field again"
+    )
+
+
+def test_unscoped_request_with_dcm_only_field_narrows_to_dcm():
+    if not _deps():
+        SKIPPED.append("product narrowing, unscoped (pydantic/yaml not installed)")
+        return
+    plan = _plan({
+        "source": "capital_markets_order",
+        "metric": "order_count",
+        "dimensions": ["investor_qib_status"],
+        "filters": [],
+    })
+    assert plan.narrowed_product == "DCM"
+    assert [f.value for f in plan.filters if f.business_name == "product"] == ["DCM"]
+
+
+def test_explicit_single_scope_is_never_narrowed():
+    # The agent said ECM; a DCM-only field is a contradiction, not a hint.
+    if not _deps():
+        SKIPPED.append("product narrowing, explicit scope (pydantic/yaml not installed)")
+        return
+    _expect_code(
+        {
+            "source": "capital_markets_order",
+            "metric": "order_count",
+            "dimensions": ["investor_qib_status"],
+            "filters": [{"field": "product", "op": "eq", "value": "ECM"}],
+        },
+        "product_not_applicable",
+        "an explicit ECM scope with a DCM-only field must still be rejected",
+    )
+
+
+def test_dual_scope_with_conflicting_single_product_fields_is_rejected():
+    if not _deps():
+        SKIPPED.append("product narrowing, conflict (pydantic/yaml not installed)")
+        return
+    e = _expect_code(
+        {
+            "source": "capital_markets_order",
+            "metric": "order_count",
+            "dimensions": ["investor_category_key", "investor_qib_status"],
+            "filters": [{"field": "product", "op": "in", "value": ["ECM", "DCM"]}],
+        },
+        "product_not_applicable",
+        "an ECM-only field beside a DCM-only field cannot be narrowed either way",
+    )
+    assert "investor_category_key" in e.message or "investor_qib_status" in e.message
+
+
 def test_descoped_field_on_dcm_is_now_accepted():
     # Release 3: investor_category works on BOTH products — the old
     # rejection must NOT fire (this is the de-scoping's regression guard).

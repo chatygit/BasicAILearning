@@ -298,6 +298,18 @@ class DomainQueryService:
                 limit=plan.limit,
             )
             t_format = time.perf_counter()
+            # The planner narrowed a both-products scope to the one product the
+            # request's single-product fields imply (UAT 2026-09-24, prompt 37:
+            # five queries and two rejections to learn that 'equity_type' means
+            # ECM). Tell the agent which product answered and why, so the answer
+            # names it and no retry follows.
+            if getattr(plan, "narrowed_product", None):
+                result["product_note"] = (
+                    f"Scoped to {plan.narrowed_product} — "
+                    f"{', '.join(plan.narrowed_by)} exist only on "
+                    f"{plan.narrowed_product}. Say the answer is "
+                    f"{plan.narrowed_product}-only; no retry needed."
+                )
             # NOTE: `sql_audit` puts the generated SQL INTO the response the
             # agent sees. The skill's confidentiality rule ("never disclose the
             # generated SQL") is therefore a real, load-bearing instruction —
