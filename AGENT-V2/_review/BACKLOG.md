@@ -88,17 +88,10 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
 - [ ] TODO unmask fetch errors — surface the DB error text.
 - [ ] TODO DENSE_RANK for partition_by top-N (ties at the boundary).
 - [ ] TODO result cache — spec in cache-design.md; build on "build it".
-- [ ] CAT-7 stale issuer claim: capital_markets_deal.yaml:260 ("Populated on both
-      products … V14 measured … 42,203 of 44,829") and capital_markets_entity.yaml
-      :41-45 / :184-187 ("Treat ECM issuer resolution as WORKING") rest on a
-      2026-08-10 QA reading of ISSUER_NAME_FROM_SOURCE that three later QA
-      measurements refuted (0 of 21,195 named; view-notes ISSUER NAME FIX). Rewrite
-      as: partial on ECM (party master → orderbook issuer by GFCID; blank = not
-      recorded, the deal name carries the company), and drop the V14 sentence;
-      also entity.yaml:105-107 "order object carries NO issuer_name" is wrong
-      since release 3. Rides the train; the SKILL disclosure duty covers PROD
-      until then.
-      Today every "next N" re-runs the same 62 s query.
+- [ ] CAT-7 DONE in repo 2026-09-24 (release train): deal.yaml issuer_name now
+      'ECM PARTIAL — party master, then orderbook issuer by GFCID; blank = not
+      recorded; the deal name usually carries the company'; entity.yaml's three
+      V14 / 'order carries NO issuer_name' passages rewritten.
 - [ ] TODO units guard, defence in depth: per-metric requires_single_value
       [product] — the entitlement gate replaces the agent's product filter
       with `in [ECM, DCM]`, so requires_filters can never fire.
@@ -198,7 +191,7 @@ Batch B:
       OFFER_PX by ISS_ID); deploy-check 23c. Unit: PER SHARE (Visa's mirror
       SELLING_CONCESSION_FEE 0.5544 on a 44.00 price = the real 45 % of the
       1.232 spread) — the OPUS columns carry the same mirror-mapped semantics;
-      the catalog's "deal fee = SUM this per deal" is wrong for per-share fees
+      the catalog's old "deal fee = SUM this per deal" was fixed 2026-09-24
       (CAT item). IOI_UNIT vocabulary: SHARES 614,082 · CURRENCY 41,418 ·
       PERCENT 12,313 · FACE 1,669 (no BOND — convertibles indicate in FACE);
       N8-1 samples PERCENT / FACE to decide whether IOI_QTY is a share-
@@ -282,14 +275,15 @@ Batch B:
       GROSS_SPREAD_PER_FEE ← ROUND(100 * GROSS_SPREAD_AMT / OFFER_PX, 4), keyed
       IPREO_TRANCHE.DEFAULT_PRD_ID = PRD_ID — ONLY after N6-6 shows the OPUS
       columns are per-share too (if OPUS is total money the columns cannot be
-      shared; catalog says "deal fee = SUM this per deal"). Also from N5-4:
+      shared; the catalog now scopes per-share to 10-digit-id ECM deals). Also from N5-4:
       IPREO_ISSUE.ISSUE_SIZE_AMT is the MONEY size (300,000,000 on 300k bonds ×
       1,000; 1.5bn on 30M × 50) → DEAL_SIZE_MM candidate with DEAL_SIZE_CURRENCY
       = CCY_CD (mostly NULL — disclose, never assume USD); OFFER_PX (11,206 of
       22,194 products) → PRICE / BASE_PRICE fallback when FINAL_PRICE is NULL;
       PAR_VALUE 13,539 (1,000 / 50 / 0) confirms the convertible-vs-share unit
-      split. File price / range ~0 → reoffer stays NULL. (5) Catalog
-      (train): investor_category gains the Ipreo vocabulary (Hedge Fund 187k,
+      split. File price / range ~0 → reoffer stays NULL. (5) Catalog + SKILL DONE in repo 2026-09-24 (catalogs ride the train,
+      SKILL ships freely; gate 1702/0; QA-PROMPTS 37-41 added for run 5):
+      investor_category gains the Ipreo vocabulary (Hedge Fund 187k,
       Investment Adviser 81k, None 39k = unclassified, Bank & Trusts, Pension
       Fund, Research Firm, Corporation, Private Equity, Insurance Company,
       Venture Capital; NULL 50 %) — "long only" asks on ECM must consider

@@ -1,30 +1,13 @@
 -- ===========================================================================
 -- DB ASKS — only what still has to run. Run as a SCRIPT (F5) on QA and
 -- screenshot into ~/Desktop/ADK. SELECTs only, never session settings.
+-- (N12 of 2026-09-24 is recorded: all four Visa cards returned.)
 -- ===========================================================================
 
--- FIRST: redeploy the three views (vw_deal_summary, vw_order_detail,
--- vw_tranche_summary — repo 2026-09-23: transaction dedupes narrowed to the
--- columns used and keyed by deal id, so a single-deal lookup sorts one deal).
-
--- N12-1. The guard for the new dedupe key: a transaction must map to ONE deal.
---        Expect 0.
-SELECT COUNT(*) AS TXNS_WITH_SEVERAL_DEALS_
-FROM   (SELECT ECM_TRANSACTION_ID FROM DGSTREAM.OPUS_ECM_TRANSACTION
-        GROUP BY ECM_TRANSACTION_ID HAVING COUNT(DISTINCT DEAL_TRANSACTION_ID) > 1);
-
--- N12-2. The three Visa cards.
-SELECT DEAL_ID, DEAL_NAME, ISSUER_NAME, EQUITY_TYPE, DEAL_STATUS, DEAL_SIZE, BASE_PRICE,
-       FIRST_PRICED, LAST_PRICED, SETTLEMENT_TS, ORDER_COUNT, INVESTOR_COUNT, TOTAL_DEMAND, TOTAL_ALLOCATION
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-WHERE  PRODUCT = 'ECM' AND DEAL_ID = '1447528575';
-
-SELECT TRANCHE_ID, TRANCHE_NAME, TRANCHE_SIZE, PRODUCT_TYPE, PRICE, PRICING_TS, SETTLEMENT_TS, TRADE_TS,
-       TOTAL_FEE, UNDERWRITING_FEE, MANAGEMENT_FEES, SELLING_CONCESSION_FEE, OVER_ALLOTMENT_AUTHORIZED_SHARES,
-       DEAL_SHARING_TYPE, SYNDICATE_MEMBER_NAME
-FROM   DGSTREAM.VW_TRANCHE_SUMMARY
-WHERE  PRODUCT = 'ECM' AND DEAL_ID = '1447528575';
-
+-- AFTER THE NEXT REDEPLOY of the three views (repo 2026-09-24: converted
+-- currency bids rounded to whole shares; the order view's raw-order window
+-- keyed by issue): the Visa order card once more — expect ORDER_DEMAND_QTY
+-- 340,909 (not 340,909.0909) on the Kuwait rows.
 SELECT INVESTOR_NAME, INVESTOR_CATEGORY, INVESTOR_REGION, DEMAND_UNIT, ORDER_DEMAND_QTY,
        DEMAND_AS_SUBMITTED, ORDER_ALLOCATION, PRICING_TS, TRANCHE_SIZE, TRANCHE_NAME
 FROM   DGSTREAM.VW_ORDER_DETAIL

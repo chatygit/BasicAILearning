@@ -255,14 +255,13 @@ some field?** Only genuine proper nouns belong in a name filter.
 | The user says | Field | Object |
 |---|---|---|
 | IPO · FO · follow-on | `offering_type` | deal |
-| long-only · hedge fund · outright · asset manager | `investor_category_key` (`LONG_ONLY`, `HEDGE_FUND`…) | order |
+| long-only · hedge fund · outright · asset manager | `investor_category_key` (`LONG_ONLY`…); ECM long-only = `investor_category in ['Long Only','Investment Adviser']` (key NULL on part of the book) | order |
 | solo · sole-managed | `deal_sharing_type` | tranche |
 | 1x1 · one-on-one | `meeting_type_key` = `ONE_TO_ONE` | order |
 
 **Prefer the `_key` twin wherever one exists** — `investor_category_key`,
-`meeting_type_key`. Keys are punctuation-free and case-stable; the display
-labels are not (`Long Only` vs `long-only`, `1:1` vs `1x1`). Filter the key,
-PROJECT the label.
+`meeting_type_key`. Keys are punctuation-free and case-stable, labels are not
+(`1:1` vs `1x1`). Filter the key, PROJECT the label.
 
 ### 3c-ter. ECM-only and DCM-only fields — SCOPE THE PRODUCT
 
@@ -350,7 +349,7 @@ and `investor_count` undercounts — say so on a headcount.
 | "away / home orders", "our book", "Citi's own orders" | order · `order_ownership` (ECM only; HOME/AWAY). ALL ECM figures cover the FULL book (never read the ~45% jump vs the old config as growth); "our orders" = eq HOME; an unfiltered total on an "our book" ask says it includes away. DCM: not tracked |
 | "tranches settling in <period>" | tranche · `settlement_ts` (partial on ECM; NULL → deal object) |
 | "price range" / "reoffer range" | deal · `reoffer_low_price` + `reoffer_high_price` (ECM). No stage history — "Initial vs Revised" is not tracked, say so |
-| fees / gross spread / economics | deal · `deal_fee_mm`(+currency) ECM deal fee; tranche · `total_fee` (+components, both products) — DCM deal fee = SUM tranche total_fee; per-designation economics = designation object. Disclose blanks |
+| fees / gross spread / economics | deal · `deal_fee_mm`(+currency) ECM deal fee; tranche · `total_fee` (+components) — DCM deal fee = SUM tranche total_fee; ECM fees are per share, never SUM them; per-designation = designation object. Disclose blanks |
 | greenshoe / over-allotment | tranche · `over_allotment_authorized/exercised_shares` (ECM) — "was the shoe exercised" = exercised gt 0. DCM: not tracked |
 | "domiciled / incorporated in" | deal · `issuer_domicile` (ECM). DCM: not tracked — say so |
 | firm account | trade · `firm_account_number/type` (ECM trades); designation · `firm_account` (ECM cards); DCM order-side candidate = `obo_name` |
@@ -378,7 +377,7 @@ and `investor_count` undercounts — say so on a headcount.
   KEY** — `deal_id`, `order_id`, `entity_id`; on tranche `deal_id` then
   `tranche_id` — or ties reshuffle and pages repeat or drop rows.
 - **An ORDER listing always projects `order_demand_qty`, `order_allocation`
-  and the unit** (`demand_unit` on ECM, `currency` on DCM; `equity_type` as a
+  and the unit** (`equity_type` → shares/bonds on ECM, `currency` on DCM; a
   Security column when deals mix) — a list of orders without the figures is not
   an answer. An aggregate projects the group keys.
 - **Coverage = demand ÷ tranche size** costs two requests: state the
@@ -403,18 +402,17 @@ and `investor_count` undercounts — say so on a headcount.
 
 ### 6b. Units doctrine — the PRODUCT and the SECURITY set the unit
 DCM sizes/allocations/demand are notional **MONEY** (a single `currency`; the
-deal size is not currency-scoped; no FX column). ECM: **the unit of an order
-figure is the row's `demand_unit`** — SHARES on common stock, BOND on
-convertibles and converts preferred; a CURRENCY / PERCENT / FACE bid stays
-labelled as that — every ECM order listing projects `demand_unit` and reads
-the unit from it. Where it is blank, the PO's table decides: Common Stock /
+deal size is not currency-scoped; no FX column). ECM: **the SECURITY sets the
+unit of every demand / allocation figure**, by `equity_type`: Common Stock /
 Equity Units / Warrants → shares; Convertible Bonds / Convertible Preferred /
-Exchangeable Notes → bonds. **ECM DEAL SIZE is a share count for the first
-group and a PAR AMOUNT for the second** — never divide or compare a
-convertible's deal size with its book.
-Never total across products, `demand_unit` values or equity types: `product`
-(and, on ECM, `equity_type` + `demand_unit`) go in `dimensions`; every
-size/allocation/demand metric REQUIRES a `product` filter.
+Exchangeable Notes → bonds. `demand_unit` is the unit of `demand_as_submitted`
+ONLY (the bid as placed); a CURRENCY / PERCENT / FACE bid with a BLANK
+`order_demand_qty` was never converted: quote it as submitted, never convert
+it. **ECM DEAL SIZE is a share count for the first group and a PAR AMOUNT for the second**
+— never divide or compare a convertible's deal size with its book.
+Never total across products or equity types: `product` (and, on ECM,
+`equity_type`) go in `dimensions`; every size/allocation/demand metric
+REQUIRES a `product` filter.
 **An ECM order table spanning several deals projects `equity_type` as a
 "Security" column and the unit per row** — one "Allocation" column read as
 shares mislabels every convertible row.

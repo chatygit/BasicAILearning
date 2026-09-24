@@ -798,3 +798,24 @@ trick that took DCM deal-scoped orders from 30 s to 0.6 s). Semantics are
 unchanged when a transaction maps to one deal (guard: db-asks N12-1, expect
 0; the grain rows 7/8/9 catch the other case). No session settings were used
 or may be used in any check (user's account is monitored).
+
+## ADDENDUM 11 — 2026-09-24 QA verification of the Ipreo release + the unit rule
+All four Visa cards (1447528575) returned after the 22-Sep redeploy plus the
+dedupe rewrite: deal priced 18-MAR-08 (the real Visa pricing date — from the
+offer-date fallback), settled 25-MAR-08, size 406,000,000, base price 44,
+2,425 orders / 698 investors, demand 5,843,728,372 (currency bids now count),
+allocation 1,009,616,809; tranche UNITED STATES 406,000,000 (underwritten),
+price 44, fees 1.232 = 0.3388 + 0.3388 + 0.5544 per share, greenshoe
+40,600,000, SHARED, 50 broker codes with "Citigroup (CITIUSA)"; orders with
+category / region / currency share-equivalents (340,909.0909 = 15,000,000 /
+44) beside the money "as submitted". Two follow-ups in the repo: converted
+CURRENCY bids are ROUNDED to whole shares (order and deal views) and the
+order view's raw-order window is keyed by (ISS_ID, ORD_ID) with the join on
+both, so a deal predicate prunes it; the Ipreo order dedupe projects only the
+ten columns used. DOCTRINE CORRECTION (SKILL + catalogs): a converted bid
+carries a share figure beside a CURRENCY unit, so "the unit of the figure is
+demand_unit" was wrong — the SECURITY sets the unit of every demand /
+allocation figure (equity_type: shares, or bonds on convertibles);
+demand_unit describes demand_as_submitted only; a CURRENCY / PERCENT / FACE
+bid with a blank order_demand_qty was never converted. Fees are documented as
+per-share only for 10-digit-id ECM deals (the OPUS unit is unmeasured).

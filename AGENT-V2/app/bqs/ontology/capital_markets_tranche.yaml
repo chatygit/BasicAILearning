@@ -266,7 +266,7 @@ dimensions:
   tranche_name: {column: tranche_name, description: "Tranche name — often a TARGET-MARKET label (UNITED STATES, GERMANY, EMEA, GLOBAL, UK Institutional, DOMESTIC, UNSPECIFIED). 'US tranches' is a tranche_name ask, not an investor-region ask. Group by it to answer 'by target market'."}
   tranche_size: {column: tranche_size, description: "Tranche size as a NUMBER (ECM shares / DCM notional money). 0 means NO size recorded at source; NULL means a size was recorded but could not be parsed. The currency-comparable money figure for DCM."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field)."}
-  currency: {column: currency, description: "Pricing/denomination currency (scalar at this grain). Required alongside any DCM money figure. Since release 2 the ECM value carries a global name fallback, matching the deal list; a residual NULL means genuinely not recorded."}
+  currency: {column: currency, description: "Pricing/denomination currency (scalar at this grain). Required alongside any DCM money figure. Since release 2 the ECM value carries a global name fallback, matching the deal list; a NULL means not recorded — most 10-digit-id ECM tranches; a currency filter drops them, disclose."}
   settlement_ts: {column: settlement_ts, description: "The tranche's OWN settlement timestamp — 'tranches settling in <period>' filters here. DCM ~two thirds filled; ECM partial (NULL = not recorded at this grain → the deal object's settlement_ts)."}
   transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: origination transaction id — FORWARD-POPULATED (recent Ipreo deals; NULL = predates the link). TEXT."}
   issuer_lei: {column: issuer_lei, products: ["ECM"], description: "ECM (release 3, ~83%). Issuer LEI. NULL on DCM — no source column; offer GFCID/ticker instead."}
@@ -275,37 +275,37 @@ dimensions:
   price: {column: price, description: "Tranche price (NUMBER): DCM stored price; ECM final offer price where recorded (partial, NULL = not recorded)."}
   price_guidance: {column: price_guidance, products: ["DCM"], description: "DCM (V3). Price guidance text (display)."}
   order_book_size_usd: {column: order_book_size_usd, products: ["DCM"], description: "DCM (V3). USD-normalized order book size — STORED AS TEXT; display only, never SUM it (a numeric conversion is a future batch)."}
-  total_fee: {column: total_fee, description: "Tranche TOTAL fee (NUMBER, both products since V3; populations unmeasured — blanks = not captured). Deal-level fee = SUM this per deal; component fees are separate columns."}
+  total_fee: {column: total_fee, description: "Tranche TOTAL fee (both products; blanks = not captured). ECM deals with 10-digit ids: PER-SHARE / per-bond amounts in the offer currency (gross spread = underwriting + management + selling concession); other ECM rows and DCM: as stored, unit unmeasured — disclose. A deal-level ECM fee is fee × shares, NEVER a plain SUM of rows. Components are separate columns."}
   underwriting_fee: {column: underwriting_fee, description: "Underwriting fee component (both products; unmeasured)."}
   management_fees: {column: management_fees, description: "Management fee component (both products; unmeasured)."}
-  selling_concession_fee: {column: selling_concession_fee, description: "Selling concession component (both products; unmeasured)."}
+  selling_concession_fee: {column: selling_concession_fee, description: "Selling concession component (both products; per share on 10-digit-id ECM deals)."}
   praecipium_fees: {column: praecipium_fees, description: "Praecipium fee component (both products; unmeasured)."}
   retail_uw_fee: {column: retail_uw_fee, description: "Retail underwriting fee component (both products; unmeasured)."}
   gross_spread_per_fee: {column: gross_spread_per_fee, products: ["ECM"], description: "ECM (V3). Gross spread percentage fee."}
   designation_fee: {column: designation_fee, products: ["ECM"], description: "ECM (V3). Designation fee at tranche level (per-card economics live on capital_markets_designation)."}
   over_allotment_authorized_shares: {column: over_allotment_authorized_shares, products: ["ECM"], description: "ECM (V3). GREENSHOE authorized shares — the greenshoe refusal is DEAD for ECM. NULL on DCM (not tracked)."}
   over_allotment_exercised_shares: {column: over_allotment_exercised_shares, products: ["ECM"], description: "ECM (V3). Greenshoe EXERCISED shares — is_not_null = 'greenshoe was exercised'."}
-  announcement_ts: {column: announcement_ts, description: "Tranche announcement timestamp (both products since V3; DCM measured ~29.5k rows, ECM unmeasured)."}
-  issue_ts: {column: issue_ts, products: ["DCM"], description: "DCM (V3). Issue date (~32.6k rows measured)."}
-  trade_ts: {column: trade_ts, description: "Tranche trade date (both products; DCM ~26.5k measured)."}
+  announcement_ts: {column: announcement_ts, description: "Tranche announcement timestamp (both products since V3)."}
+  issue_ts: {column: issue_ts, products: ["DCM"], description: "DCM (V3). Issue date."}
+  trade_ts: {column: trade_ts, description: "Tranche trade date (both products)."}
   first_trade_ts: {column: first_trade_ts, products: ["ECM"], description: "ECM (V3). First trade date."}
   lockup_ts: {column: lockup_ts, products: ["ECM"], description: "ECM (V3). Managers' lockup date — 'when does the lockup expire' lands here."}
   target_market: {column: target_market, products: ["DCM"], description: "DCM (V3). Target market label (~7.8k rows) — NOT a region; tranche_name carries target-market labels on ECM."}
   frn_coupon_index: {column: frn_coupon_index, products: ["DCM"], description: "DCM (V3). Floating-rate coupon index (SOFR/EURIBOR…) for FRN tranches."}
   tranche_region: {column: tranche_region, description: "Tranche target region (NAM/EMEA/APAC). This is the TRANCHE's market, not the investor's geography (that lives on capital_markets_order). ~1 in 5 DCM tranches carry one; ECM effectively empty."}
   # --- ECM-only ---
-  product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the instrument CLASS ('common stock', 'convertible') use equity_type — now on THIS object too."}
-  equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…) — denormalized from the deal (round 2), so class asks ranked by tranche metrics are ONE request here. Same values and rules as the deal object's equity_type. NULL on DCM."}
+  product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the instrument CLASS ('common stock', 'convertible') use equity_type."}
+  equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…) — denormalized from the deal, so class asks ranked by tranche metrics are ONE request. Same values and rules as the deal object's equity_type. NULL on DCM."}
   exchange: {column: exchange, products: ["ECM"], description: "ECM. Listing venue — holds FULL venue names AND sometimes the abbreviation itself ('NYSE'); match BOTH tokens with like (full name first, abbreviation on a 0-row retry), never equality. A dual-listed tranche may show only one venue."}
   # --- syndicate (aligned pipe lists) ---
-  syndicate_member_name: {column: syndicate_member_name, description: "ECM: pipe-delimited syndicate banks, ordered the same way as syndicate_role/broker_code/bnd_broker (pair by position only when the element counts match). A member token may carry an inline '(true)'/'(false)' suffix duplicating the B&D flag — never filter on it, and STRIP it when displaying the name. DCM (release 3): the FULL deduped member pipe list where membership exists, falling back to the single B&D bank on older tranches — 'syndicate members of a DCM transaction' is now answerable; DCM roles/broker codes remain NULL (unmeasured), so members come WITHOUT role attribution on DCM."}
-  syndicate_role: {column: syndicate_role, products: ["ECM"], description: "ECM. Pipe-delimited roles, aligned with syndicate_member_name. NULL on DCM. Display only — never attribute a role to a bank by matching lists."}
+  syndicate_member_name: {column: syndicate_member_name, description: "ECM: pipe-delimited syndicate banks, ordered the same way as syndicate_role/broker_code/bnd_broker. A member token may carry an inline '(true)'/'(false)' suffix duplicating the B&D flag — never filter on it, STRIP it when displaying. On ECM deals with 10-digit ids members are BROKER CODES (ABNROTH, BARCAP, CITIUSA…) with Citi shown as 'Citigroup (CITIUSA)' — a bank-NAME filter can miss those rows; match Citi with like '%CITIGROUP%'. DCM: the full deduped member list (older tranches: the B&D bank only); roles/broker codes NULL on DCM, so no role attribution there."}
+  syndicate_role: {column: syndicate_role, products: ["ECM"], description: "ECM. Pipe-delimited roles aligned with syndicate_member_name; labels differ by source (like-match) — 10-digit-id deals: Co-Manager, Underwriter, Joint Bookrunner, Selling Group, Lead Manager/Bookrunner, Passive Bookrunner, Joint Lead Manager, Senior Co-Manager, Co-Lead Manager, Sole Bookrunner…; other ECM rows: see the filter list. NULL on DCM."}
   broker_code: {column: broker_code, products: ["ECM"], description: "ECM. Pipe-delimited broker codes, aligned with syndicate_member_name. NULL on DCM."}
-  bnd_broker: {column: bnd_broker, description: "ECM: pipe list of 'true'/'false', one per syndicate member, aligned with the member list; no member name is embedded in it. DCM: a SCALAR computed as 'is the B&D bank Citigroup Global', with NO null branch — so 'false' covers BOTH 'another bank billed' AND 'no B&D bank recorded at all', and it is never NULL on DCM. Split those two cases with bnd_bank is_null. Legacy either way; prefer bnd_bank."}
-  bnd_bank: {column: bnd_bank, description: "RESOLVED bill-and-deliver bank NAME(S). ECM can hold SEVERAL banks in one ' | ' list (co-B&D); DCM is a single bank. NULL = no B&D designated. Use this for ALL B&D asks."}
+  bnd_broker: {column: bnd_broker, description: "ECM: pipe list of 'true'/'false', one per syndicate member, aligned with the member list; no member name is embedded in it. DCM: a SCALAR 'is the B&D bank Citigroup', never NULL — 'false' also covers 'no B&D bank recorded'; split with bnd_bank is_null. Legacy; prefer bnd_bank."}
+  bnd_bank: {column: bnd_bank, description: "RESOLVED bill-and-deliver bank NAME(S). ECM can hold SEVERAL banks in one ' | ' list (co-B&D); DCM is a single bank. NULL = no B&D designated — EXCEPT every ECM tranche with a 10-digit deal id (that source has no B&D flag): there it is 'not captured'. Use this for ALL B&D asks."}
   deal_sharing_type: {column: deal_sharing_type, description: "'SOLO' = Citi was the ONLY syndicate member (both products). 'SHARED' = everything else, including a tranche solely managed by another bank and a tranche with no syndicate rows. Never render SOLO as a bare 'sole-managed'."}
   # --- identifiers (aligned pipe lists) ---
-  identifier_type: {column: identifier_type, description: "Pipe-delimited identifier types (CUSIP/ISIN/FIGI/RIC/VALOREN/'SMCP ID'/'DIRECTBOOKS ID'), zip-aligned with identifier_value. UPPER-normalized in the view for both products (2026-09-03)."}
+  identifier_type: {column: identifier_type, description: "Pipe-delimited identifier types (CUSIP/ISIN/FIGI/RIC/VALOREN/'SMCP ID'/'DIRECTBOOKS ID'), zip-aligned with identifier_value. UPPER-normalized."}
   identifier_value: {column: identifier_value, description: "Pipe-delimited identifier values, zip-aligned with identifier_type. Display ZIPPED with the type list into one cell per tranche. A security identifier is never a deal_id and never an entity."}
   # --- DCM-only ---
   product_class: {column: product_class, products: ["DCM"], description: "DCM. Bond class — a closed 15-value list (Investment Grade, High Yield, SSA, ABS…). Expand IG/HY/EM before filtering."}
@@ -314,13 +314,13 @@ dimensions:
   allowed_order_max_price: {column: allowed_order_max_price, products: ["DCM"], description: "DCM tranche flag Y/N — MAX-PRICE orders allowed (rarer: Y on ~12% of recorded tranches). NULL = not recorded."}
   coupon_type: {column: coupon_type, products: ["DCM"], description: "DCM. Coupon STRUCTURE (Fixed, FRN, Zero Coupon, Fixed to FRN, Step Coupon…) — SPACES, not hyphens. It is not a rate; never present 'Fixed' as 'the coupon'."}
   coupon_freq: {column: coupon_freq, products: ["DCM"], description: "DCM. Annual, Semi Annual, Quarterly, Monthly, Weekly, Zero, At Maturity, Daily."}
-  tenors: {column: tenors, products: ["DCM"], description: "DCM. Scalar tenor label built as '<value>-<PERIOD>' — the hyphen is always there, so never '10Y'. The PERIOD spelling drifts ('10-YEAR' and '10-Y' both occur; 'M' is months), so match the short token '%10-Y%'. NULL when no tenor was recorded (a large, real population). No longer a pipe list and no longer aligned with securities_maturity."}
+  tenors: {column: tenors, products: ["DCM"], description: "DCM. Scalar tenor label built as '<value>-<PERIOD>' — the hyphen is always there, so never '10Y'. The PERIOD spelling drifts ('10-YEAR' and '10-Y' both occur; 'M' is months), so match the short token '%10-Y%'. NULL when no tenor was recorded (a large, real population). Not a pipe list."}
   seniority: {column: seniority, products: ["DCM"], description: "DCM. Rank in the capital structure (Senior Secured, Senior Unsecured, Subordinated…). An ECM 'senior secured convertible' ask is an equity_type ask, not this."}
   reg_category: {column: reg_category, products: ["DCM"], description: "DCM. Regulatory category — stored as 'SEC Registered(Public)' (no space before the bracket), '144A', 'Reg S'… A bare '144A'/'Reg S'/'3(a)(2)' ask, and a 'delivery type SEC Registered' ask, both route HERE."}
   delivery_type: {column: delivery_type, products: ["DCM"], description: "DCM. Legal delivery type — a SCALAR now, only three values: '144A', 'RegS' (no space), '3(a)(2) Exempt'. Use only when the user says 'delivery'."}
   esg_bond: {column: esg_bond, products: ["DCM"], description: "DCM. GREEN / SUSTAINABILITY / SOCIAL. NULL means not an ESG-labelled bond."}
   issuer_ratings: {column: issuer_ratings, products: ["DCM"], description: "DCM. COMMA-separated ratings, each rendered 'AGENCY - VALUE(OUTLOOK)' and ordered by agency. The AGENCY NAME IS IN THE STRING, so match the agency directly. This is the only place a rating outlook is exposed. Never a pipe list."}
-  securities_maturity: {column: securities_maturity, products: ["DCM"], description: "DCM. Maturity date stored as TEXT in an unmeasured format (the deployed column is character data — the 2026-08-11 DATE conversion was reverted on ORA-01790). Safe to PROJECT and show; sorting or comparing it is a STRING operation until the stored format is measured, so caveat any ordering by maturity. NEVER use as time_dimension for time_grain — date_trunc on text fails. Future maturities are normal — never treat them as invalid or filter them out."}
+  securities_maturity: {column: securities_maturity, products: ["DCM"], description: "DCM. Maturity date stored as TEXT in an unmeasured format. Safe to PROJECT; sorting/comparing it is a STRING operation — caveat any ordering by maturity. NEVER use as time_dimension — date_trunc on text fails. Future maturities are normal."}
   tranche_status: {column: tranche_status, products: ["DCM"], description: "DCM. Tranche lifecycle status — the SAME source column as deal_status on DCM, so the two are identical there. NULL on every ECM row; for ECM status use deal_status, which is on THIS object."}
 
 # -------------------------------- FILTERS -----------------------------------
@@ -685,12 +685,13 @@ filters:
     operators: [like, is_null, is_not_null]
     case_insensitive: true
     description: >-
-      Pipe list on ECM (a single B&D bank string on DCM) — 'like %BANK%' means
-      the bank participated somewhere in the syndicate. Match a bank by its
-      STEM, never equality. 'Citi' means ONLY the five Citigroup Global Markets
-      subsidiaries — like '%CITIGROUP GLOBAL MARKETS%'; a name merely containing
-      'Citi' (CITIBANK, test entities) is NOT Citi for syndicate or B&D
-      purposes. Other stems: '%JPMORGAN%'/'%JP MORGAN%', '%GOLDMAN%',
+      Pipe list on both products (DCM: the full member list) — 'like %BANK%'
+      means the bank participated somewhere in the syndicate. Match a bank by
+      its STEM, never equality. 'Citi' = labels starting Citigroup / Citibank /
+      Citi ('Citigroup%', 'Citi %', 'Citibank%'; never bare '%citi%' — Citizens
+      and CITIC are competitors). On ECM deals with 10-digit ids members are
+      BROKER CODES (Citi shown as 'Citigroup (CITIUSA)'; others as codes — a
+      bank-name stem misses them). Other stems: '%JPMORGAN%'/'%JP MORGAN%', '%GOLDMAN%',
       '%MORGAN STANLEY%', '%BARCLAYS%', '%BANK OF AMERICA%'/'%MERRILL%',
       '%JEFFERIES%', '%ABN AMRO%', '%CREDIT SUISSE%'. There is no not_like
       operator, and NEVER negate participation to mean "another bank led it" —
@@ -946,14 +947,15 @@ computed_filters:
 
 unsupported_intents:
   syndicate_on_dcm:
-    patterns: ["syndicate members on the bond", "co-managers", "bookrunners for the DCM deal", "how many banks"]
+    patterns: ["co-managers on the bond", "bookrunners for the DCM deal", "which role did each bank have on the DCM deal"]
     reason: >-
-      On DCM the view exposes a single member — the B&D bank — not the full
-      syndicate, so member counts, "5+ syndicate" thresholds and role questions
-      are ECM-only.
+      DCM member lists carry NO roles or broker codes, so role questions and
+      per-role counts cannot be answered on DCM; the member list itself and
+      member counts can (syndicate_member_name).
     user_message: >-
-      For DCM I can only see the bill-and-deliver bank, not the rest of the
-      syndicate. I can show that, or answer the same question for ECM deals.
+      For DCM I can list the syndicate members, but the source records no
+      roles, so I can't say who was bookrunner or co-manager. I can show the
+      members, or answer the role question for ECM deals.
   role_attribution:
     patterns: ["who was the bookrunner", "which bank was lead on", "what role did citi have"]
     reason: >-
@@ -989,14 +991,13 @@ unsupported_intents:
       Selling restrictions by country aren't captured. Regulatory category
       (144A / Reg S / SEC Registered) is the closest available field.
   pricing_economics:
-    patterns: ["coupon rate", "what coupon", "re-offer price", "issue price", "yield of", "yield to maturity", "spread over", "spread to benchmark", "fees", "gross spread", "underwriting fee"]
+    patterns: ["spread over", "spread to benchmark", "new issue premium"]
     reason: >-
-      No price, yield, spread or fee columns exist on this view — only coupon
-      TYPE and FREQUENCY, which are structures, not rates.
+      No spread-to-benchmark column exists; price, yield, coupon (DCM) and the
+      fee columns (both products) ARE dimensions on this object — route those.
     user_message: >-
-      The pricing level (coupon rate / yield / spread / price) and fee economics
-      aren't available here. I can show the coupon type, coupon frequency, tenor
-      and maturity for the tranche instead. Would that help?
+      Spread to benchmark isn't captured. I can show the price, yield, coupon,
+      tenor, maturity and fee columns for the tranche instead.
 
 usage_notes:
   - Always set a product filter. One row per tranche — no deduplication.

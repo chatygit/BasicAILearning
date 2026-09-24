@@ -194,6 +194,20 @@ five-beat shape added to agents.yaml. Still to run: 18, 24; ⚡ args for 16 and 
       Allocation · Tranche Currency, five rows PER TRANCHE, no Product column;
       headline + at-a-glance line above. Capture the ⚡ run_bqs_query args
       whatever the outcome.
+- [ ] 37. "Show the Visa IPO deal card" (Ipreo deal 1447528575, QA) — PASS: one deal
+      row with issuer VISA, Common Stock, 406,000,000 size, 2,425 orders, priced
+      date filled, no "test" wording.
+- [ ] 38. "Top 5 investors by allocation on the Visa IPO" — PASS: order object,
+      allocation in SHARES, Investment Adviser / Hedge Fund categories shown, the
+      Kuwait and Fidelity accounts, no unit in headers.
+- [ ] 39. "List convertible deals priced in 2025, ECM" — PASS: both ECM sources
+      appear (8-char and 10-digit ids), deal size labelled as a bare number, no
+      currency assumed where it is blank.
+- [ ] 40. "Long-only investors on <an Ipreo ECM deal>" — PASS: Investment
+      Adviser rows included (no _key on those rows), the assumption stated.
+- [ ] 41. "Fees on the Visa IPO" — PASS: tranche object; per-share amounts with
+      the offer currency; gross spread = underwriting + management + selling
+      concession; never a SUM of rows presented as the deal fee.
 
 ## Run 4 order (UAT, fresh session each, after the 2026-09-21 promotion)
 36 (with ⚡ args) · 15 · 3 · 20 — each must be ONE turn with no "which one?"

@@ -2626,13 +2626,15 @@ for _srv in (ROOT / "app" / "mcpserver.py", ROOT / "app" / "bqs" / "ontology.py"
 # SECURITY's unit — equity_type decides shares vs bonds; counts are exact (full
 # digits, commas, never "3.0mm shares"); mixed-class tables carry a Security
 # column. A convertible's allocation printed as shares was the reported defect.
-check(has(SKILL, "figure is the row's `demand_unit`") and has(SKILL, "COUNTS ARE EXACT")
+check(has(SKILL, "the SECURITY sets the\nunit of every demand / allocation figure") and has(SKILL, "COUNTS ARE EXACT")
       and has(SKILL, "Convertible Preferred /\nExchangeable Notes → bonds") and has(SKILL, "PAR AMOUNT for the second"),
       "[units] SKILL lost the demand_unit / par-size / exact-count doctrine (PO + census J, 2026-09-21)")
 check(not has(SKILL, "mm shares"),
       "[units] SKILL abbreviates a share count again ('mm shares') — counts are exact")
-check(has(ORDER, "in the row's demand_unit — SHARES on common stock, BOND on convertibles"),
-      "[units] order card lost the demand_unit note on order_allocation")
+# 2026-09-24: the unit is the SECURITY's (equity_type), never demand_unit —
+# converted currency/face bids carry a share figure beside a CURRENCY unit.
+check(has(ORDER, "a SHARE count, or BONDS on convertibles per equity_type"),
+      "[units] order card lost the security-unit note on order_allocation")
 
 # TC1 FOURTH FAILURE (UAT 2026-09-21): the order card's own example "Top 10
 # investors on a DCM deal" taught the aggregate shape (metric + limit) for a

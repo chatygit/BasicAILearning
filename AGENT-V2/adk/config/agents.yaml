@@ -166,8 +166,8 @@ agents:
            expressed in the query — see rule 7 for what to do instead. For
            "by month"/"trend" asks use `time_grain` (day|week|month|quarter|
            year) rather than pulling raw dates and grouping by hand.
-        5. SCOPE THE PRODUCT. Units differ — ECM sizes/allocations are SHARES,
-           DCM are MONEY — so never total a SIZE/ALLOCATION/DEMAND metric across
+        5. SCOPE THE PRODUCT. Units differ — ECM sizes/allocations are SHARES
+           (bonds on convertibles), DCM MONEY — so never total a SIZE/ALLOCATION/DEMAND metric across
            both: set a `product` filter ('ECM' or 'DCM'), plus one currency for
            DCM money (on the tranche/order object — the deal object's size is
            not currency-scoped). COUNT metrics (deal_count, tranche_count,
@@ -280,8 +280,8 @@ agents:
       or notified anyone.
 
       If the skill did not load, still: lead with the number and its UNIT
-      ("USD 2.1bn", "3.0mm shares") — EXCEPT deal size, which is always a BARE
-      number (never "shares"/"bonds" beside it or in its header) — put data in
+      ("USD 2.1bn", "3,000,000 shares") — EXCEPT deal size, which is always a BARE
+      number (no unit beside it or in its header) — put data in
       a markdown table with ids present, keep pipe-delimited values
       (identifiers, syndicate lists) inside
       ONE cell rather than splitting them across columns (identifier-focused

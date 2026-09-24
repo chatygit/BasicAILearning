@@ -38,11 +38,9 @@
 #   INVESTOR / DCM   124,668   9,871          12.6 name variants per id
 #   INVESTOR / ECM     2,982   1,157
 #   ISSUER   / DCM     6,907     671
-#   ISSUER   / ECM   not in the Q28 result. V14 OVERTURNS that reading: ECM
-#                    issuer names ARE populated at source (~42,872 of 44,829
-#                    rows) and the diagnostics conclude the missing Q28 row was
-#                    an OCR drop, not a defect. Treat ECM issuer resolution as
-#                    WORKING; do not code a workaround. Re-verify on PROD.
+#   ISSUER   / ECM   PARTIAL: names come from the party master, else the
+#                    orderbook issuer by GFCID; the newer ECM source names
+#                    every deal but has no GFCID (id-less rows). A miss is 'not recorded', never 'no issuer'.
 #   DEAL     / DCM    21,068   21,068         1:1
 #   DEAL     / ECM    22,347   18,399         pre-rewrite. The DEAL branch reads
 #                    VW_DEAL_SUMMARY, which V1 collapsed to 18,399 = 18,399, so
@@ -103,8 +101,8 @@ how_to_use:
      capital_markets_tranche), filter 'issuer_name' like '%NAME%', project issuer_name
      AND issuer_id. Deal name → capital_markets_deal / capital_markets_tranche / capital_markets_order,
      filter 'deal_name' like '%NAME%', project deal_name AND deal_id. The order
-     object carries NO issuer_name — an issuer-scoped order ask filters
-     deal_name, or gets deal ids from the deal object first."
+     object carries issuer_name too, so an issuer-scoped order ask filters it
+     inline."
   - "THE INLINE PATH RESOLVES FOR FREE. When one of those name filters matches
      MORE THAN ONE distinct entity, the server attaches a disambiguation block
      to the SAME response — the resolution, already done, at zero extra cost.
@@ -181,10 +179,8 @@ how_to_use:
      not render two empty labelled columns there: disambiguate DCM investors on
      entity_activity_count and last_active, and say the enrichment is not
      captured for DCM. ISSUER (sector/ticker) and DEAL (status/issuer) read real
-     source columns on both products, but only the ECM side is MEASURED (V14:
-     ticker and sector on ~42.2k-42.9k of 44,829 ECM transaction rows); DCM
-     population is UNMEASURED, so read a blank there as 'not captured', never as
-     'no sector'."
+     source columns on both products; populations are partial and unmeasured
+     per environment, so read a blank as 'not captured', never as 'no sector'."
   - "MISSPELLINGS: matching is contains-based, so a genuine typo ('blakrock')
      cannot match anything. Do not loop trying variants — a zero-row name search
      makes the server run an UNSCOPED DISTINCT probe over this whole unindexed
@@ -278,8 +274,8 @@ dimensions:
   entity_id: {column: entity_id, description: "Resolved entity id (GP id / GFCID / DEAL_ID). TEXT — quote it, leading zeros matter. ALWAYS project it. It is NULLABLE (2 of 10 Q29 BlackRock candidates) — a NULL id is not a drill-down handle."}
   entity_activity_count: {column: entity_activity_count, description: "Activity: deal count (investor/issuer) or tranche count (deal). The ranking signal — dormant/test entities sink. Split across the name variants of one id, so compare families only after summing per id. NULLABLE on the DEAL branch: it is the deal view's pre-computed tranche_count, which is NULL on an ECM deal that joined no tranche rows — so the primary sort key itself can be NULL there, not just last_active. Never NULL on the INVESTOR/ISSUER branches (a COUNT DISTINCT)."}
   last_active: {column: last_active, description: "Most recent pricing/activity timestamp. NULLABLE — ECM investor rows draw it from the order view's pricing date, which is NULL when an order never matched a priced tranche. NULL ordering on a DESC sort is UNVERIFIED here; keep entity_id asc as the final key."}
-  context_value_1: {column: context_value_1, description: "TYPE-DEPENDENT — investor: category · issuer: sector · deal: status. ALWAYS NULL for INVESTOR + DCM (the order view casts investor category to NULL on DCM). Label the column for the type you queried."}
-  context_value_2: {column: context_value_2, description: "TYPE-DEPENDENT — investor: region · issuer: ticker · deal: issuer name. ALWAYS NULL for INVESTOR + DCM (the order view casts investor region to NULL on DCM). Label the column for the type you queried."}
+  context_value_1: {column: context_value_1, description: "TYPE-DEPENDENT — investor: category · issuer: sector · deal: status. Blank where the source did not record it (DCM investor category ~67 %). Label the column for the type you queried."}
+  context_value_2: {column: context_value_2, description: "TYPE-DEPENDENT — investor: region · issuer: ticker · deal: issuer name. Blank where the source did not record it (DCM investor region ~95 % filled). Label the column for the type you queried."}
 
 # -------------------------------- FILTERS ----------------------------------
 filters:
