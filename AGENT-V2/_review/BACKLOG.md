@@ -154,6 +154,10 @@ Batch B:
       vw_tranche_summary 219-389; view-notes addendum 9; deploy-check rows
       22/23/24 + K8/K9; contract test 3-branch aware; tranche price +
       settlement_ts widened to both products; investor_region notes ISO-3).
+      VERIFIED ON QA 2026-09-24 (all four Visa cards after the final redeploy:
+      whole-share conversions, per-share fees, Citigroup (CITIUSA), offer-date
+      pricing). Remaining: handover to the view team with the index/stats ask,
+      agent run 5 (QA-PROMPTS 37-41), and the ASKS-external questions. History:
       DEPLOYED TO QA 2026-09-22 (names compiled → N3 closed). Smoke N4: deal
       19,583 / tranche 19,973 / order 658,680 Ipreo rows; grain holds on both
       products (deal ECM 39,165, DCM 21,190; order ECM 728,793, DCM 5,826,467);
