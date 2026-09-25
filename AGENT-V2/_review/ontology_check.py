@@ -2187,7 +2187,7 @@ check(has(SKILL, "CITIDEV CITIUSA CITIAUS CITIASIA CITIUKE CITGMCA")
       and has(SKILL, "JPMSEC JPMORSEC") and has(SKILL, "JEFFLLC"),
       "[capability] SKILL lost the broker-code table (Citi ECM B&D codes + "
       "other banks) — dropped once by a bullet rewrite on 2026-09-15")
-check(has(SKILL, "Citi's own labels (measured UAT 2026-09-15")
+check(has(SKILL, "Citi's own labels: plain `Citigroup` is the MOST common dealer label")
       and has(SKILL, "Citizens"),
       "[semantic] SKILL lost the Citi-label doctrine — agents fall back to "
       "'%CITIGROUP GLOBAL MARKETS%' (misses plain Citigroup) or '%citi%' "

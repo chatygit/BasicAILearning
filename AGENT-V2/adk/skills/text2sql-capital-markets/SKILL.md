@@ -299,13 +299,14 @@ query" are OUR mechanics. Work silently; disclose SCOPE decisions ("across the
 ### 3e. Entitlement is a silent constraint, not a topic
 
 Discovery returns **`entitled_products`** — the complete set this user may
-query; it rides on EVERY query response, so read it from the MOST RECENT one.
-Query only entitled products from the first request: an ask that doesn't name
-a product is an ask about the entitled set. Never run, offer or suggest a query
-for a product outside it. If the user named an unentitled product (an 8-digit
-numeric transaction id is DCM), do NOT run it: open with the §8 sentence
-("Your profile isn't entitled to <product> data…"), never "I can only
-access", then give the entitled half. Absent `entitled_products` = both
+query; read it from the MOST RECENT response. Query only entitled products
+from the first request: an ask that doesn't name a product is an ask about
+the entitled set. Never run, offer or suggest a query for a product outside
+it. If the user NAMED an unentitled product, do NOT run it: open with the §8
+sentence ("Your profile isn't entitled to <product> data…"), never
+"I can only access", then give the entitled half. An id alone names no product
+(8-digit ids exist on BOTH): run it scoped to the entitled set, and give the
+§8 sentence only when that returns 0 rows. Absent `entitled_products` = both
 products queryable.
 
 ## 4. Entity resolution — only when you must (ONE request, never an aggregate)
@@ -478,7 +479,7 @@ report the split.
   attributed to a named bank** (position-aligned pipe lists — show members and
   roles side by side and say so). An **ECM league table is impossible** (one
   list per tranche); offer a named bank's participation.
-- **Citi's own labels (measured UAT 2026-09-15, 59 spellings): plain `Citigroup` is the MOST common dealer label (46.6k tranches), then `Citigroup Global Markets Inc./Inc/Limited/Australia/Europe/Asia/Singapore/Japan`, `Citi Group GMG`, `Citibank …`.** Match with `like 'Citigroup%'`, `like 'Citi %'`, `like 'Citibank%'` — NEVER a bare contains `%citi%`: it also matches **Citizens** (Financial / Capital Markets / Securities) and **CITIC** (China CITIC Bank, CITIC Securities), real competitor banks. SOLO counts EVERY Citi legal entity (a deal run by two of them is still SOLO — PO ruling); the view's SOLO and DCM B&D flags use that anchored rule. ECM B&D goes by broker CODE, not name: Citi = `CITIDEV CITIUSA CITIAUS CITIASIA CITIUKE CITGMCA`; a test label or a bank entity is not the B&D broker. Other banks' codes: JPMorgan `JPMSEC JPMORSEC` · Goldman `GSCO` · Morgan Stanley `MSCO` · Barclays `BARCAP` · BofA `BAMLS` · Jefferies `JEFFLLC`.
+- **Citi's own labels: plain `Citigroup` is the MOST common dealer label (46.6k tranches), then `Citigroup Global Markets Inc./Inc/Limited/Australia/Europe/Asia/Singapore/Japan`, `Citi Group GMG`, `Citibank …`.** Match with `like 'Citigroup%'`, `like 'Citi %'`, `like 'Citibank%'` — NEVER a bare contains `%citi%`: it also matches **Citizens** (Financial / Capital Markets / Securities) and **CITIC** (China CITIC Bank, CITIC Securities), real competitor banks. SOLO counts EVERY Citi legal entity (a deal run by two of them is still SOLO — PO ruling); the view's SOLO and DCM B&D flags use that anchored rule. ECM B&D goes by broker CODE, not name: Citi = `CITIDEV CITIUSA CITIAUS CITIASIA CITIUKE CITGMCA`; a test label or a bank entity is not the B&D broker. Other banks' codes: JPMorgan `JPMSEC JPMORSEC` · Goldman `GSCO` · Morgan Stanley `MSCO` · Barclays `BARCAP` · BofA `BAMLS` · Jefferies `JEFFLLC`.
 - Pipe lists — `like` only, never equality, never NOT-LIKE: `syndicate_member_name`,
   `syndicate_role`, `broker_code`, `bnd_bank` (ECM), `identifier_type`/
   `identifier_value`, `currencies` (deal). Do not use `bnd_broker` (`bnd_bank`
@@ -570,7 +571,7 @@ returns rows — have no safety net at all:
 | "priced / announced deals" | case-insensitive; `priced`/`Priced` and `announced`/`Announced` are distinct stored values — **merge the variants when grouping or the buckets will not sum** |
 | "US investors" | `in ['United States','US']` — **never `like '%US%'`**: it matches RUSSIA, AUSTRIA, AUSTRALIA |
 | "non-US", any NOT-predicate | negate that same pair, then count the NULL bucket with `is_null` and disclose it — unknown is not non-US |
-| "one-on-one / 1:1" | `meeting_type eq '1:1'` ("One-to-One" matches nothing). "Other than 1x1" excludes ONLY `1:1` — **`No Meeting` IS a meeting type and its orders belong in the answer** (user ruling 2026-08-18); project `meeting_type`. Exclude `No Meeting` only when the words require a meeting to have happened, and say so |
+| "one-on-one / 1:1" | `meeting_type eq '1:1'` ("One-to-One" matches nothing). "Other than 1x1" excludes ONLY `1:1` — **`No Meeting` IS a meeting type and its orders belong in the answer**; project `meeting_type`. Exclude `No Meeting` only when the words require a meeting to have happened, and say so |
 | "CUSIP", any identifier type | `like` always (pipe list — equality never matches); types UPPER-normalized in the view since 2026-09-03, keep case-insensitive anyway |
 | "10-year" | `tenors like '%10-Y%'` — catches both stored spellings (`10-YEAR`, `10-Y`); `10Y` matches nothing. A 1-digit tenor (`%2-Y%`) also matches `12-Y`/`22-Y`: project `tenors` and say which labels you counted |
 | "fixed-to-float", "semi-annual" | `Fixed to FRN`, `Semi Annual` — spaces, not hyphens |
