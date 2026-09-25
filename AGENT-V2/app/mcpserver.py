@@ -421,8 +421,9 @@ def _attach_entitlement_scope(
                 "change mid-conversation). Scope every request to it from the "
                 "start; never run a query for, offer, or suggest a product "
                 "outside it. If the user explicitly names an unentitled "
-                "product, say access does not cover it in one line — WITHOUT "
-                "running the query — and answer with the entitled portion."
+                "product, do NOT run the query: say \"Your profile isn't "
+                "entitled to <product> data\" (about THEIR access, never "
+                "\"I can only access\") and answer with the entitled portion."
             )
     return result
 
@@ -562,8 +563,8 @@ def _entitlement_gate(request: dict) -> dict | None:
             "error": True,
             "code": "product_not_entitled",
             "message": (
-                f"You are not entitled to {blocked} data. Your access covers: "
-                f"{', '.join(entitled)}. Ask about an entitled product instead."
+                f"Your profile isn't entitled to {blocked} data; your access "
+                f"covers {', '.join(entitled)}. Ask about an entitled product."
             ),
         }
 

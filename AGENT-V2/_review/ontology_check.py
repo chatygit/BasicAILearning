@@ -1201,6 +1201,15 @@ if MCPSERVER.exists():
           "[answer] SKILL.md §3e no longer reads entitled_products — the "
           "agent is back to offering products the caller cannot query and "
           "paying a turn for the denial")
+    # WORDING (user, 2026-09-24): an ECM-only user asking for a DCM transaction
+    # got "I am sorry, I can only access ECM data" — the limitation must be
+    # stated as the USER'S entitlement, in the same sentence on both paths
+    # (query denied by the server, or never run per §3e).
+    check(has(SKILL, "Your profile isn't entitled to <product> data") and has(SKILL, "I can only"),
+          "[answer] SKILL.md §3e/§8 lost the fixed entitlement sentence — the agent "
+          "improvises first-person wording ('I can only access ECM data')")
+    check("Your profile isn't entitled to" in text(ROOT / "app" / "mcpserver.py"),
+          "[answer] mcpserver.py entitlement note/denial no longer carries the fixed sentence")
     check(has(ROOT / "adk" / "config" / "agents.yaml", "entitled_products"),
           "[answer] agents.yaml: the follow-ups rule no longer names "
           "entitled_products — the skill-failed fallback path offers "

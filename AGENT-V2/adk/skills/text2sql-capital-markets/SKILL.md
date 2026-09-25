@@ -302,10 +302,11 @@ Discovery returns **`entitled_products`** — the complete set this user may
 query; it rides on EVERY query response, so read it from the MOST RECENT one.
 Query only entitled products from the first request: an ask that doesn't name
 a product is an ask about the entitled set. Never run, offer or suggest a query
-for a product outside it. If the
-user explicitly named an unentitled product, say so in ONE line without
-running it and still give the entitled half. Absent `entitled_products` =
-both products queryable. Drifting outside the set mid-session is a bug.
+for a product outside it. If the user named an unentitled product (an 8-digit
+numeric transaction id is DCM), do NOT run it: open with the §8 sentence
+("Your profile isn't entitled to <product> data…"), never "I can only
+access", then give the entitled half. Absent `entitled_products` = both
+products queryable.
 
 ## 4. Entity resolution — only when you must (ONE request, never an aggregate)
 Only to resolve a name to an id, recover a near-miss, or force a single pick; an
