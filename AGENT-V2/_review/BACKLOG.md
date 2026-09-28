@@ -91,6 +91,14 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       about. Ask the platform whether a data sub-agent's 'not available' should
       ever route to web search (MRM: an answer sourced outside the governed
       data, presented as the agent's).
+- [ ] DONE (in repo 2026-09-28, undeployed) SRV-9 shares-vs-bonds first pass: the
+      planner appends `equity_type` to any ECM request whose metric or
+      dimensions touch a unit-bearing column (demand / allocation / size), the
+      response carries `unit_note`, the four ECM order examples project it, and
+      the SKILL says read the unit BEFORE labelling. Cause (user 2026-09-28):
+      the agent labelled a convertible's book 'shares', got corrected, then
+      checked equity_type — no example had ever projected it. Verify with
+      QA-PROMPTS 42 after the server push.
 - [ ] SRV-8 disambiguation probe runs SERIAL after the answer (PROD 2026-09-25:
       Fidelity ask execute 22.5 s + enrich 20.1 s — the probe re-scanned the
       order view because investor_name was not projected). Fix: fire the

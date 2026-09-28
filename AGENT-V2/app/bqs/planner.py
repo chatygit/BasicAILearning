@@ -135,6 +135,11 @@ class QueryPlan:
     # single-product fields imply (planner, 2026-09-24) — and by which fields.
     narrowed_product: str | None = None
     narrowed_by: list[str] = field(default_factory=list)
+    # equity_type was appended to the projection by the planner because the
+    # request carries an ECM demand / allocation / size figure without it
+    # (2026-09-28): the security decides shares vs bonds, and a model that
+    # cannot see it labels convertibles 'shares' on the first answer.
+    unit_auto: bool = False
 
 
 _VALID_GRAINS = {"day", "week", "month", "quarter", "year"}
@@ -539,6 +544,49 @@ def _check_product_applicability(req, spec) -> tuple[str | None, list[str]]:
     return narrowed, decided
 
 
+# Columns whose ECM unit is set by the security (shares, or bonds on
+# convertibles). A request that projects or aggregates one of these without
+# `equity_type` cannot be labelled correctly by the agent; counts are unit-free.
+_UNIT_COLUMNS = {
+    "order_demand_qty", "order_allocation", "demand_as_submitted",
+    "total_demand", "total_allocation", "deal_size", "tranche_size",
+}
+
+
+def _auto_project_equity_type(req: BQSRequest, spec: OntologySpec) -> bool:
+    """Append `equity_type` to the projection of an ECM unit-bearing request.
+
+    UAT 2026-09-28 (user): the agent labelled a convertible deal's allocations
+    'shares', was corrected, and only THEN looked at equity_type. Prose said
+    'the security sets the unit' but no worked example projected equity_type,
+    so the first answer never had it. This makes the unit visible in the rows
+    on the first pass: when the product scope includes ECM, the object has an
+    `equity_type` dimension, and the request's metric or dimensions touch a
+    unit-bearing column, `equity_type` joins the group keys. A single deal has
+    one security, so nothing splits; across deals the split by security is
+    exactly the 'never total shares with bonds' rule.
+    """
+    if "equity_type" not in spec.dimensions or "equity_type" in req.dimensions:
+        return False
+    scope: set[str] = set()
+    for f in req.filters:
+        if f.field == "product":
+            v = f.value
+            scope |= {str(x).upper() for x in (v if isinstance(v, list) else [v])}
+    if scope and "ECM" not in scope:
+        return False
+    ms = spec.metrics.get(req.metric)
+    touched = {getattr(ms, "column", None)} if ms is not None else set()
+    for name in req.dimensions:
+        d = spec.dimensions.get(name)
+        if d is not None:
+            touched.add(getattr(d, "column", None))
+    if not (touched & _UNIT_COLUMNS):
+        return False
+    req.dimensions = list(req.dimensions) + ["equity_type"]
+    return True
+
+
 def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
     """Validate the request against the ontology and build a QueryPlan."""
     metric = _resolve_metric(req, spec)
@@ -546,6 +594,7 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
     _check_unsupported(spec, req)
 
     narrowed, narrowed_by = _check_product_applicability(req, spec)
+    unit_auto = _auto_project_equity_type(req, spec)
     dims = _resolve_dimensions(req, spec)
     filters = [_validate_filter(spec, f) for f in req.filters]
     computed_filters = [
@@ -656,6 +705,7 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
     return QueryPlan(
         narrowed_product=narrowed,
         narrowed_by=narrowed_by,
+        unit_auto=unit_auto,
         spec=spec,
         metric=metric,
         dimensions=dims,

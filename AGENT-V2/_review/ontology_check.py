@@ -2687,6 +2687,21 @@ check(not has(SKILL, "mm shares"),
 check(has(ORDER, "a SHARE count, or BONDS on convertibles per equity_type"),
       "[units] order card lost the security-unit note on order_allocation")
 
+# SHARES VS BONDS FIRST-PASS (user, 2026-09-28): the agent labelled a
+# convertible's allocations 'shares', was corrected, then checked equity_type.
+# Cause: no ECM order example projected equity_type. Three layers: the examples
+# carry it, the SKILL says read it BEFORE labelling, the planner appends it to
+# any ECM unit-bearing request and the service says so (unit_note).
+check(text(ORDER).count(", equity_type") >= 4,
+      "[units] order card: the ECM worked examples no longer project equity_type — "
+      "the model copies examples, so the first answer defaults to 'shares' again")
+check("_auto_project_equity_type" in text(PLANNER) and "_UNIT_COLUMNS" in text(PLANNER)
+      and "unit_auto=unit_auto" in text(PLANNER),
+      "[units] planner.py: lost the equity_type auto-projection on ECM unit-bearing requests")
+check('result["unit_note"]' in text(ROOT / "app" / "services" / "domain_query_service.py"),
+      "[units] domain_query_service.py: the auto-projected equity_type is not explained to the agent")
+check(has(SKILL, "read the unit from it per row BEFORE labelling"),
+      "[units] SKILL lost the 'unit before label' rule")
 # TC1 FOURTH FAILURE (UAT 2026-09-21): the order card's own example "Top 10
 # investors on a DCM deal" taught the aggregate shape (metric + limit) for a
 # one-deal ask — models copy examples over prose. Both one-deal examples must

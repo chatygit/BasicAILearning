@@ -207,6 +207,9 @@ five-beat shape added to agents.yaml. Still to run: 18, 24; ⚡ args for 16 and 
       currency assumed where it is blank.
 - [ ] 40. "Long-only investors on <an Ipreo ECM deal>" — PASS: Investment
       Adviser rows included (no _key on those rows), the assumption stated.
+- [ ] 42. "Top 5 investors by allocation on <a convertible ECM deal>" — PASS:
+      the FIRST answer says bonds (equity_type in the rows, unit_note in the
+      response); no correction needed, no "Allocation (Shares)" header.
 - [ ] 41. "Fees on the Visa IPO" — PASS: tranche object; per-share amounts with
       the offer currency; gross spread = underwriting + management + selling
       concession; never a SUM of rows presented as the deal fee.

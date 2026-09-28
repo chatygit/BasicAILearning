@@ -357,7 +357,7 @@ and `investor_count` undercounts — say so on a headcount.
 | firm account | trade · `firm_account_number/type` (ECM trades); designation · `firm_account` (ECM cards); DCM order-side candidate = `obo_name` |
 | "lockup expiring" | tranche · `lockup_ts` (ECM) |
 | firm / pot orders | order · `is_firm_order` × `is_pot` (both products; case variants; NOT mutually exclusive) |
-| wall-crossed investors | order · `wall_crossed` (ECM; population unmeasured) |
+| wall-crossed investors | order · `wall_crossed` |
 | "investors NEVER allocated despite placing orders" | ONE request: `total_allocation` grouped by `[investor_name, investor_id]` + scope filters + **`having` total_allocation `eq` 0** — never a row-level `order_allocation eq 0` filter. Say "no allocation recorded in this scope"; expect a HUGE DCM list |
 | "top investors by ORDER SIZE" across products | NEVER `total_order_amount` with `product in [ECM,DCM]` — it SUMs the ECM IOI limit AND mixes shares with money. Scope DCM (`total_order_amount`) or use `total_demand` with `product` in dimensions |
 | "allowed order types" / "can investors order on spread / yield / max price" | tranche · `allowed_order_spread` `allowed_order_yield` `allowed_order_max_price` (DCM Y/N per tranche) — list the Y ones; NULL = not recorded |
@@ -415,9 +415,9 @@ it. **ECM DEAL SIZE is a share count for the first group and a PAR AMOUNT for th
 Never total across products or equity types: `product` (and, on ECM,
 `equity_type`) go in `dimensions`; every size/allocation/demand metric
 REQUIRES a `product` filter.
-**An ECM order table spanning several deals projects `equity_type` as a
-"Security" column and the unit per row** — one "Allocation" column read as
-shares mislabels every convertible row.
+**Every ECM demand / allocation request projects `equity_type` (server-added
+if omitted): read the unit from it per row BEFORE labelling, never assume
+shares; mixed securities show it as a "Security" column.**
 **COUNTS ARE EXACT: shares / bonds / units in full digits with thousands
 separators — "12,349,121 shares" — never rounded; money may abbreviate.**
 **EXCEPTION — DEAL SIZE shows a BARE number (user ruling 2026-08-14): never

@@ -226,6 +226,47 @@ def test_dual_scope_with_conflicting_single_product_fields_is_rejected():
     assert "investor_category_key" in e.message or "investor_qib_status" in e.message
 
 
+def test_ecm_allocation_request_gets_equity_type_projected():
+    # 2026-09-28: convertibles were labelled 'shares' on the first answer
+    # because the rows never carried the security. The planner now adds it.
+    if not _deps():
+        SKIPPED.append("equity_type auto-projection (pydantic/yaml not installed)")
+        return
+    plan = _plan({
+        "source": "capital_markets_order",
+        "metric": "total_allocation",
+        "dimensions": ["investor_name", "investor_id"],
+        "filters": [{"field": "product", "op": "eq", "value": "ECM"}],
+    })
+    assert plan.unit_auto is True
+    assert [d.business_name for d in plan.dimensions][-1] == "equity_type"
+
+
+def test_equity_type_not_added_for_counts_or_dcm_or_when_present():
+    if not _deps():
+        SKIPPED.append("equity_type auto-projection negatives (pydantic/yaml not installed)")
+        return
+    count = _plan({
+        "source": "capital_markets_order", "metric": "order_count",
+        "dimensions": ["investor_name"],
+        "filters": [{"field": "product", "op": "eq", "value": "ECM"}],
+    })
+    assert count.unit_auto is False and all(d.business_name != "equity_type" for d in count.dimensions)
+    dcm = _plan({
+        "source": "capital_markets_order", "metric": "total_allocation",
+        "dimensions": ["investor_name"],
+        "filters": [{"field": "product", "op": "eq", "value": "DCM"}],
+    })
+    assert dcm.unit_auto is False
+    present = _plan({
+        "source": "capital_markets_order", "metric": "total_allocation",
+        "dimensions": ["investor_name", "equity_type"],
+        "filters": [{"field": "product", "op": "eq", "value": "ECM"}],
+    })
+    assert present.unit_auto is False
+    assert [d.business_name for d in present.dimensions].count("equity_type") == 1
+
+
 def test_descoped_field_on_dcm_is_now_accepted():
     # Release 3: investor_category works on BOTH products — the old
     # rejection must NOT fire (this is the de-scoping's regression guard).

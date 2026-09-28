@@ -310,6 +310,13 @@ class DomainQueryService:
                     f"{plan.narrowed_product}. Say the answer is "
                     f"{plan.narrowed_product}-only; no retry needed."
                 )
+            if getattr(plan, "unit_auto", False):
+                result["unit_note"] = (
+                    "equity_type was added to the rows: ECM figures are in the "
+                    "SECURITY's unit — shares, or BONDS on Convertible Bonds / "
+                    "Convertible Preferred / Exchangeable Notes. Label every "
+                    "figure from that column; never default to shares."
+                )
             # NOTE: `sql_audit` puts the generated SQL INTO the response the
             # agent sees. The skill's confidentiality rule ("never disclose the
             # generated SQL") is therefore a real, load-bearing instruction —
