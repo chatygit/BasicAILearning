@@ -91,6 +91,13 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       about. Ask the platform whether a data sub-agent's 'not available' should
       ever route to web search (MRM: an answer sourced outside the governed
       data, presented as the agent's).
+- [ ] SRV-8 disambiguation probe runs SERIAL after the answer (PROD 2026-09-25:
+      Fidelity ask execute 22.5 s + enrich 20.1 s — the probe re-scanned the
+      order view because investor_name was not projected). Fix: fire the
+      probe concurrently with the main query (both derive from the plan;
+      thread pool, 2 connections), or skip it when the request already
+      projects the name (already free) — and log which. The SKILL rule stands;
+      the server should not pay 20 s when the model forgets it.
 - [ ] SRV-1 MCP result de-dup: `output_schema=None` + one compact TextContent, compact `tool_serializer`; lazy imports or extended test stubs — every result reaches the model twice (~16k tokens per tranche fetch) (test_entitlement_gate.py 15 cases; gate 1538/1210 on the wrapper; importorskip Client test; PROMOTE-CHECKLIST FastMCP/ADK check; exclusive with ASKS-external §1b)
 - [ ] SRV-4 tool schema via `Annotated[..., Field(description=...)]` with the metric-slot rule on dimensions/filters; docstrings < 1,500/800 chars; `question` signature untouched; tools.yaml:48 nine — −800 tokens/call, class-1 defence at the argument (gate 1111, 1210 moved, new textual pins; QA 2, 24)
 - [ ] SRV-3 `ECM_DCM_SQL_AUDIT` default off, one-line paging keeping "rows N-M", delete `scored`; SKILL 895 drops generated_sql only — 300-550 tokens/result (test_response_paging.py :144 rewritten; gate 1239/1243-1246/2496 moved)
@@ -336,7 +343,21 @@ Batch B:
       tiers are empty. Entity view: name-only issuers become id-less rows
       (already a known class, entity_id is_not_null). Before building: PROD
       A0 + row 1e + the party-master count (PROMOTE-CHECKLIST PROD-side).
-- [ ] STATUS EXCLUSION (Vinit 2026-09-21) — censused UAT (db-asks K, closed):
+- [ ] STATUS EXCLUSION — BUILT IN REPO 2026-09-28 on Vinit's answer (DCM only;
+      ECM waits for Alex): tranche/deal/order views drop DCM tranches with
+      cancelled / postponed / deleted / archived status (NULL-safe, UPPER),
+      DCM orders with deleted / cancelled status and the whole 'RQ' legacy
+      load (ITEM_SOURCE; the deal view's hoisted OC aggregate carries the same
+      filter + an EXISTS against excluded tranches); gate [status] pins;
+      deploy-check rows 25/25b (tranche), 26/26b/26c (order), 27/27b (deal);
+      doctrine: SKILL §7c "excluded on DCM too" + count default priced /
+      freeToTrade, catalogs (order_status, tranche_status, deal_status), QA 28
+      flipped. Expected on UAT: −1,367 tranches, −972 deals, DCM orders
+      5.83M → ~1.25M. Open: Vinit's three follow-ups (RQ-era Settled in
+      counts, trades/hedges on excluded tranches, 'discarded'), Alex on ECM
+      Postponed — ASKS-external §6. Deploy with the next view batch, then
+      B-DCM / C / D-DCM. History:
+- [x] STATUS EXCLUSION (Vinit 2026-09-21) — censused UAT (db-asks K, closed):
       TRANCHES: DCM only (ECM tranche status is NULL on 50,510/50,518) — exclude
       UPPER(STATUS) IN (ARCHIVED 975, CANCELLED 335, POSTPONED 54, DELETED 3;
       'discarded' is not a stored value): 972 DCM deals disappear, 264 shrink,

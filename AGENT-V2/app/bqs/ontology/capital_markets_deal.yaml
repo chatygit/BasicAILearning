@@ -427,9 +427,10 @@ filters:
       Deal lifecycle status. ALWAYS compare case-insensitively (UPPER both sides)
       and MERGE the case variants before reporting a breakdown, or the buckets
       will not sum to the stated total.
-      DCM stored literals — all 16 measured (Q17): Settled, priced, Priced,
-      announced, Announced, allocated, freeToTrade, subject, draft, cancelled,
-      deleted, archived, postponed, confidential, 'Final Settled', and NULL.
+      DCM stored literals: Settled, priced, Priced, announced, Announced,
+      allocated, freeToTrade, subject, draft, confidential, 'Final Settled',
+      NULL — cancelled / deleted / archived / postponed tranches are excluded
+      by the view, so a deal never shows them.
       Note the SPACE in 'Final Settled', the camelCase in 'freeToTrade' (render
       it "Free to Trade"), and that a NULL status exists — is_null is available
       to count it.

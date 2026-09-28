@@ -254,7 +254,9 @@ WITH agg AS (
                     THEN 1 END) AS dcm_dupcur,
          COUNT(CASE WHEN TOTAL_DEMAND > 0 THEN 1 END) AS dcm_demand_deals,
          COUNT(CASE WHEN ORDER_COUNT > 0 THEN 1 END) AS dcm_ordered_deals,
-         COUNT(CASE WHEN SUBSCRIPTION_RATIO IS NOT NULL THEN 1 END) AS subs_ratio_deals
+         COUNT(CASE WHEN SUBSCRIPTION_RATIO IS NOT NULL THEN 1 END) AS subs_ratio_deals,
+         COUNT(CASE WHEN UPPER(DEAL_STATUS) IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')
+                    THEN 1 END) AS dcm_excluded_status
   FROM DGSTREAM.VW_DEAL_SUMMARY
   WHERE PRODUCT = 'DCM'
 )
@@ -290,6 +292,13 @@ SELECT '15. DCM deals still carry demand (lever C hoist intact)', 'Y',
 UNION ALL
 SELECT '15c. DCM deals with SUBSCRIPTION_RATIO (INFO — helper wave)', '(info)',
        TO_CHAR(subs_ratio_deals), 'INFO' FROM agg
+UNION ALL
+SELECT '27. DCM deals (INFO — status exclusion 2026-09-28: UAT 47,297 before, ~972 fewer expected)', '(info)',
+       TO_CHAR(rows_), 'INFO' FROM agg
+UNION ALL
+SELECT '27b. DCM deal status never an excluded value', 'Y',
+       CASE WHEN dcm_excluded_status = 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_excluded_status = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 ORDER BY 1;
 
 -- C. TRANCHE VIEW — ONE scan. Dies alone if VW_TRANCHE_SUMMARY is old.
@@ -319,7 +328,10 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                     THEN TOTAL_FEE END) AS ecm_ipreo_fee,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN PRICE END) AS ecm_ipreo_price
+                    THEN PRICE END) AS ecm_ipreo_price,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN 1 END) AS dcm_rows,
+         COUNT(CASE WHEN PRODUCT = 'DCM' AND UPPER(TRANCHE_STATUS) IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')
+                    THEN 1 END) AS dcm_excluded_tr
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
@@ -369,6 +381,13 @@ UNION ALL
 SELECT '23c. Ipreo tranches w/ fee (IPREO_PRODUCTFEE, QA ~12,266) / price (INFO)',
        '(info)', TO_CHAR(ecm_ipreo_fee) || ' fee / ' || TO_CHAR(ecm_ipreo_price) ||
        ' price of ' || TO_CHAR(ecm_ipreo_rows), 'INFO' FROM agg
+UNION ALL
+SELECT '25. DCM excluded tranche statuses absent (cancelled/postponed/deleted/archived)', 'Y',
+       CASE WHEN dcm_excluded_tr = 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_excluded_tr = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '25b. DCM tranche rows (INFO — UAT ~74.9k before, expect 1,367 fewer)', '(info)',
+       TO_CHAR(dcm_rows), 'INFO' FROM agg
 ORDER BY 1;
 
 -- D. ORDER VIEW — split by product (same reason as B). Dies alone if
@@ -439,7 +458,9 @@ WITH agg AS (
          COUNT(INVESTOR_REGION) AS dcm_geo,
          COUNT(INVESTOR_CATEGORY) AS dcm_cat,
          COUNT(SALES_PERSON) AS sales_,
-         COUNT(PRODUCT_CLASS) AS dcm_class
+         COUNT(PRODUCT_CLASS) AS dcm_class,
+         SUM(CASE WHEN UPPER(ORDER_STATUS) NOT IN ('ACCEPTED', 'BOOKED', 'UPDATED', 'NEW') THEN 1 ELSE 0 END) AS dcm_out_of_scope,
+         COUNT(CASE WHEN ORDER_STATUS IS NULL THEN 1 END) AS dcm_null_status
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'DCM'
 )
@@ -469,6 +490,16 @@ UNION ALL
 SELECT '9. order grain, DCM (rows = ORDER_ID)', 'Y',
        CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
        CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '26. DCM order statuses in scope only (accepted/booked/updated/new)', 'Y',
+       CASE WHEN dcm_out_of_scope = 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_out_of_scope = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '26b. DCM order rows (INFO — QA 5,826,467 before; the RQ load was 75 %, expect ~1.25M)', '(info)',
+       TO_CHAR(rows_), 'INFO' FROM agg
+UNION ALL
+SELECT '26c. DCM NULL-status orders (INFO — all were RQ; expect 0)', '(info)',
+       TO_CHAR(dcm_null_status), 'INFO' FROM agg
 ORDER BY 1;
 
 -- E. HEDGE ORDER VIEW — ONE scan (new in V3).

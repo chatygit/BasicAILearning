@@ -14,7 +14,7 @@
 #
 # THE GRAIN NOW HOLDS. V22: ECM 48,302 rows = 48,302 distinct orders.
 # V4: DCM 5,826,084 = 5,826,084. Before the rewrite the view returned
-# 11,881,246 rows for 5,874,386 orders (Q9, ~2x duplication). So order listings
+# 11,881,246 rows for 5,874,386 orders (2x duplication). So order listings
 # and order counts need NO deduplication — do not add any, and do not let a
 # downstream edit reintroduce a dedupe rule. (Monitored invariant, not a
 # defect: the ECM branch joins O.DEAL_ID to a transaction spine deduped by
@@ -339,7 +339,7 @@ dimensions:
   order_ownership: {column: order_ownership, products: ["ECM"], description: "ECM. HOME = our (owned) book, AWAY = orders seen away. BOTH are in every total since release 2 (before it, every figure was HOME-only — ECM population grew ~45% at the flip). 'Our orders'/'Citi's book' = HOME. NULL = flag not stored. NULL on DCM (no such flag)."}
   sales_person: {column: sales_person, description: "Both products (ECM = the investor salesperson name; DCM since release 3). Covering salesperson, first + last name (~30% populated). 'Orders covered by <person>' filters here; NULL = not recorded."}
   transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: the origination transaction id — FORWARD-POPULATED (recent Ipreo deals only; NULL on history) — a NULL means the deal predates the link, not 'no transaction'. TEXT, quote it. 'Transaction 75041397' asks filter here. ONE TRANSACTION CAN MAP TO SEVERAL DEALS (re-created copies, relaunches): on a transaction ask project deal_id + deal_name, partition by deal_id as well as tranche, and when several deals come back answer per deal — never merge their books."}
-  order_status: {column: order_status, description: "Order status (V3, both products). NOTE: the ECM branch already excludes CANCELLED/DELETED/PASS rows at the view layer; DCM applies no exclusion — a DCM status breakdown can include statuses ECM never shows."}
+  order_status: {column: order_status, description: "Order status (both products). The view EXCLUDES ECM CANCELLED/DELETED/PASS and DCM DELETED/CANCELLED plus the pre-2022 legacy load; DCM set: accepted, booked, updated, new. An ask for an excluded status is structurally zero — say so."}
   investor_lei: {column: investor_lei, products: ["ECM"], description: "ECM (V3). Investor LEI (sparse). NULL on DCM."}
   investor_qib_status: {column: investor_qib_status, products: ["DCM"], description: "DCM (V3). QIB flag as stored text ('false'/'true'/NULL)."}
   investor_sub_type: {column: investor_sub_type, products: ["DCM"], description: "DCM (V3). Investor sub-type beneath investor_category (sparse)."}
@@ -694,9 +694,9 @@ filters:
     suggestable: true
     case_insensitive: true
     description: >-
-      V3, both products. ECM rows never show CANCELLED/DELETED/PASS (view
-      exclusion); DCM has no exclusion and its vocabulary includes a
-      lowercase 'confidential' — match case-insensitively, merge variants.
+      Both products, case-insensitive. The view excludes ECM
+      CANCELLED/DELETED/PASS, DCM DELETED/CANCELLED and the pre-2022 legacy
+      load. DCM set: accepted, booked, updated, new.
   investor_lei:
     column: investor_lei
     products: ["ECM"]

@@ -2113,6 +2113,38 @@ for _vf in sorted((ROOT / "views").glob("vw_*.sql")):
               f"lists ({[len(b) for b in _branches]} aliases) — positional "
               f"pairing ships corrupt data; align the branch SELECT lists")
 
+# DCM STATUS EXCLUSION (Vinit, answered 2026-09-28): cancelled / postponed /
+# deleted / archived tranches leave the DCM branches of all three views (orders
+# follow through the (ROOT_ID, PARENT_ID) inner join and an EXISTS in the deal
+# view's hoisted order aggregate); DCM orders drop DELETED / CANCELLED and the
+# whole 'RQ' legacy load (ITEM_SOURCE). NULL-safe + UPPER() — a bare NOT IN
+# would drop NULL-status rows and the stored values have case variants.
+_T_EXCL = "NOT IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')"
+_O_EXCL = "NOT IN ('DELETED', 'CANCELLED')"
+_RQ = "UPPER(O.ITEM_SOURCE) <> 'RQ'"
+for _vf, _want_t, _want_o, _want_rq in (
+    ("vw_tranche_summary.sql", 1, 0, 0),
+    ("vw_order_detail.sql", 1, 1, 0),
+    ("vw_deal_summary.sql", 2, 1, 1),
+):
+    _t = text(ROOT / "views" / _vf)
+    check(_t.count(_T_EXCL) == _want_t,
+          f"[status] {_vf}: expected {_want_t} DCM tranche exclusion(s), found {_t.count(_T_EXCL)}")
+    check(_t.count(_O_EXCL) == _want_o,
+          f"[status] {_vf}: expected {_want_o} DCM order exclusion(s), found {_t.count(_O_EXCL)}")
+    check(_t.count(_RQ) + _t.count("UPPER(DO.ITEM_SOURCE) <> 'RQ'") == (_want_rq or (1 if _want_o else 0)),
+          f"[status] {_vf}: the RQ legacy-load exclusion is missing or duplicated")
+    for _m in re.finditer(r"UPPER\((\w+)\.STATUS\) NOT IN", _t):
+        _a = _m.group(1)
+        check(f"({_a}.STATUS IS NULL OR UPPER({_a}.STATUS) NOT IN" in _t,
+              f"[status] {_vf}: the {_a}.STATUS exclusion is not NULL-safe")
+check(has(SKILL, "Excluded on DCM too (§7b)") and has(SKILL, "tranche_status in ['priced','freeToTrade']")
+      and has(ORDER, "DCM set: accepted, booked, updated, new")
+      and has(TRANCHE, "Count asks default to in ['priced','freeToTrade']"),
+      "[status] doctrine lost the DCM exclusion / count-default rules (Vinit 2026-09-28)")
+check("EXISTS (SELECT 1 FROM DGSTREAM.OB_DEAL_TRANCHE X" in text(ROOT / "views" / "vw_deal_summary.sql"),
+      "[status] vw_deal_summary.sql: the hoisted DCM order aggregate no longer excludes orders on excluded tranches")
+
 # SUBQUERY PROJECTION CONSISTENCY (2026-08-31, the OD.TOTAL_DEMAND DEV
 # failure — third ORA-00904 class: an outer SELECT references ALIAS.COL
 # but the aliased subquery never projects COL; a silent no-op .replace()

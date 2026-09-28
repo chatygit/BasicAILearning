@@ -321,7 +321,7 @@ dimensions:
   esg_bond: {column: esg_bond, products: ["DCM"], description: "DCM. GREEN / SUSTAINABILITY / SOCIAL. NULL means not an ESG-labelled bond."}
   issuer_ratings: {column: issuer_ratings, products: ["DCM"], description: "DCM. COMMA-separated ratings, each rendered 'AGENCY - VALUE(OUTLOOK)' and ordered by agency. The AGENCY NAME IS IN THE STRING, so match the agency directly. This is the only place a rating outlook is exposed. Never a pipe list."}
   securities_maturity: {column: securities_maturity, products: ["DCM"], description: "DCM. Maturity date stored as TEXT in an unmeasured format. Safe to PROJECT; sorting/comparing it is a STRING operation — caveat any ordering by maturity. NEVER use as time_dimension — date_trunc on text fails. Future maturities are normal."}
-  tranche_status: {column: tranche_status, products: ["DCM"], description: "DCM. Tranche lifecycle status — the SAME source column as deal_status on DCM, so the two are identical there. NULL on every ECM row; for ECM status use deal_status, which is on THIS object."}
+  tranche_status: {column: tranche_status, products: ["DCM"], description: "DCM. Tranche lifecycle status (same column as deal_status on DCM). cancelled / postponed / deleted / archived are EXCLUDED by the view — structurally zero. A count ask with no stage named = priced or freeToTrade, said in the answer. NULL on ECM; use deal_status."}
 
 # -------------------------------- FILTERS -----------------------------------
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM offering type ferried at tranche grain (helper wave) — IPO / Follow-On asks per tranche without the deal hop. NULL on DCM."}
@@ -504,9 +504,9 @@ filters:
     case_insensitive: true
     description: >-
       Tranche target region — NAM, EMEA, APAC. Populated on roughly one DCM
-      tranche in five and effectively EMPTY on ECM (QA measure 2026-08-18;
-      the equity source never filled it) — a region filter reads only the
-      minority of the book that carries a region, so SAY SO in the answer.
+      tranche in five and effectively EMPTY on ECM — a region filter reads
+      only the minority of the book that carries a region, so SAY SO in the
+      answer.
       A NOT-region predicate also drops NULL-region rows — count them with
       is_null and disclose the number.
   deal_region:
@@ -537,9 +537,9 @@ filters:
       object for it. Matching here is case-insensitive, which is mandatory
       because the stored vocabulary contains CASE-VARIANT DUPLICATES. DCM values
       observed in full: Settled, priced, Priced, announced, Announced, draft,
-      freeToTrade, cancelled, allocated, subject, archived, deleted, postponed,
-      confidential, 'Final Settled', and NULL — that list is MEASURED and
-      complete. ECM is different in kind: the column is the transaction's
+      freeToTrade, allocated, subject, confidential, 'Final Settled', and NULL
+      (cancelled / postponed / deleted / archived tranches are excluded by the
+      view). ECM is different in kind: the column is the transaction's
       EXECUTION-status value (the view keeps one per transaction, choosing the
       alphabetically-last where a transaction carries conflicting ones), and its
       vocabulary has NOT been measured. Carried over unverified — the SAME 15
@@ -565,10 +565,10 @@ filters:
     suggestable: true
     case_insensitive: true
     description: >-
-      DCM only — NULL on every ECM row, so an ECM-scoped filter here returns
-      zero; use deal_status, which is on this object for both products. Same
-      value set as deal_status on DCM (it is the same source column), including
-      the case variants and a NULL bucket.
+      DCM only (NULL on ECM — use deal_status). Values: draft, announced,
+      subject, priced, allocated, freeToTrade, Settled, 'Final Settled', NULL,
+      with case variants; cancelled / postponed / deleted / archived never
+      appear (view exclusion). Count asks default to in ['priced','freeToTrade'].
   sector:
     column: sector
     operators: [eq, ne, in, not_in, like]

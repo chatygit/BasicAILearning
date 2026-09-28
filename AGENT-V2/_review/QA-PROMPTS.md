@@ -125,8 +125,10 @@ Needs BOTH the nine views AND the config push in QA (+ BQS_ENABLED_SOURCES / new
 - [ ] 27. "List the syndicate members of deal <DCM deal> and how many there are"
       — PASS: the DCM member list + count from one tranche query; no
       "single B&D bank" caveat.
-- [ ] 28. "Show cancelled orders on deal <DCM deal>" — PASS: order_status filter
-      on the order object; no refusal.
+- [ ] 28. "Show cancelled orders on deal <DCM deal>" — PASS (flipped 2026-09-28):
+      says cancelled / deleted orders are excluded by construction on both
+      products, so the answer is structurally zero — no doomed query, no
+      "none found".
 - [ ] 29. "List EMEA DCM deals priced in 2025" — PASS: deal object, deal_region
       eq EMEA + product DCM, one query (deal_region is both products).
 - [ ] 30. "What spread over treasuries did <deal> price at?" — PASS: a governed
@@ -235,3 +237,11 @@ Not run: 24, 35 (the file named 35 is a second shot of 18), 33 as written.
 | 40 long-only investors, ECM 2026 (as typed) | 58,140 | 124,306 | PASS shape — two queries (count + list), 86 investors, first 50 alphabetical with GP ids. Name variants listed as separate rows (ALPINE GLOBAL MGMT LLC with and without an id; ALYESKA; Aberdeen ×2) — the per-id merge rule not applied. Ran on 2026, so no 10-digit-id rows could appear (Ipreo ends Mar-25): the Investment Adviser inclusion is untested |
 | 41 fees on the Visa IPO | 13,942 (web agent) | 190,288 | FAIL — our agent ran SIX run_bqs_query calls, gave up, and the root agent handed the question to enterprise_web_search, which answered from the 2008 prospectus ($1.232 per share, $500,192,000 total, $42.768 net per share). Our tranche object holds exactly those fees (1.232 = 0.3388 + 0.3388 + 0.5544) but the deployed catalog (09-18 build) still declares 'fees / gross spread / underwriting fee' an UNSUPPORTED intent on the tranche object — rewritten in the repo 2026-09-24, ships on the train. File 42-1 is a second shot of this answer |
 Run 5 complete (37-41). FIX FROM THIS RUN: server narrows a both-products scope to the product a single-product field implies (planner `narrowed_product` + response `product_note`) — prompt 37 becomes one query; ships on the train.
+
+## PROD quick test — 2026-09-25 21:22 (everything promoted 25-Sep: SKILL + agents by hand, server build with the 24-Sep catalogs + product narrowing + entitlement wording; OCP log screenshots only, no answer shots)
+| Ask (bk42867, ECM-only in PROD) | object · metric | execute | enrich | Notes |
+|---|---|---|---|---|
+| "top investors by allocation in Healthcare deals over the last 2 years, grouped by Investor Type" | order · total_allocation, LIMIT 10 | 37.7 s | 0.0 s | product set by the agent (agent_scoped=True); first CyberArk fetch in this pod (FID ecm_starburst_prod), cache after |
+| "demand and allocations for FIDELITY MANAGEMENT & RESEARCH in the past 2 years … Deal Name, Pricing Date, Deal Size, Offering Type, Deal Type, the BnD Bank, Citi's Role, and the order and allocation" | order · row_count, 50 rows | 22.5 s | **20.1 s** | DISCOVERY HOPS warning: order + tranche catalogs fetched (B&D bank / Citi role are tranche-grain — the two-step is legitimate here). investor_name NOT projected → the disambiguation probe ran as a second serial scan (§0b rule "always PROJECT the name field you filter on" ignored). 50 rows = the default limit → truncated |
+| "the Indications and Allocations for GQG Partners on equity deals" | order · row_count | (not in shot) | | investor_name projected this time (probe free). DISCOVERY HOPS again: tranche catalog fetched for an order-only question — pure token cost |
+What the log proves: the PROD entitlement API answers (1.6 s, then cached), the gate scopes to ECM, the promoted product rule holds (no unscoped query), nine catalogs load. What it cannot show: answer shape/style, whether the Ipreo views are the PROD revision (needs deploy-check A0 by an access holder), narrowing (never triggered — every ask carried a product filter).

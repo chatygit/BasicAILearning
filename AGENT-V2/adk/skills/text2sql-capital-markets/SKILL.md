@@ -71,8 +71,8 @@ never restructure, never drop a filter.
   must be the metric or a projected dimension. Always end with a unique key.
   **Bankers read sorted-within-sorted**: between the ask's primary sort and the
   id tiebreak, add a READABLE middle key — name A→Z (issuer/investor/deal) —
-  so same-day or same-size rows land alphabetically, not randomly (MRM ask
-  2026-08-18). Primary desc, name asc, id last.
+  so same-day or same-size rows land alphabetically, not randomly. Primary
+  desc, name asc, id last.
 - **`limit` — ALWAYS set one on a listing.** Omitting it applies a **50-row**
   server default and the reply comes back `truncated` (§8) — a page, not the
   answer. Ceilings: 5000 on deal/tranche/order, **50 on entity**.
@@ -582,10 +582,10 @@ returns rows — have no safety net at all:
 | "Moody's rating" | `issuer_ratings like '%MOODY%'` — better than guessing notation |
 | any ECM `currency` predicate | ECM currency can be NULL — `ne`/`not_in` drops those rows: size the bucket with `is_null` and disclose it. The deal object's ECM `currencies` comes from a different source column than the tranche `currency` — never present them as the same label |
 
-⚠ **Row-exclusion differs by product.** DCM rows include cancelled, deleted,
-archived, draft and confidential statuses; ECM excludes its equivalents, so
-counts do not mean quite the same thing across products — disclose it when a
-status-sensitive answer spans both.
+**Excluded on DCM too (§7b):** cancelled / postponed / deleted / archived
+tranches (and their orders), deleted / cancelled orders, the pre-2022 legacy
+order load — structurally zero, say so. DCM "how many deals / tranches" with
+no stage named = `tranche_status in ['priced','freeToTrade']`, said so.
 
 ## 8. Read the response shape and self-correct
 - **Success**: `rows`/`columns`/`row_count`, `as_of_date`, and **`generated_sql`

@@ -819,3 +819,18 @@ allocation figure (equity_type: shares, or bonds on convertibles);
 demand_unit describes demand_as_submitted only; a CURRENCY / PERCENT / FACE
 bid with a blank order_demand_qty was never converted. Fees are documented as
 per-share only for 10-digit-id ECM deals (the OPUS unit is unmeasured).
+
+## ADDENDUM 12 — 2026-09-28 DCM status exclusion (Vinit's answer)
+DCM branches of deal / tranche / order views: tranches whose STATUS is
+cancelled, postponed, deleted or archived are gone (NULL-safe, UPPER — the
+stored values have case variants); their orders follow through the order
+view's (ROOT_ID, PARENT_ID) inner join and, in the deal view's hoisted order
+aggregate, an EXISTS against the tranche table with the same predicate. DCM
+orders additionally drop STATUS deleted / cancelled and every row of the 'RQ'
+legacy load (ITEM_SOURCE = 'RQ': the 10-11 Jan 2022 migration, 3.75M of 5.0M
+UAT orders, whose statuses were workflow codes) — in scope = accepted, booked,
+updated, new. A deal whose tranches are all excluded disappears from the deal
+object (972 on UAT); 'Settled' RQ-era tranches STAY (we exclude RQ orders,
+not tranches) but carry no book. ECM untouched pending Alex; trade / hedge
+views untouched pending Vinit. Doctrine: count asks default to priced /
+freeToTrade (Vinit). Deploy-check: 25/25b, 26/26b/26c, 27/27b.

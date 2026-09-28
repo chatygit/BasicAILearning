@@ -140,6 +140,105 @@ The `_load_meta` row makes the lag visible in every answer.
 Phase 0 needs nothing from the DB team and no view rewrite. It is the whole
 argument, and it is reversible with nine one-line edits.
 
+## Bucket layout (added 2026-09-27 — DataGlobe now writes S3, not Oraas)
+One bucket per environment, same layout in all three. Three Iceberg schemas map
+to three prefixes; the metastore holds the mapping, queries use schema.table.
+
+```
+s3://<env>-capital-markets-iceberg/
+  raw/        DataGlobe-owned. One Iceberg table per DG table, Oracle column
+              names and types, DG metadata on every row (SOURCE_PUBLISHED_TS,
+              DG_PROCESSED_TS, DG_VERSION, DG_EVENT_ID, DG_ENTITY_KEY).
+              Append-only: every published version is a row. WE DO NOT WRITE HERE.
+  core/       Ours. Deduped current state, one table per business grain per
+              source family, built from raw by our load. The ROW_NUMBER windows
+              and LISTAGGs of today's views run here, once per load.
+  serve/      Ours. The nine agent objects as tables — today's view contracts,
+              column for column. The ONLY schema the agent's role can read.
+  ops/        Ours. load_meta (object, loaded_at, source watermark, row count),
+              reconciliation results, the deploy-check as a table.
+```
+
+### raw — the 35 DG tables the nine views read (as DataGlobe lands them)
+| Family | Tables | Grain / notes |
+|---|---|---|
+| OneBook orderbook `OB_*` (15) | OB_DEAL_TRANCHE, OB_DEAL_ISSUER, OB_TRANCHE, OB_TRANCHE_RATING, OB_TRANCHE_SYNDICATE_MEMBER, OB_ORDER, OB_ORDER_SIZE, OB_ECM_ORDER, OB_ECM_ORDER_IOI, OB_ORDER_TRADE, OB_ORDER_TRADE_SYNDICATE, OB_HEDGE_ORDER, OB_HEDGE_TRADE, OB_ECM_TRADE_BOOK_INVESTOR_TRADE, OB_ECM_TRADE_BOOK_DESIGNATION | DCM deals/tranches/orders/trades/hedges; ECM orderbook + trade book. OB_ORDER 5.0M / OB_ORDER_SIZE 4.8M rows are the two big ones |
+| OPUS ECM `OPUS_ECM_*` (7) | OPUS_ECM_TRANSACTION, _STATUS, _TRANCHE, _TRANCHE_DEMAND_CURRENCY, _TRANCHE_SYNDICATE, _TRANCHE_PRODUCT_DETAIL, _TRANCHE_PRODUCT_DETAIL_IDENTIFIER | ECM system of record (deal/tranche masters) |
+| Ipreo `IPREO_*` (13) | IPREO_OPUS_ECM_TRANSACTION, _STATUS, _TRANCHE, _TRANCHE_PRODUCT_DETAIL, _TRANCHE_SYNDICATE, IPREO_OB_ECM_ORDER, IPREO_OB_ECM_ORDER_IOI, IPREO_ISSUE, IPREO_TRANCHE, IPREO_ORDER, IPREO_ORDERIOI, IPREO_PRODUCT, IPREO_PRODUCTFEE | second ECM source, mirror + raw tables |
+| NOT in our bucket (2) | OPUS_BASE_TRANSACTION, OPUS_BASE_TRANSACTION_RELATED_PARTIES | the origination team's bucket — read by the core load from their catalog, or dropped (previous section) |
+| Coming | DealLogic (Mongo catalog) | a source for the core load, one more ECM/DCM branch |
+
+Raw partitioning is DataGlobe's call; ask them for `day(DG_PROCESSED_TS)` so our
+incremental core load reads one day of files, not the table.
+
+### core — deduped current state (ours)
+| Table | Built from | Dedupe key (today's window) | Partition |
+|---|---|---|---|
+| core.ecm_transaction | OPUS_ECM_TRANSACTION ∪ IPREO_OPUS_ECM_TRANSACTION (+ DealLogic later), with a `source_system` column | deal_transaction_id, ecm_transaction_id | source_system |
+| core.ecm_transaction_status | both _STATUS tables | ecm_transaction_id (Execution_Status only) | source_system |
+| core.ecm_tranche | both _TRANCHE tables + product detail + Ipreo raw tranche/product/fee | deal_transaction_id, tranche_id | source_system, year(pricing_ts) |
+| core.ecm_tranche_syndicate | both _SYNDICATE tables, Citi label normalised | tranche_id, member | source_system |
+| core.ecm_order | OB_ECM_ORDER + OB_ECM_ORDER_IOI ∪ IPREO_OB_ECM_ORDER + IOI + IPREO_ORDER (category/region/billed-by) | deal_id, tranche_id, order_id | source_system, year(pricing_ts) |
+| core.dcm_deal_tranche | OB_DEAL_TRANCHE + OB_TRANCHE + ratings + syndicate members (the LISTAGGs) | deal_id, tranche_id | year(pricing_ts) |
+| core.dcm_order | OB_ORDER + OB_ORDER_SIZE | root_id, parent_id, order_id | year(pricing_ts) |
+| core.trade | OB_ORDER_TRADE, OB_ECM_TRADE_BOOK_INVESTOR_TRADE | product, trade_id | product, year(trade_ts) |
+| core.hedge_order / core.hedge_trade | OB_HEDGE_ORDER / OB_HEDGE_TRADE | hedge id | year |
+| core.designation / core.trade_syndicate | OB_ECM_TRADE_BOOK_DESIGNATION / OB_ORDER_TRADE_SYNDICATE | card id / (trade, dealer) | product |
+| core.issuer | OB_DEAL_ISSUER (+ the party master from the other team's catalog if readable) | gfcid | — |
+| core.currency_name | OPUS_ECM_TRANSACTION_TRANCHE_DEMAND_CURRENCY (global id→name) | currency_id | — |
+
+`source_system` (OPUS / IPREO / DEALLOGIC) is a core column for lineage and
+reconciliation; serve does not expose it — the agent sees one ECM, as agreed.
+
+### serve — the nine objects (ours; the agent's only read surface)
+| Table | From core | Partition | Sort within files |
+|---|---|---|---|
+| serve.deal_summary | ecm_transaction + tranche + order roll-ups; dcm_deal_tranche + dcm_order roll-ups | product, year(last_priced) | deal_id |
+| serve.tranche_summary | ecm_tranche + syndicate; dcm_deal_tranche | product, year(pricing_ts) | deal_id, tranche_id |
+| serve.order_detail | ecm_order; dcm_order | product, year(pricing_ts) | deal_id, investor_gp_id |
+| serve.trade_detail | trade | product, year(trade_ts) | deal_id |
+| serve.hedge_order / serve.hedge_trade | hedge_* | product, year | deal_id |
+| serve.designation / serve.trade_syndicate | designation / trade_syndicate | product | deal_id |
+| serve.entity_search | deal_summary + order_detail (tens of thousands of rows) | none | entity_name |
+
+Sizes: ≈12M rows across serve, ≈2 GB Parquet; a full rebuild per load is
+minutes, so Phase 0/1 rebuild serve in full and only core is incremental.
+
+### Load cadence and ownership
+- DataGlobe: Kafka → raw, continuous (their sink, their SLA).
+- Ours, hourly: `INSERT INTO core … SELECT … FROM raw WHERE DG_PROCESSED_TS >
+  last watermark` per family, then `CREATE OR REPLACE TABLE serve.x AS SELECT …
+  FROM core`, then one row into ops.load_meta and the reconciliation query.
+- Snapshot expiry: 7 days on core/serve (time travel for regression pins),
+  DataGlobe's rule on raw.
+
+### Migration of the SQL we already have
+The nine view files ARE the core+serve definitions, minus dialect: Oracle
+`NVL`→`coalesce`, `LISTAGG … ON OVERFLOW`→`listagg` (Trino ≥ 0.4) or
+`array_join(array_agg(...))`, `TO_NUMBER … DEFAULT NULL ON CONVERSION
+ERROR`→`try_cast`, `NUMBER(38,4)`→`DECIMAL(38,4)`, `ROWID` tie-breaks→
+`DG_VERSION DESC` (a better dedupe order than ROWID ever was), `REGEXP_LIKE`→
+`regexp_like`, `FETCH FIRST`→`LIMIT`. The UNION ALL branches become the
+`source_system` branches of the core loads. The contract test and golden corpus
+run unchanged against serve because the column names and types are the same.
+
+## Sources that live outside our bucket (added 2026-09-27)
+The migration splits DGSTREAM by owning team. Two tables the ECM branches read
+today will belong to the origination platform's team, not to us:
+OPUS_BASE_TRANSACTION and OPUS_BASE_TRANSACTION_RELATED_PARTIES. They feed
+exactly three things: ECM `deal_region` (and the tranche-region fallback), the
+deal-grain `deal_fee_mm` / `deal_size_mm` pair with their currencies, and the
+Primary-Client issuer overlay (name, GFCID, ticker) behind an NVL fallback.
+
+Rule: a source outside our bucket is read the same way DealLogic-in-Mongo is —
+by the core LOAD, as a scheduled INSERT from that team's catalog, never by a
+join at question time. If their catalog is not readable by our load role, the
+column is dropped (the removal wave is preserved in git 78b3c4c; issuer names
+fall back to the orderbook issuer, deal region to `issuer_country`, deal fees
+to the tranche fee columns). Decision per column, taken when the platform team
+says which catalogs our role may read. DealLogic follows the identical path:
+its Mongo catalog is a source, its rows become one more branch in core.
+
 ## What does not change
 BQS contract (one metric per request, ANDed filters, 40-id in-lists, partition_by,
 having, offset paging) · the nine objects and every column in them · SKILL and
