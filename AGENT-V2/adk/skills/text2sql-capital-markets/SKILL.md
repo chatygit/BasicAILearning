@@ -263,29 +263,28 @@ some field?** Only genuine proper nouns belong in a name filter.
 `meeting_type_key`. Keys are punctuation-free and case-stable, labels are not
 (`1:1` vs `1x1`). Filter the key, PROJECT the label.
 
-### 3c-ter. ECM-only and DCM-only fields — SCOPE THE PRODUCT
+### 3c-ter. ECM-only and DCM-only fields — LIST freely, FILTER scoped
 
-These columns are **hard NULL on the other product**. Using one without
-scoping to its product cannot match anything, and the server REJECTS it with
-`product_not_applicable` rather than returning an empty result you would
-misread as "no data". (`investor_region` and `investor_category` LEFT this
-list in release 3 — DCM carries country names ~95% and investor types ~67%,
-case variants; `deal_region` left it earlier.) The authoritative scoping is each
-catalog: discover does NOT show a `products` key — read the leading ECM / DCM /
-ECM-ONLY / DCM-ONLY token in a field's description; the server rejects a
-mismatch with `product_not_applicable`, so scope `product eq` whenever you
-touch one. The lists below are the HIGH-TRAFFIC ones.
+These columns are **hard NULL on the other product** (the catalog is the
+authority: discover does NOT show a `products` key — read the leading ECM /
+DCM / ECM-ONLY / DCM-ONLY token in a field's description).
+- **Listed as a dimension: just project it.** It is ONE view: one request over
+  the entitled scope, and the other product's rows show `-` in that column
+  (`offering_type` beside `product_class` is fine; `column_note` names the
+  blank-by-design columns) — never split by product for it, never ask which
+  product, never refuse. If a server still rejects a LISTED column, run once
+  per product (`product eq` each) and merge into ONE table; never drop it.
+- **As a filter (or metric): it DECIDES the product.** The server narrows a
+  both-products scope to it (`product_note`); an explicit contradicting scope,
+  or an ECM-only filter beside a DCM-only one, is rejected
+  `product_not_applicable` — fix the scope, never retry blind.
 
 - **ECM-only**: `equity_type` · `offering_type` · `product_type` · `exchange` ·
   `broker_code` · `syndicate_role` · `investor_category_key` · `meeting_type`
   (+`_key`) · `order_type` · `ioi_type` · `order_ownership` · `issuer_lei`
 - **DCM-only**: `product_class` · `seniority` · `reg_category` · `esg_bond` ·
   `coupon_type` · `coupon_freq` · `tenors` · `securities_maturity` ·
-  `issuer_ratings` · `delivery_type` · `tranche_status` · `settlement_ts` (tranche)
-
-**If your request touches any of these, add `product eq 'ECM'` (or `'DCM'`)** —
-the field DECIDES the product, so this is not a guess; an unscoped or
-dual-entitled request is rejected the same way.
+  `issuer_ratings` · `delivery_type` · `tranche_status`
 
 ### 3d. Never ask permission for a mechanic — and never NARRATE one
 

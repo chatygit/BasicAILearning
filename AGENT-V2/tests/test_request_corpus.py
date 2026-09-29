@@ -158,6 +158,24 @@ CORPUS: dict[str, dict] = {
         "order": [{"field": "total_demand", "direction": "desc"}],
         "limit": 5,
     },
+    # QA 43 — the dual-entitled Fidelity participation listing (user ruling
+    # 2026-09-29): an ECM-only and a DCM-only column LISTED side by side across
+    # both products in ONE request; each is blank on the other product's rows.
+    "investor_participation_dual_scope": {
+        "source": "capital_markets_order",
+        "metric": "row_count",
+        "dimensions": ["deal_name", "deal_id", "product", "pricing_date", "deal_size",
+                       "offering_type", "product_class", "order_demand_qty",
+                       "order_allocation", "demand_unit", "currency"],
+        "filters": [
+            {"field": "product", "op": "in", "value": ["ECM", "DCM"]},
+            {"field": "investor_name", "op": "like", "value": "%FIDELITY MANAGEMENT%"},
+            {"field": "pricing_date", "op": "gte", "value": "2024-09-29"},
+        ],
+        "order": [{"field": "pricing_date", "direction": "desc"},
+                  {"field": "deal_name", "direction": "asc"}],
+        "limit": 50,
+    },
     # QA 2 step 1 — a ranking that feeds an orderbook drill-down: named, booked.
     "largest_ipos_named_booked": {
         "source": "capital_markets_deal",

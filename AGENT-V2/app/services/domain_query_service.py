@@ -310,12 +310,31 @@ class DomainQueryService:
                     f"{plan.narrowed_product}. Say the answer is "
                     f"{plan.narrowed_product}-only; no retry needed."
                 )
+            # A LISTED column that exists on one product only is blank on the
+            # other product's rows BY DESIGN (user ruling 2026-09-29: it is one
+            # view — never split the answer per product for it). Say so, or the
+            # agent reads the blank as missing data and re-queries.
+            blank = getattr(plan, "blank_dims", None)
+            if blank:
+                by_prod: dict[str, list[str]] = {}
+                for name, only in blank.items():
+                    by_prod.setdefault(only, []).append(name)
+                parts = "; ".join(
+                    f"{', '.join(names)} {'is' if len(names) == 1 else 'are'} {prod}-only"
+                    for prod, names in by_prod.items()
+                )
+                result["column_note"] = (
+                    f"{parts}: blank on the other product's rows by design. "
+                    "Render the blank as '-' in ONE table; do not split the "
+                    "answer by product or re-query for it."
+                )
             if getattr(plan, "unit_auto", False):
                 result["unit_note"] = (
                     "equity_type was added to the rows: ECM figures are in the "
                     "SECURITY's unit — shares, or BONDS on Convertible Bonds / "
                     "Convertible Preferred / Exchangeable Notes. Label every "
-                    "figure from that column; never default to shares."
+                    "figure from that column; never default to shares. A blank "
+                    "equity_type marks a DCM row: money in its currency."
                 )
             # NOTE: `sql_audit` puts the generated SQL INTO the response the
             # agent sees. The skill's confidentiality rule ("never disclose the

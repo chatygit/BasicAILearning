@@ -213,6 +213,14 @@ five-beat shape added to agents.yaml. Still to run: 18, 24; ⚡ args for 16 and 
 - [ ] 41. "Fees on the Visa IPO" — PASS: tranche object; per-share amounts with
       the offer currency; gross spread = underwriting + management + selling
       concession; never a SUM of rows presented as the deal fee.
+- [ ] 43. DUAL-ENTITLED login: "demand and allocations for FIDELITY MANAGEMENT
+      & RESEARCH in the past 2 years … Deal Name, Pricing Date, Deal Size,
+      Offering Type, Deal Type, the BnD Bank, Citi's Role, and the order and
+      allocation" — PASS: ONE run_bqs_query on the order object across both
+      products (product projected, no per-product split, no "cannot fulfil"),
+      one table with a Product column, Offering Type "-" on DCM rows and Deal
+      Type = product_class there / equity_type on ECM, B&D bank + Citi role
+      from the tranche object as the second step. `column_note` in the response.
 
 ## Run 4 order (UAT, fresh session each, after the 2026-09-21 promotion)
 36 (with ⚡ args) · 15 · 3 · 20 — each must be ONE turn with no "which one?"
@@ -248,3 +256,17 @@ Run 5 complete (37-41). FIX FROM THIS RUN: server narrows a both-products scope 
 | "demand and allocations for FIDELITY MANAGEMENT & RESEARCH in the past 2 years … Deal Name, Pricing Date, Deal Size, Offering Type, Deal Type, the BnD Bank, Citi's Role, and the order and allocation" | order · row_count, 50 rows | 22.5 s | **20.1 s** | DISCOVERY HOPS warning: order + tranche catalogs fetched (B&D bank / Citi role are tranche-grain — the two-step is legitimate here). investor_name NOT projected → the disambiguation probe ran as a second serial scan (§0b rule "always PROJECT the name field you filter on" ignored). 50 rows = the default limit → truncated |
 | "the Indications and Allocations for GQG Partners on equity deals" | order · row_count | (not in shot) | | investor_name projected this time (probe free). DISCOVERY HOPS again: tranche catalog fetched for an order-only question — pure token cost |
 What the log proves: the PROD entitlement API answers (1.6 s, then cached), the gate scopes to ECM, the promoted product rule holds (no unscoped query), nine catalogs load. What it cannot show: answer shape/style, whether the Ipreo views are the PROD revision (needs deploy-check A0 by an access holder), narrowing (never triggered — every ask carried a product filter).
+
+## Dual-entitlement failure — 2026-09-29 (test user with ECM + DCM; screenshots BIG-issue / big-issue-2)
+Prompt 43 as typed. The agent's request listed `offering_type` (ECM-only) as a
+dimension on the both-products scope → `product_not_applicable` ("exists only on
+ECM … add product eq 'ECM' or drop it"). It then planned an ECM query + a DCM
+query (product_class instead), never added the product filter, hit the same
+rejection and surfaced it verbatim: "I am sorry, I cannot fulfill this request".
+User: "It's one view. The user didn't ask to filter on offering type — list it
+as '-' for DCM. Tons of test users have both entitlements. This answer is bad."
+FIX (repo 2026-09-29, SRV-10): a LISTED single-product column never narrows or
+rejects (planner `blank_dims` + response `column_note`); only filters and the
+metric decide the product; SKILL §3c-ter rewritten (list freely, filter scoped;
+the old "add product eq whenever you touch one" rule removed); order/deal cards
+say a listed column is blank, never split. Re-run 43 after the server push.

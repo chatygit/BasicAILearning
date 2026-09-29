@@ -71,8 +71,8 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
 - [ ] DONE config.py default BQS_ENABLED_SOURCES = nine sources.
 - [ ] DONE (in repo, undeployed) suggestions.py disambiguation hint no longer instructs a NUMBERED-list menu — it asks for the combined figure + per-entity breakdown in the same turn (UAT 2026-09-18: prompts 3, 15, 20 each burned 3 extra turns on the menu). Ships with the next server push; the SKILL/agents rule covers it meanwhile.
 - [ ] DONE (in repo 2026-09-24, undeployed) SRV-7 product narrowing: a both-
-      products scope + a single-product field (equity_type, offering_type,
-      investor_category_key, tenors…) is scoped to that product in the planner
+      products scope + a single-product FILTER or metric (since SRV-10 a LISTED
+      column never narrows) is scoped to that product in the planner
       (product filter rewritten to eq; plan.narrowed_product / narrowed_by) and
       the response carries `product_note`; explicit single-product scopes and
       ECM-only + DCM-only mixes still raise product_not_applicable. Closes the
@@ -99,6 +99,23 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       the agent labelled a convertible's book 'shares', got corrected, then
       checked equity_type — no example had ever projected it. Verify with
       QA-PROMPTS 42 after the server push.
+- [ ] DONE (in repo 2026-09-29, undeployed) SRV-10 a LISTED single-product
+      column never decides the product. Dual-entitled test user, Fidelity
+      participation prompt (QA 43): `offering_type` as a dimension on the
+      both-products scope was rejected product_not_applicable (with narrowing
+      it would still be a "contradiction" beside product_class); the agent
+      planned an ECM/DCM split, never added the product filter, surfaced the
+      raw error. User: "it's one view — list it as '-' for DCM; this answer is
+      bad". Planner: only filters (never is_null) and the metric narrow or
+      reject; dimensions pass through and the plan lists them as `blank_dims`;
+      the response carries `column_note` ("blank on the other product's rows by
+      design — one table, no split"); `unit_note` says a blank equity_type is a
+      DCM row (money). SKILL §3c-ter rewritten; order/deal cards say a listed
+      column is blank, never split; tranche settlement_ts dropped from the
+      SKILL's DCM-only list (both products since Ipreo). Tests: planner
+      contract (dimension cases + is_null) and corpus recipe
+      `investor_participation_dual_scope` with golden SQL. Verify: prompt 43
+      after the server push — ONE query, one table, "-" on DCM rows.
 - [ ] SRV-8 disambiguation probe runs SERIAL after the answer (PROD 2026-09-25:
       Fidelity ask execute 22.5 s + enrich 20.1 s — the probe re-scanned the
       order view because investor_name was not projected). Fix: fire the

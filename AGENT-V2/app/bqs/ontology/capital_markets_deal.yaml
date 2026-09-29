@@ -69,14 +69,14 @@ how_to_use:
   - "DO NOT ask this object for tranche attributes (coupon, tenor, identifiers,
      syndicate, ratings, exchange, seniority) — use capital_markets_tranche. DO NOT ask it
      for investor/allocation/demand/order attributes — use capital_markets_order."
-  - "ALWAYS set a 'product' filter — 'ECM' for equity, 'DCM' for debt. ECM sizes
-     are SHARE COUNTS; DCM sizes are notional MONEY. Never total ECM and DCM
-     together — scope one product or group by 'product'. COUNT metrics are
-     unit-free, so one request with 'product' in dimensions covers both.
-     Product unknown (a named deal / issuer / transaction with no product
-     word)? never guess one — filter product in ['ECM','DCM'] and put
-     'product' in dimensions; the rows tell you which it is. A product-scoped
-     field in the request decides the product — scope product eq to it."
+  - "ALWAYS set 'product' ('ECM' equity, 'DCM' debt). ECM sizes are SHARE
+     COUNTS; DCM sizes are notional MONEY. Never total ECM with DCM — scope one
+     product or group by 'product'. COUNT metrics are unit-free, so one request
+     with 'product' in dimensions covers both. No product word? never guess one — filter product in ['ECM','DCM'],
+     put 'product' in dimensions; the rows say which. A product-scoped FILTER
+     decides the product — scope product eq to it; a product-scoped column
+     merely LISTED is blank on the other product's rows: project it, never
+     split the answer per product."
   - "DCM money caveat: this object's DEAL_SIZE is a single deal-level figure and
      is NOT scoped to one currency (a deal may price in several — see
      'currencies'). For currency-comparable DCM money totals, use the

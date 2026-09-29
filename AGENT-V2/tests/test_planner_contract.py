@@ -6,10 +6,12 @@ Every case here pins a shipped bug or a 2026-08-11 fix:
     on EVERY paged listing without an explicit order (page 2 crashed).
   - The fallback ignored the time_grain bucket, so monthly buckets tied inside
     a dimension and pages could repeat or skip months — silently wrong trends.
-  - _check_product_applicability is what turns "ECM-only field asked on DCM"
+  - _check_product_applicability is what turns "ECM-only FILTER asked on DCM"
     into a rejection instead of an empty result read as "no data". It only
     fires for dual-entitled callers — which is what PRODUCTION has — so a
-    single-product local login can never reproduce its absence.
+    single-product local login can never reproduce its absence. A column that
+    is only LISTED never decides the product (user ruling 2026-09-29): it is
+    blank on the other product's rows, and the plan names it in blank_dims.
   - partition_by (top-N-per-group) closed QA ask #17, the one true V1
     architectural regression. Misuse must fail with code bad_partition, not
     compile into wrong SQL.
@@ -123,19 +125,22 @@ def test_offset_with_nothing_to_sort_is_refused():
 # product applicability — the dual-entitlement bug class
 # --------------------------------------------------------------------------
 
-def test_ecm_only_field_on_dcm_is_rejected_not_empty():
+def test_ecm_only_filter_on_dcm_is_rejected_not_empty():
     if not _deps():
         SKIPPED.append("product applicability (pydantic/yaml not installed)")
         return
-    # investor_category was this test's example until release 3 de-scoped
-    # it (DCM carries investor types now). investor_category_key stays
-    # ECM-only — the guard itself is unchanged.
+    # A FILTER on an ECM-only column under an explicit DCM scope cannot match
+    # a row (the column is hard NULL there): rejected, never an empty result
+    # read as "no data". investor_category_key stays ECM-only (investor_category
+    # itself was de-scoped in release 3).
     e = _expect_code(
         {
             "source": "capital_markets_order",
             "metric": "order_count",
-            "dimensions": ["investor_category_key"],
-            "filters": [{"field": "product", "op": "eq", "value": "DCM"}],
+            "filters": [
+                {"field": "product", "op": "eq", "value": "DCM"},
+                {"field": "investor_category_key", "op": "eq", "value": "LONG_ONLY"},
+            ],
         },
         "product_not_applicable",
         "investor_category_key is hard NULL on every DCM row",
@@ -143,34 +148,59 @@ def test_ecm_only_field_on_dcm_is_rejected_not_empty():
     assert "investor_category_key" in e.message
 
 
-def test_same_field_on_ecm_is_accepted():
+def test_same_filter_on_ecm_is_accepted():
     if not _deps():
         SKIPPED.append("product applicability happy path (pydantic/yaml not installed)")
         return
     plan = _plan({
         "source": "capital_markets_order",
         "metric": "order_count",
-        "dimensions": ["investor_category_key"],
-        "filters": [{"field": "product", "op": "eq", "value": "ECM"}],
+        "filters": [
+            {"field": "product", "op": "eq", "value": "ECM"},
+            {"field": "investor_category_key", "op": "eq", "value": "LONG_ONLY"},
+        ],
     })
     assert plan.metric.business_name == "order_count"
+    assert plan.narrowed_product is None and plan.blank_dims == {}
 
 
-def test_dual_scope_with_ecm_only_field_narrows_to_ecm():
+def test_listed_single_product_column_is_projected_not_rejected():
+    # User ruling 2026-09-29 (dual-entitled Fidelity prompt): a column that is
+    # only LISTED never decides the product — it is one view, and the column
+    # is simply blank on the other product's rows. An explicit DCM scope plus
+    # an ECM-only dimension therefore plans, and the plan names the blank.
+    if not _deps():
+        SKIPPED.append("listed single-product column (pydantic/yaml not installed)")
+        return
+    plan = _plan({
+        "source": "capital_markets_order",
+        "metric": "order_count",
+        "dimensions": ["investor_category_key"],
+        "filters": [{"field": "product", "op": "eq", "value": "DCM"}],
+    })
+    assert plan.narrowed_product is None
+    assert plan.blank_dims == {"investor_category_key": "ECM"}
+    assert [d.business_name for d in plan.dimensions] == ["investor_category_key"]
+
+
+def test_dual_scope_with_ecm_only_filter_narrows_to_ecm():
     # UAT run 5 (2026-09-24), prompt 37: five queries because a both-products
     # scope plus an ECM-only field was rejected twice. "Either product" plus a
-    # field that exists on one of them IS the product — scope to it and say so.
+    # FILTER that can only match one of them IS the product — scope to it and
+    # say so.
     if not _deps():
         SKIPPED.append("product narrowing (pydantic/yaml not installed)")
         return
     plan = _plan({
         "source": "capital_markets_order",
         "metric": "order_count",
-        "dimensions": ["investor_category_key"],
-        "filters": [{"field": "product", "op": "in", "value": ["ECM", "DCM"]}],
+        "filters": [
+            {"field": "product", "op": "in", "value": ["ECM", "DCM"]},
+            {"field": "offering_type", "op": "eq", "value": "IPO"},
+        ],
     })
     assert plan.narrowed_product == "ECM"
-    assert plan.narrowed_by == ["investor_category_key"]
+    assert plan.narrowed_by == ["offering_type"]
     prods = [f for f in plan.filters if f.business_name == "product"]
     assert len(prods) == 1 and prods[0].op == "eq" and prods[0].value == "ECM", (
         "the product filter must be rewritten to eq ECM — a scope that still "
@@ -178,22 +208,21 @@ def test_dual_scope_with_ecm_only_field_narrows_to_ecm():
     )
 
 
-def test_unscoped_request_with_dcm_only_field_narrows_to_dcm():
+def test_unscoped_request_with_dcm_only_filter_narrows_to_dcm():
     if not _deps():
         SKIPPED.append("product narrowing, unscoped (pydantic/yaml not installed)")
         return
     plan = _plan({
         "source": "capital_markets_order",
         "metric": "order_count",
-        "dimensions": ["investor_qib_status"],
-        "filters": [],
+        "filters": [{"field": "tenors", "op": "like", "value": "%5%YEAR%"}],
     })
     assert plan.narrowed_product == "DCM"
     assert [f.value for f in plan.filters if f.business_name == "product"] == ["DCM"]
 
 
 def test_explicit_single_scope_is_never_narrowed():
-    # The agent said ECM; a DCM-only field is a contradiction, not a hint.
+    # The agent said ECM; a DCM-only FILTER is a contradiction, not a hint.
     if not _deps():
         SKIPPED.append("product narrowing, explicit scope (pydantic/yaml not installed)")
         return
@@ -201,15 +230,17 @@ def test_explicit_single_scope_is_never_narrowed():
         {
             "source": "capital_markets_order",
             "metric": "order_count",
-            "dimensions": ["investor_qib_status"],
-            "filters": [{"field": "product", "op": "eq", "value": "ECM"}],
+            "filters": [
+                {"field": "product", "op": "eq", "value": "ECM"},
+                {"field": "tenors", "op": "like", "value": "%5%YEAR%"},
+            ],
         },
         "product_not_applicable",
-        "an explicit ECM scope with a DCM-only field must still be rejected",
+        "an explicit ECM scope with a DCM-only filter must still be rejected",
     )
 
 
-def test_dual_scope_with_conflicting_single_product_fields_is_rejected():
+def test_dual_scope_with_conflicting_single_product_filters_is_rejected():
     if not _deps():
         SKIPPED.append("product narrowing, conflict (pydantic/yaml not installed)")
         return
@@ -217,13 +248,68 @@ def test_dual_scope_with_conflicting_single_product_fields_is_rejected():
         {
             "source": "capital_markets_order",
             "metric": "order_count",
-            "dimensions": ["investor_category_key", "investor_qib_status"],
-            "filters": [{"field": "product", "op": "in", "value": ["ECM", "DCM"]}],
+            "filters": [
+                {"field": "product", "op": "in", "value": ["ECM", "DCM"]},
+                {"field": "offering_type", "op": "eq", "value": "IPO"},
+                {"field": "tenors", "op": "like", "value": "%5%YEAR%"},
+            ],
         },
         "product_not_applicable",
-        "an ECM-only field beside a DCM-only field cannot be narrowed either way",
+        "an ECM-only filter beside a DCM-only filter cannot be narrowed either way",
     )
-    assert "investor_category_key" in e.message or "investor_qib_status" in e.message
+    assert "offering_type" in e.message or "tenors" in e.message
+
+
+def test_mixed_product_dimensions_run_as_one_query_on_a_dual_scope():
+    # The Fidelity prompt (2026-09-29): Deal Name, Pricing Date, Deal Size,
+    # Offering Type (ECM-only), Deal Type (product_class, DCM-only), order and
+    # allocation for one investor across BOTH products. Before this ruling the
+    # two listed columns read as an ECM/DCM contradiction and the request was
+    # rejected; the agent then planned a per-product split and gave up. Now:
+    # one request, no narrowing, no rejection, both columns projected, and
+    # the plan names them as blank by design.
+    if not _deps():
+        SKIPPED.append("mixed-product dimensions (pydantic/yaml not installed)")
+        return
+    plan = _plan({
+        "source": "capital_markets_order",
+        "metric": "row_count",
+        "dimensions": ["deal_name", "pricing_date", "deal_size", "offering_type",
+                       "product_class", "order_demand_qty", "order_allocation",
+                       "product"],
+        "filters": [
+            {"field": "product", "op": "in", "value": ["ECM", "DCM"]},
+            {"field": "investor_name", "op": "like", "value": "%FIDELITY MANAGEMENT%"},
+            {"field": "pricing_date", "op": "gte", "value": "2024-09-29"},
+        ],
+        "limit": 50,
+    })
+    assert plan.narrowed_product is None and plan.narrowed_by == []
+    assert plan.blank_dims == {"offering_type": "ECM", "product_class": "DCM"}
+    names = [d.business_name for d in plan.dimensions]
+    assert "offering_type" in names and "product_class" in names
+    assert "equity_type" in names, "a unit column is projected → equity_type auto-added"
+    prods = [f for f in plan.filters if f.business_name == "product"]
+    assert len(prods) == 1 and prods[0].op == "in", "the both-products scope must survive"
+
+
+def test_is_null_filter_on_single_product_column_never_decides():
+    # offering_type is_null matches every DCM row (NULL there) as well as the
+    # ECM rows without an offering type — it cannot decide the product, and a
+    # both-products scope must neither narrow nor be rejected for it.
+    if not _deps():
+        SKIPPED.append("is_null on a single-product column (pydantic/yaml not installed)")
+        return
+    plan = _plan({
+        "source": "capital_markets_order",
+        "metric": "order_count",
+        "filters": [
+            {"field": "product", "op": "in", "value": ["ECM", "DCM"]},
+            {"field": "offering_type", "op": "is_null"},
+        ],
+    })
+    assert plan.narrowed_product is None
+    assert len([f for f in plan.filters if f.business_name == "product"]) == 1
 
 
 def test_ecm_allocation_request_gets_equity_type_projected():
@@ -454,8 +540,17 @@ CASES = [
     ("offset fallback sorts every dimension", test_offset_without_order_sorts_every_dimension),
     ("offset fallback includes time-grain bucket", test_offset_fallback_includes_time_grain_bucket),
     ("bare offset is refused", test_offset_with_nothing_to_sort_is_refused),
-    ("ECM-only field on DCM rejected", test_ecm_only_field_on_dcm_is_rejected_not_empty),
-    ("same field on ECM accepted", test_same_field_on_ecm_is_accepted),
+    ("ECM-only filter on DCM rejected", test_ecm_only_filter_on_dcm_is_rejected_not_empty),
+    ("same filter on ECM accepted", test_same_filter_on_ecm_is_accepted),
+    ("listed single-product column projected, not rejected", test_listed_single_product_column_is_projected_not_rejected),
+    ("dual scope + ECM-only filter narrows to ECM", test_dual_scope_with_ecm_only_filter_narrows_to_ecm),
+    ("unscoped + DCM-only filter narrows to DCM", test_unscoped_request_with_dcm_only_filter_narrows_to_dcm),
+    ("explicit single scope is never narrowed", test_explicit_single_scope_is_never_narrowed),
+    ("conflicting single-product filters rejected", test_dual_scope_with_conflicting_single_product_filters_is_rejected),
+    ("mixed-product dimensions run as ONE query", test_mixed_product_dimensions_run_as_one_query_on_a_dual_scope),
+    ("is_null on a single-product column never decides", test_is_null_filter_on_single_product_column_never_decides),
+    ("ECM allocation request gets equity_type", test_ecm_allocation_request_gets_equity_type_projected),
+    ("equity_type not added for counts/DCM/present", test_equity_type_not_added_for_counts_or_dcm_or_when_present),
     ("release-3 de-scoped field on DCM accepted", test_descoped_field_on_dcm_is_now_accepted),
     ("partition_by plans and compiles", test_partition_by_plans_and_compiles),
     ("partition explicit order sorts globally", test_partition_with_explicit_order_sorts_survivors_globally),

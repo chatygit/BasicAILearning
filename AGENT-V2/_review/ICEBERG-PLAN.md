@@ -190,6 +190,12 @@ incremental core load reads one day of files, not the table.
 `source_system` (OPUS / IPREO / DEALLOGIC) is a core column for lineage and
 reconciliation; serve does not expose it — the agent sees one ECM, as agreed.
 
+Normalise once, at load: core stores statuses canonicalised (one spelling per
+value) and a `name_key` (upper-cased, trimmed) beside every name column, so
+the view-era `UPPER(col)` predicates become plain equality on serve and the
+file statistics prune on them. Case variants are a load-time problem, never
+a query-time one.
+
 ### serve — the nine objects (ours; the agent's only read surface)
 | Table | From core | Partition | Sort within files |
 |---|---|---|---|

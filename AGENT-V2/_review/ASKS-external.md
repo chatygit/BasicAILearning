@@ -123,6 +123,18 @@ ECM_TRANSACTION_ID keys already exist.)
 Verification: our deal-scoped trade/hedge probes go from full-scan seconds to
 index-probe milliseconds; no application change on your side.
 
+**Added 2026-09-28 — function-based indexes for the agent's case-insensitive
+name filters.** Every name predicate the agent sends is `UPPER(col) LIKE
+UPPER(?)` / `UPPER(col) = UPPER(?)` (the stored values have case variants), so
+the plain (NAME) / (INVESTOR_NAME) indexes cannot serve them. Exact and
+prefix name asks would use these; contains-matches still scan.
+```sql
+CREATE INDEX IX_OB_ORDER_NAME_UPPER ON DGSTREAM.OB_ORDER (UPPER(NAME)) ONLINE;
+CREATE INDEX IX_OB_ECM_ORDER_INV_NAME_UPPER ON DGSTREAM.OB_ECM_ORDER (UPPER(INVESTOR_NAME)) ONLINE;
+CREATE INDEX IX_IPREO_OB_ECM_ORDER_INV_NAME_UPPER ON DGSTREAM.IPREO_OB_ECM_ORDER (UPPER(INVESTOR_NAME)) ONLINE;
+CREATE INDEX IX_OB_DEAL_TRANCHE_DEAL_NAME_UPPER ON DGSTREAM.OB_DEAL_TRANCHE (UPPER(DEAL_NAME)) ONLINE;
+```
+
 **Added 2026-09-23 — QA memory cap (INC raised with the DB team 2026-09-23).** Since 23-Sep every full scan of
 VW_DEAL_SUMMARY on QA dies with ORA-04036 (PGA_AGGREGATE_LIMIT; the largest
 session is interrupted), including statements that ran the day before in

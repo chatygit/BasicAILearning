@@ -135,6 +135,9 @@ class QueryPlan:
     # single-product fields imply (planner, 2026-09-24) — and by which fields.
     narrowed_product: str | None = None
     narrowed_by: list[str] = field(default_factory=list)
+    # Listed dimensions that exist on one product only while the scope spans
+    # the other (2026-09-29): blank on those rows BY DESIGN — name → product.
+    blank_dims: dict[str, str] = field(default_factory=dict)
     # equity_type was appended to the projection by the planner because the
     # request carries an ECM demand / allocation / size figure without it
     # (2026-09-28): the security decides shares vs bonds, and a model that
@@ -461,35 +464,37 @@ def _resolve_derived_filter(spec: OntologySpec, name: str) -> ResolvedDerivedFil
     return ResolvedDerivedFilter(name, dspec.predicate, columns)
 
 
-def _check_product_applicability(req, spec) -> tuple[str | None, list[str]]:
-    """Reject a request that uses a field the requested product cannot have —
-    or NARROW the scope when the request itself says which product it means.
+def _check_product_applicability(req, spec) -> tuple[str | None, list[str], dict[str, str]]:
+    """Scope a request by the product its FILTERS and METRIC imply — and let a
+    single-product DIMENSION through untouched.
 
     23+ columns are HARD NULL on one product — CAST(NULL AS ...) in the view's
-    other UNION branch. Asking for investor_category while scoped to DCM cannot
-    match anything, and the empty result reads to the agent as "no data" rather
-    than "impossible combination", so it retries, widens, or reports nothing
-    found. Spec section 3.2 asked for this to be mechanical rather than prose.
+    other UNION branch. Three roles, three rules:
 
-    WHY IT SHOWS UP AS AN ENVIRONMENT BUG. A caller entitled to ONE product gets
-    `product eq '<that>'` injected by the entitlement gate, so every request is
-    single-product scoped by accident and this never fires. A DUAL-entitled
-    caller is scoped to both, so the same question that worked on a
-    single-product login returns nothing. Production is the dual case.
+    * A FILTER on such a column (any operator but is_null) can only match rows
+      of that product, so it DECIDES the product; so does a single-product
+      METRIC (a SUM over NULLs is nothing). A both-products scope is NARROWED
+      to that product here (the product filter is rewritten to eq and the
+      plan records which fields decided, so the response can say so). An
+      explicit single-product scope that contradicts one, or an ECM-only
+      filter beside a DCM-only one, cannot match anything and is rejected
+      product_not_applicable — an empty result would read as "no data".
+    * A DIMENSION never decides anything (user ruling 2026-09-29, dual-
+      entitled Fidelity prompt: offering_type LISTED beside product_class was
+      taken for a contradiction, the agent planned an ECM/DCM split and
+      surfaced the raw rejection). It is ONE view: a listed column that
+      exists on one product is simply blank on the other product's rows.
+      Those columns come back as blank_dims so the response can say the
+      blank is by design.
+    * is_null on a single-product column matches the other product's rows
+      (all NULL there), so it neither decides nor rejects.
 
-    NARROWING (2026-09-24). UAT run 5, prompt 37 ("Show the Visa IPO deal
-    card"): the agent sent no product filter, the gate injected both, and
-    `equity_type` then `offering_type` were rejected here — five queries and
-    ~340k prompt tokens to learn that an ECM-only field means ECM. A scope that
-    covers BOTH products means "either"; when every single-product field in
-    the request agrees on ONE product inside that scope, the request is scoped
-    to it here (the product filter is rewritten to eq) and the plan records
-    which fields decided, so the response can say so. An explicit single-
-    product scope that contradicts a field still raises, and so does a request
-    mixing ECM-only and DCM-only fields — those are real contradictions.
+    WHY IT SHOWS UP AS AN ENVIRONMENT BUG. A caller entitled to ONE product
+    gets `product eq '<that>'` injected by the entitlement gate; a DUAL-
+    entitled caller (production, and every test user) is scoped to both, so
+    the same question behaves differently per login unless these rules hold.
 
-    Returns (narrowed_product, deciding_fields); (None, []) when nothing was
-    narrowed.
+    Returns (narrowed_product, deciding_fields, blank_dims).
     """
     requested: set[str] = set()
     for f in req.filters:
@@ -499,24 +504,22 @@ def _check_product_applicability(req, spec) -> tuple[str | None, list[str]]:
     if not requested:
         requested = {"ECM", "DCM"}  # unscoped spans everything entitled
 
-    used: list[tuple[str, list[str]]] = []
+    deciding: list[tuple[str, set[str]]] = []
     ms = spec.metrics.get(req.metric)
     if ms is not None and getattr(ms, "products", None):
-        used.append((req.metric, ms.products))
-    for name in req.dimensions:
-        d = spec.dimensions.get(name)
-        if d is not None and getattr(d, "products", None):
-            used.append((name, d.products))
+        deciding.append((req.metric, {p.upper() for p in ms.products}))
     for f in req.filters:
         fs = spec.filters.get(f.field)
-        if fs is not None and getattr(fs, "products", None):
-            used.append((f.field, fs.products))
+        if fs is None or not getattr(fs, "products", None):
+            continue
+        if str(getattr(f.op, "value", f.op)) == "is_null":
+            continue  # NULL on the other product: it matches there too
+        deciding.append((f.field, {p.upper() for p in fs.products}))
 
     narrowed: str | None = None
     decided: list[str] = []
     if len(requested) > 1:
-        singles = [(name, {p.upper() for p in allowed}) for name, allowed in used
-                   if len(allowed) == 1]
+        singles = [(name, ps) for name, ps in deciding if len(ps) == 1]
         targets = {next(iter(ps)) for _, ps in singles}
         if len(targets) == 1 and next(iter(targets)) in requested:
             narrowed = next(iter(targets))
@@ -528,8 +531,7 @@ def _check_product_applicability(req, spec) -> tuple[str | None, list[str]]:
                 )
             ]
 
-    for name, allowed in used:
-        allow = {p.upper() for p in allowed}
+    for name, allow in deciding:
         impossible = requested - allow
         if impossible:
             only = "/".join(sorted(allow))
@@ -541,7 +543,14 @@ def _check_product_applicability(req, spec) -> tuple[str | None, list[str]]:
                 f"you want the {only} answer, or drop '{name}'.",
                 code="product_not_applicable",
             )
-    return narrowed, decided
+
+    blank: dict[str, str] = {}
+    for name in req.dimensions:
+        d = spec.dimensions.get(name)
+        allow = {p.upper() for p in (getattr(d, "products", None) or [])} if d else set()
+        if allow and requested - allow:
+            blank[name] = "/".join(sorted(allow))
+    return narrowed, decided, blank
 
 
 # Columns whose ECM unit is set by the security (shares, or bonds on
@@ -593,7 +602,7 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
 
     _check_unsupported(spec, req)
 
-    narrowed, narrowed_by = _check_product_applicability(req, spec)
+    narrowed, narrowed_by, blank_dims = _check_product_applicability(req, spec)
     unit_auto = _auto_project_equity_type(req, spec)
     dims = _resolve_dimensions(req, spec)
     filters = [_validate_filter(spec, f) for f in req.filters]
@@ -705,6 +714,7 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
     return QueryPlan(
         narrowed_product=narrowed,
         narrowed_by=narrowed_by,
+        blank_dims=blank_dims,
         unit_auto=unit_auto,
         spec=spec,
         metric=metric,

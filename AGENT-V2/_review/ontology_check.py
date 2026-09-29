@@ -1653,6 +1653,32 @@ check(text(PLANNER).count("_check_product_applicability(req, spec)") >= 2,
       "[product] planner.py: _check_product_applicability is defined but no "
       "longer CALLED from plan_query — the rejection is dead code and the "
       "dual-entitled empty-result bug is back")
+# DIMENSIONS NEVER DECIDE (user ruling 2026-09-29, dual-entitled Fidelity
+# prompt): offering_type LISTED beside product_class read as a contradiction,
+# the agent planned an ECM/DCM split and surfaced the raw rejection. It is one
+# view — a listed single-product column is blank on the other product's rows.
+# Only filters (never is_null) and the metric narrow or reject.
+check("blank_dims" in text(PLANNER) and "for name in req.dimensions" in text(PLANNER),
+      "[product] planner.py: blank_dims is gone — a LISTED single-product column "
+      "narrows or rejects again and dual-entitled listings split per product")
+check('== "is_null"' in text(PLANNER),
+      "[product] planner.py: an is_null filter on a single-product column decides "
+      "the product again — it matches the OTHER product's rows (all NULL there)")
+check('result["column_note"]' in text(ROOT / "app" / "services" / "domain_query_service.py"),
+      "[product] domain_query_service.py: column_note is gone — the agent reads a "
+      "blank-by-design column as missing data and re-queries")
+check(has(SKILL, "just project it") and has(SKILL, "never split by product for it"),
+      "[product] SKILL.md: the list-freely rule for single-product columns is gone "
+      "(user 2026-09-29: 'this answer is bad')")
+check(not has(SKILL, "If your request touches any of these, add")
+      and not has(SKILL, "scope `product eq` whenever you"),
+      "[product] SKILL.md: the old 'scope product eq whenever you touch one' rule "
+      "is back — it taught the agent to split dual-entitled listings per product")
+check(not has(SKILL, "`settlement_ts` (tranche)"),
+      "[product] SKILL.md: tranche settlement_ts is listed DCM-only again — it is "
+      "on both products since the Ipreo branch")
+check(has(ORDER, "merely LISTED") and has(DEAL, "merely LISTED"),
+      "[product] order/deal cards lost the listed-column-is-blank rule")
 check("products" in text(ONTOLOGY_PY),
       "[product] ontology.py: the specs no longer carry `products` — per-product "
       "applicability is back to prose, which is what let the bug ship")
@@ -2568,6 +2594,7 @@ _NAMES_VOCAB = {
     "entitlement_denied", "no_entitled_products", "product_not_applicable",
     "product_not_entitled", "stale_relative_window", "unknown_computed_filter",
     "unsupported_intents", "usage_notes", "how_to_use",
+    "product_note", "unit_note", "column_note",
     # tools / servers / prose
     "run_bqs_query", "discover_business_terms", "capital_markets_oracle_mcp",
     "bill_and_deliver",

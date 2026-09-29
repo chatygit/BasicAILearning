@@ -72,26 +72,25 @@ how_to_use:
      order/IOI type, meeting type, investor category/region, 'top investors', and
      'how many deals/tranches did <investor> touch' (COUNT DISTINCT on deal/tranche
      while filtering the investor)."
-  - "ALWAYS set 'product'. ECM allocations/demand are SHARE COUNTS; DCM order
-     amounts are notional MONEY — scope one 'currency' or group by 'currency' for
-     DCM money totals. State the unit in the answer. Product unknown (a named
-     deal / issuer / transaction with no product
-     word)? never guess one — filter product in ['ECM','DCM'] and put
-     'product' in dimensions; the rows tell you which it is. A product-scoped
-     field in the request decides the product — scope product eq to it."
-  - "PRODUCT APPLICABILITY IS A LOOKUP, NOT A JUDGEMENT. Eight fields are
-     ECM-ONLY — the view hard-casts them to NULL on every DCM row, so the list is
-     complete and closed: investor_category_key, meeting_type,
-     meeting_type_key, order_type, ioi_type,
-     offering_type, equity_type, order_ownership. (investor_region and
-     investor_category LEFT this list in release 3 — DCM carries country
-     names ~95% and investor types ~67%.) sales_person is the one
-     DCM-only field (NULL on ECM).
-     Everything else works on BOTH products. NOTHING here is DCM-only. Combining product 'DCM' with an ECM-only field returns ZERO rows —
-     that is an empty answer, not a narrow one. DO NOT RUN IT: say the field is
-     not captured for bonds, and offer either the same ask on ECM or an
-     equivalent built from the both-product fields (investor_name / investor_id /
-     allocation / demand / currency)."
+  - "ALWAYS set 'product'. ECM allocations/demand are counts in the security's
+     unit (equity_type); DCM order amounts are notional MONEY — scope one
+     'currency' or group by 'currency' for DCM money totals. State the unit.
+     Product unknown (no product word)? never guess one — filter product in ['ECM','DCM']
+     and put 'product' in dimensions; the rows tell you which it is. A
+     product-scoped FILTER decides the product — scope product eq to it; a
+     product-scoped column merely LISTED is blank on the other product's rows:
+     project it, never split the answer per product."
+  - "PRODUCT APPLICABILITY IS A LOOKUP, NOT A JUDGEMENT: each field's
+     description opens ECM / DCM / both, and the view hard-casts a
+     single-product field to NULL on the other product's rows. High-traffic
+     ECM-only: investor_category_key, meeting_type(_key), order_type, ioi_type,
+     offering_type, equity_type, order_ownership, book_status. DCM-only:
+     product_class, tenors, investor_qib_status, esg_tag, obo_name,
+     tranche_region. investor_region, investor_category and sales_person work
+     on BOTH. FILTERING product 'DCM' on an ECM-only field matches ZERO rows —
+     the server rejects it (product_not_applicable): say the field is not
+     captured for bonds and offer the ECM ask. LISTING one across both products
+     is fine — it is blank on the other product's rows."
   - "Investor-side scoping: use investor_id (GP id) for a picked entity or
      investor_name like '%NAME%' for a family/name. Umbrella names (BlackRock,
      Fidelity) mean the whole family — group by investor_name and show ids.
