@@ -845,8 +845,13 @@ ISSUERVIEW_* block, DEAL_ORDERBOOK_* block, EXEC_DEAL_REGION.
 #     OFFERING_TYPE (1 = IPO, 2 = FO) exists on 313 issues ONLY — the same 313
 #     the mirror's PRODUCT_OFFERING_TYPE_VALUE carries (216 C-IPO, 73 C-FO,
 #     20 CB-IPO, 4 CP-IPO, from late 2013). The ~19,300 older issues have NO
-#     stored IPO-vs-FO anywhere in these tables (db-asks O tests a filing-
-#     range derivation). Also unexposed: FX at offering/settlement,
+#     stored IPO-vs-FO anywhere in these tables, and NO derivation exists
+#     (db-asks O, 2026-09-29): all 19,341 unlabelled issues (1990-2099) have
+#     neither a filing range nor a file price. On the 313 labelled ones the
+#     signal even runs the other way — INIT_FILE_PX_LO/_HI sits on 70 of 74
+#     FOs (the marketed range) and on 12 of 240 IPOs; FILE_PX on 132 of 240
+#     IPOs and on no FO. The only source for the history is an external deal
+#     reference (DealLogic) matched at load time. Also unexposed: FX at offering/settlement,
 #     institutional retention, deal state, PIPE flag, overallotment max.
 # IPREO_PRODUCT (32 cols): UUID, IP_PRD_ID, PRD_ID, ISS_ID, DEC_PAR_VALUE,
 #   COUPON_RATE, MAT_DT, OFFER_PX, SEC_TYPE_CD, BASE_PRD_IND, CCY_ID,
@@ -857,9 +862,10 @@ ISSUERVIEW_* block, DEAL_ORDERBOOK_* block, EXEC_DEAL_REGION.
 #     GDR/GDS 58, SUCN 47, Common 24, ExSrNts 22, EqtyUts 20, CvtPfdMan 18,
 #     CSN 18, ExSrUnSNt 15, CSrSn 12, then a long tail (WAR, PIERS, 144A - CS,
 #     Units …). Adds the ADR / GDR distinction the mirror folds into Common;
-#     INIT_FILE_PX_LO / _HI + FILE_PX + OFFER_PX = the IPO filing range vs the
-#     final price ("priced above / below the range") — unexposed today
-#     (pricing-sentiment gap); SYMBOL = ticker; COUPON_RATE / MAT_DT /
+#     INIT_FILE_PX_LO / _HI + FILE_PX + OFFER_PX = filing price data vs the
+#     final price — present ONLY on the 313 issues from late 2013 (db-asks O;
+#     the history has none), so "priced above / below the range" covers the
+#     recent deals only (pricing-sentiment gap); SYMBOL = ticker; COUPON_RATE / MAT_DT /
 #     CONVERSION_FACTOR for convertibles.
 # IPREO_TRANCHE (38 cols): UUID, IP_TRN_ID, TRN_ID, ISS_ID, TRN_NM,
 #   TRN_OWNER_NM, DEFAULT_PRD_ID, DTC_TRK_PER_START_DT, DTC_TRK_PER_END_DT,

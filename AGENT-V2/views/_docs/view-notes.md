@@ -834,6 +834,11 @@ object (972 on UAT); 'Settled' RQ-era tranches STAY (we exclude RQ orders,
 not tranches) but carry no book. ECM untouched pending Alex; trade / hedge
 views untouched pending Vinit. Doctrine: count asks default to priced /
 freeToTrade (Vinit). Deploy-check: 25/25b, 26/26b/26c, 27/27b.
+2026-09-29 (PR bot, after the first deploy): the deal view's DCM CURRENCY
+roll-up (CU block, LISTAGG over OB_DEAL_TRANCHE) had kept the excluded
+tranches, so a deal with an active USD tranche and a cancelled EUR one
+still listed 'USD | EUR'; the same NULL-safe status predicate is on it
+now — vw_deal_summary re-deploy, then A0 + B-DCM.
 
 ## ADDENDUM 13 — 2026-09-29 ORDER_ALLOCATION keeps the source NULL
 All three order-view branches wrapped the allocation in NVL(…, 0), so an
@@ -863,8 +868,10 @@ equity_type is 'Equity'. A view-side SECURITY MAP is staged in BACKLOG §3
 Ipreo Common Stock deals — and db-asks M/N showed the raw source has no more:
 IPREO_ISSUE.OFFERING_TYPE (1 = IPO, 2 = FO) exists on the same 313 issues
 the mirror carries (late 2013 on); ISSUE_TYPE_CD (C / CB / CP / EU) is the
-security. A filing-range derivation (IPREO_PRODUCT.INIT_FILE_PX_LO/_HI) is
-under test (db-asks O); until then pre-2014 IPO asks cannot be filtered by
-type and the deal card says so. Ipreo Common Stock LAST date 2099-02-15 =
+security. The filing-range derivation failed the test (db-asks O): the
+19,341 unlabelled issues have neither a range nor a file price, and on the
+labelled 313 the range sits on follow-ons, the file price on IPOs. Pre-2014
+IPO asks cannot be filtered by type; the deal card says so; DealLogic at
+load time is the only future source (ICEBERG-PLAN). Ipreo Common Stock LAST date 2099-02-15 =
 a source placeholder date (trailing windows end at tomorrow, so it never
 shows unless asked for).

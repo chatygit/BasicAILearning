@@ -285,12 +285,37 @@ def test_mixed_product_dimensions_run_as_one_query_on_a_dual_scope():
         "limit": 50,
     })
     assert plan.narrowed_product is None and plan.narrowed_by == []
-    assert plan.blank_dims == {"offering_type": "ECM", "product_class": "DCM"}
+    assert plan.blank_dims == {"offering_type": "ECM", "product_class": "DCM",
+                               "equity_type": "ECM"}, (
+        "blank_dims is computed AFTER the auto-projection, so the added "
+        "equity_type is named as blank on DCM rows too (PR bot 2026-09-29)"
+    )
     names = [d.business_name for d in plan.dimensions]
     assert "offering_type" in names and "product_class" in names
     assert "equity_type" in names, "a unit column is projected → equity_type auto-added"
     prods = [f for f in plan.filters if f.business_name == "product"]
     assert len(prods) == 1 and prods[0].op == "in", "the both-products scope must survive"
+
+
+def test_submitted_bid_alone_does_not_trigger_equity_type():
+    # PR bot 2026-09-29: demand_as_submitted is the bid as placed, in
+    # demand_unit (a currency or percent bid) — the security says nothing
+    # about it, so it must not pull in the unit note by itself.
+    if not _deps():
+        SKIPPED.append("submitted bid unit (pydantic/yaml not installed)")
+        return
+    plan = _plan({
+        "source": "capital_markets_order",
+        "metric": "row_count",
+        "dimensions": ["investor_name", "demand_as_submitted", "demand_unit"],
+        "filters": [
+            {"field": "product", "op": "eq", "value": "ECM"},
+            {"field": "deal_id", "op": "eq", "value": "1447528575"},
+        ],
+        "limit": 5,
+    })
+    assert not plan.unit_auto
+    assert "equity_type" not in [d.business_name for d in plan.dimensions]
 
 
 def test_is_null_filter_on_single_product_column_never_decides():
@@ -549,6 +574,7 @@ CASES = [
     ("conflicting single-product filters rejected", test_dual_scope_with_conflicting_single_product_filters_is_rejected),
     ("mixed-product dimensions run as ONE query", test_mixed_product_dimensions_run_as_one_query_on_a_dual_scope),
     ("is_null on a single-product column never decides", test_is_null_filter_on_single_product_column_never_decides),
+    ("submitted bid alone does not trigger equity_type", test_submitted_bid_alone_does_not_trigger_equity_type),
     ("ECM allocation request gets equity_type", test_ecm_allocation_request_gets_equity_type_projected),
     ("equity_type not added for counts/DCM/present", test_equity_type_not_added_for_counts_or_dcm_or_when_present),
     ("release-3 de-scoped field on DCM accepted", test_descoped_field_on_dcm_is_now_accepted),

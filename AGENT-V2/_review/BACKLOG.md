@@ -116,6 +116,23 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       contract (dimension cases + is_null) and corpus recipe
       `investor_participation_dual_scope` with golden SQL. Verify: prompt 43
       after the server push — ONE query, one table, "-" on DCM rows.
+- [ ] PR-BOT ROUND 2026-09-29 (seven findings on the SRV-9 / SRV-10 / view
+      push) — FIXED in repo: (3) deal view DCM currency roll-up kept excluded
+      tranches → filtered, vw_deal_summary re-deploy needed; (4)
+      demand_as_submitted was in _UNIT_COLUMNS → removed, unit_note carves it
+      out; (7) blank_dims computed before the equity_type auto-projection →
+      _blank_dims runs after it, column_note now names equity_type on dual
+      scopes; (5) unit_note says 'Equity' is a placeholder — read the security
+      from offering_type's prefix; (6) order card said "the DCM book excludes
+      NOTHING" and "ECM keeps only OWNED orders" → rewritten to the current
+      exclusions (HOME + AWAY since release 2). ANSWERED, no change: (1)
+      per-security totals are the rule — a shares + bonds total is never an
+      answer (SKILL §6b), a single deal has one security so nothing splits,
+      zero matching orders now return zero rows (the agent reads 0 rows as
+      the answer); (2) NULL allocation = not recorded, 0 = stored zero (census
+      L3: NULL is the normal state at every source) — order card says a
+      'zero allocation' ask reports both buckets, filter gained is_null;
+      averages excluding unrecorded allocations is the correct average.
 - [ ] SRV-8 disambiguation probe runs SERIAL after the answer (PROD 2026-09-25:
       Fidelity ask execute 22.5 s + enrich 20.1 s — the probe re-scanned the
       order view because investor_name was not projected). Fix: fire the
@@ -185,18 +202,20 @@ Batch B:
       IPREO_ISSUE.OFFERING_TYPE (1 = IPO, 2 = FO) is populated on the same 313
       issues the mirror carries (late 2013 on); the ~19,300 older issues store
       no IPO-vs-FO anywhere (ISSUE_TYPE_CD is the security, not the offering).
-      Nothing to fill from. Candidate DERIVATION: a filing range
-      (IPREO_PRODUCT.INIT_FILE_PX_LO/_HI) marks an IPO — db-asks O1 tests it
-      on the 313 labelled issues, O2 measures history coverage. Build only if
-      O1 is near-clean, as OFFERING_TYPE = NVL(stored, CASE range → 'IPO') with
-      an OFFERING_TYPE_SOURCE column ('stored' / 'derived') so the agent can
-      say so; otherwise the honest doctrine stands — pre-2014 Ipreo IPO asks
-      cannot be filtered by type (deal card says so). The deal name is NEVER
-      the source (§3c-bis).
+      Nothing to fill from, and NO DERIVATION (db-asks O, 2026-09-29): all
+      19,341 unlabelled issues carry neither a filing range nor a file price;
+      on the 313 labelled ones the range sits on FOs (70 of 74) and the file
+      price on IPOs (132 of 240) — recent-era fields, not history. CLOSED as
+      a view item: the honest doctrine stands (deal card: pre-2014 Ipreo IPO
+      asks cannot be filtered by type; the deal name is never the source,
+      §3c-bis). The only real source is DealLogic (deal type on every ECM
+      deal): matched on issuer + pricing date AT LOAD TIME in the Iceberg core
+      layer (ICEBERG-PLAN, sources outside the bucket) once we have read
+      rights on that catalog — ASKS-external §5 (6).
 - [ ] IPREO LEADS from the same dictionary (not built): IPREO_PRODUCT
-      INIT_FILE_PX_LO / _HI + FILE_PX + OFFER_PX = the IPO filing range vs the
-      final price ("priced above / within / below the range" — the pricing-
-      sentiment gap's first real column); IPREO_TRANCHE
+      INIT_FILE_PX_LO / _HI + FILE_PX + OFFER_PX = filing price data vs the
+      final price — on the 313 late-2013+ issues only (db-asks O: the history
+      has none), so "priced above / below the range" would cover ~132 IPOs; IPREO_TRANCHE
       DEAL_OWNER_CALENDAR_ROLE_NM = Citi's role per tranche (N4: clean
       vocabulary JBR / PBR / LM / CM / SBR / CLM / JBRP but NULL on 19,268 of
       ~19.6k issues — a fallback for the recent deals only, the syndicate-

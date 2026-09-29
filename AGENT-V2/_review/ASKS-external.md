@@ -235,7 +235,12 @@ a mandate without a book (no orders, no size), to be excluded from deal
 counts? (4) will the security (common stock / convertible / units) be stored
 in its own field again, or must we derive it from the offering-type prefix?
 (5) Ipreo mirror: PRODUCT_OFFERING_TYPE_VALUE is blank on 17,307 of 17,310
-Common Stock deals — which raw Ipreo column carries IPO vs follow-on?
+Common Stock deals — ANSWERED by census (db-asks N/O, 2026-09-29): none does;
+the raw issue carries the type on the same 313 issues, the history has
+nothing and nothing derives it. (6) DealLogic catalog (Starburst): read
+rights, so the Ipreo history's IPO-vs-follow-on can be filled at load time
+from DealLogic's deal type (issuer + pricing-date match) — the only source
+there is.
 
 ## 6. Vinit — status exclusion (status: ANSWERED 2026-09-28, built in the repo; three follow-ups)
 

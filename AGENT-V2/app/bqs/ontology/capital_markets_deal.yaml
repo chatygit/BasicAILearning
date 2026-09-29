@@ -130,10 +130,11 @@ how_to_use:
      across the deal's tranche statuses, which picks lowercase over uppercase by
      codepoint, so a deal whose tranches are 'Settled' and 'announced' reports
      'announced' — the deal card and the tranche object can legitimately
-     disagree; disclose it rather than trying to reconcile it. On ECM the view
-     excludes Confidential, Withdrawn and Terminated, so an ECM 'confidential
-     deals' ask returns zero BY CONSTRUCTION — say that, do not report 'none
-     found'. DCM excludes nothing and does carry 'confidential' rows (Q17)."
+     disagree; disclose it. On ECM the view excludes Confidential, Withdrawn
+     and Terminated, so an ECM 'confidential deals' ask is zero BY
+     CONSTRUCTION — say that, never 'none found'. DCM keeps 'confidential'
+     deals; a deal whose tranches are ALL cancelled / postponed / deleted /
+     archived is gone (Q17)."
   - "Multi-currency deals: metric currency_count with a HAVING threshold (group
      by deal_name, metric currency_count, having currency_count gt 1). The
      CURRENCIES list is deduped now (Q21 found 6,940 DCM deals rendering
@@ -448,13 +449,12 @@ filters:
       capital_markets_tranche because it is the same source column: Priced, Settled,
       Live, Executed, Draft, Announced, Allocated, Subject, Archived,
       FreeToTrade, Postponed, Cancelled, Deleted, OPEN, CLOSED (15).
-      'Mandated' and 'Private' are NOT offered: V1 files them under DCM, and
-      Q17's complete DCM measurement contains neither, so they are attested on
-      neither product.
+      'Mandated' and 'Private' are NOT offered: Q17's complete DCM measurement
+      contains neither.
       ECM NEVER RETURNS Confidential, Withdrawn or Terminated: the view excludes
       them on every ECM branch, so such an ask is structurally zero — say that,
-      do not report "none found". DCM excludes nothing and does carry
-      'confidential' rows.
+      do not report "none found". DCM keeps 'confidential' deals but drops a
+      deal whose tranches are ALL cancelled / postponed / deleted / archived.
       TWO MORE THINGS THIS COLUMN HIDES: on DCM it is MAX() across the deal's
       tranche statuses, which picks lowercase over uppercase by codepoint, so the
       deal card can disagree with capital_markets_tranche for the same deal (Q17/Q18); on

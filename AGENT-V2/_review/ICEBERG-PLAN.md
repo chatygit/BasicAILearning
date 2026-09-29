@@ -245,6 +245,8 @@ to the tranche fee columns). Decision per column, taken when the platform team
 says which catalogs our role may read. DealLogic follows the identical path:
 its Mongo catalog is a source, its rows become one more branch in core.
 
+- **DealLogic fills a gap our own sources cannot (found 2026-09-29):** the Ipreo history (1990–2013, ~19,300 ECM deals) stores no IPO-versus-follow-on flag anywhere, and no column derives it. DealLogic carries the deal type on every ECM deal. The core-layer LOAD matches Ipreo issues to DealLogic on issuer and pricing date and writes `offering_type` (with `offering_type_source = 'deallogic'`) — never a join at question time. Needs read rights on the DealLogic catalog (asks upward).
+
 ## What does not change
 BQS contract (one metric per request, ANDed filters, 40-id in-lists, partition_by,
 having, offset paging) · the nine objects and every column in them · SKILL and

@@ -330,11 +330,15 @@ class DomainQueryService:
                 )
             if getattr(plan, "unit_auto", False):
                 result["unit_note"] = (
-                    "equity_type was added to the rows: ECM figures are in the "
-                    "SECURITY's unit — shares, or BONDS on Convertible Bonds / "
-                    "Convertible Preferred / Exchangeable Notes. Label every "
-                    "figure from that column; never default to shares. A blank "
-                    "equity_type marks a DCM row: money in its currency."
+                    "equity_type was added to the rows: ECM demand / allocation / "
+                    "size figures are in the SECURITY's unit — shares, or BONDS on "
+                    "Convertible Bonds / Convertible Preferred / Exchangeable "
+                    "Notes. Label them from that column; never default to shares. "
+                    "demand_as_submitted is the exception: its unit is demand_unit. "
+                    "'Equity' is a placeholder on the newest deals: read the "
+                    "security from offering_type's prefix ('Convertible - …' = "
+                    "bonds). A blank equity_type marks a DCM row: money in its "
+                    "currency."
                 )
             # NOTE: `sql_audit` puts the generated SQL INTO the response the
             # agent sees. The skill's confidentiality rule ("never disclose the

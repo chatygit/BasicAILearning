@@ -464,7 +464,7 @@ def _resolve_derived_filter(spec: OntologySpec, name: str) -> ResolvedDerivedFil
     return ResolvedDerivedFilter(name, dspec.predicate, columns)
 
 
-def _check_product_applicability(req, spec) -> tuple[str | None, list[str], dict[str, str]]:
+def _check_product_applicability(req, spec) -> tuple[str | None, list[str]]:
     """Scope a request by the product its FILTERS and METRIC imply — and let a
     single-product DIMENSION through untouched.
 
@@ -484,8 +484,8 @@ def _check_product_applicability(req, spec) -> tuple[str | None, list[str], dict
       taken for a contradiction, the agent planned an ECM/DCM split and
       surfaced the raw rejection). It is ONE view: a listed column that
       exists on one product is simply blank on the other product's rows.
-      Those columns come back as blank_dims so the response can say the
-      blank is by design.
+      _blank_dims names those columns (after auto-projection) so the
+      response can say the blank is by design.
     * is_null on a single-product column matches the other product's rows
       (all NULL there), so it neither decides nor rejects.
 
@@ -494,7 +494,7 @@ def _check_product_applicability(req, spec) -> tuple[str | None, list[str], dict
     entitled caller (production, and every test user) is scoped to both, so
     the same question behaves differently per login unless these rules hold.
 
-    Returns (narrowed_product, deciding_fields, blank_dims).
+    Returns (narrowed_product, deciding_fields).
     """
     requested: set[str] = set()
     for f in req.filters:
@@ -544,20 +544,42 @@ def _check_product_applicability(req, spec) -> tuple[str | None, list[str], dict
                 code="product_not_applicable",
             )
 
+    return narrowed, decided
+
+
+def _blank_dims(req: BQSRequest, spec: OntologySpec) -> dict[str, str]:
+    """Listed dimensions that exist on one product only while the scope spans
+    the other — blank on those rows BY DESIGN (name → product).
+
+    Computed on the FINAL projection: after narrowing rewrote the product
+    filter and after equity_type was auto-projected (PR bot 2026-09-29:
+    computing it earlier left an auto-added equity_type out of column_note,
+    so its DCM blanks were explained only by unit_note, in other words).
+    """
+    scope: set[str] = set()
+    for f in req.filters:
+        if f.field == "product":
+            v = f.value
+            scope |= {str(x).upper() for x in (v if isinstance(v, list) else [v])}
+    if not scope:
+        scope = {"ECM", "DCM"}
     blank: dict[str, str] = {}
     for name in req.dimensions:
         d = spec.dimensions.get(name)
         allow = {p.upper() for p in (getattr(d, "products", None) or [])} if d else set()
-        if allow and requested - allow:
+        if allow and scope - allow:
             blank[name] = "/".join(sorted(allow))
-    return narrowed, decided, blank
+    return blank
 
 
 # Columns whose ECM unit is set by the security (shares, or bonds on
 # convertibles). A request that projects or aggregates one of these without
 # `equity_type` cannot be labelled correctly by the agent; counts are unit-free.
+# demand_as_submitted is NOT here: it is the bid as placed, in demand_unit (a
+# currency or percent bid), so the security says nothing about it (PR bot
+# 2026-09-29).
 _UNIT_COLUMNS = {
-    "order_demand_qty", "order_allocation", "demand_as_submitted",
+    "order_demand_qty", "order_allocation",
     "total_demand", "total_allocation", "deal_size", "tranche_size",
 }
 
@@ -602,8 +624,9 @@ def plan_query(req: BQSRequest, spec: OntologySpec) -> QueryPlan:
 
     _check_unsupported(spec, req)
 
-    narrowed, narrowed_by, blank_dims = _check_product_applicability(req, spec)
+    narrowed, narrowed_by = _check_product_applicability(req, spec)
     unit_auto = _auto_project_equity_type(req, spec)
+    blank_dims = _blank_dims(req, spec)
     dims = _resolve_dimensions(req, spec)
     filters = [_validate_filter(spec, f) for f in req.filters]
     computed_filters = [

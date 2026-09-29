@@ -1699,6 +1699,23 @@ check(has(SKILL, "TABLE CELLS ARE BARE NUMBERS") and has(AGENTS, "cells are bare
 check(not has(SKILL, "inline figures keep their label"),
       "[units] SKILL.md: 'inline figures keep their label' is back — the agent "
       "read it as a licence to suffix table cells")
+# PR BOT ROUND 2026-09-29 on the SRV-9 / SRV-10 / view push.
+_PL = text(PLANNER)
+_unit_block = _PL[_PL.index("_UNIT_COLUMNS = {"):_PL.index("}", _PL.index("_UNIT_COLUMNS = {"))]
+check('"demand_as_submitted"' not in _unit_block,
+      "[units] planner.py: demand_as_submitted is back in _UNIT_COLUMNS — a "
+      "currency / percent bid gets the security-unit note")
+check(_PL.index("_auto_project_equity_type(req, spec)\n") < _PL.index("_blank_dims(req, spec)\n")
+      and _PL.count("_blank_dims(req, spec)") >= 1,
+      "[product] planner.py: blank_dims is computed before equity_type is auto-"
+      "projected — its DCM blanks vanish from column_note")
+check("demand_as_submitted is the exception" in text(ROOT / "app" / "services" / "domain_query_service.py"),
+      "[units] domain_query_service.py: unit_note lost the demand_as_submitted carve-out")
+check(not has(ORDER, "excludes NOTHING") and not has(ORDER, "keeps only OWNED"),
+      "[status] order card describes the pre-exclusion DCM book / HOME-only ECM book again")
+check("operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]" in text(ORDER),
+      "[units] order card: order_allocation lost is_null — 'zero allocation' asks "
+      "cannot reach the not-recorded bucket")
 # NEW OPUS SOURCE SHAPE (UAT census L1/L2, 2026-09-29): deals since Oct-2025
 # store PRODUCT_EQUITY_TYPE_VALUE = 'Equity' (a placeholder) and a compound
 # PRODUCT_OFFERING_TYPE_VALUE ('Common Stk - IPO', 'Common Stk - Follow on',
@@ -2188,7 +2205,7 @@ _RQ = "UPPER(O.ITEM_SOURCE) <> 'RQ'"
 for _vf, _want_t, _want_o, _want_rq in (
     ("vw_tranche_summary.sql", 1, 0, 0),
     ("vw_order_detail.sql", 1, 1, 0),
-    ("vw_deal_summary.sql", 2, 1, 1),
+    ("vw_deal_summary.sql", 3, 1, 1),  # D block + OC EXISTS + CU currency roll-up (PR bot 2026-09-29)
 ):
     _t = text(ROOT / "views" / _vf)
     check(_t.count(_T_EXCL) == _want_t,

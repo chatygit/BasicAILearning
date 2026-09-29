@@ -170,15 +170,14 @@ how_to_use:
      matching deal+tranche row and are absent from THIS object while the deal
      object's order_count still counts them — if a deal card's order count and
      this listing disagree, that is why; say so rather than reconciling. (b) The
-     ECM book is NARROWER than the DCM book in four fixed ways, none of them a
-     filter you can change: ECM keeps only OWNED orders, drops order status
-     CANCELLED / DELETED / PASS, drops MATCHED orders that are not the dominant
-     one, and drops every order whose transaction execution status is
-     Confidential / Withdrawn / Terminated. The DCM book excludes NOTHING — it
-     still contains cancelled and deleted orders, and orders on deals whose
-     status is 'confidential'. 'Number of orders' therefore means a materially
-     different population per product — disclose it whenever the two products
-     are compared side by side, and never present the two as the same measure."
+     two books are narrowed differently BY THE VIEW, not by a filter: ECM drops
+     order status CANCELLED / DELETED / PASS, non-dominant MATCHED duplicates
+     and orders on Confidential / Withdrawn / Terminated transactions (HOME and
+     AWAY both kept since release 2); DCM drops deleted / cancelled orders, the
+     pre-2022 'RQ' legacy load and every order on a cancelled / postponed /
+     deleted / archived tranche (orders on 'confidential' deals stay). 'Number
+     of orders' is a different population per product — disclose it whenever
+     the two sit side by side; never present them as one measure."
   - "VALUE TRAPS on this object: meeting_type's stored literal is '1:1', NOT
      'One-to-One' (that spelling exists only in meeting_type_key, as
      ONE_TO_ONE); 'No Meeting' IS a meeting type (user ruling 2026-08-18):
@@ -326,7 +325,7 @@ dimensions:
   meeting_type_key: {column: meeting_type_key, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Coded meeting type (NO_MEETING, ONE_TO_ONE, CONFERENCE_CALL, SMALL_GROUP, GROUP_MEETING). 'One-to-One' exists ONLY here — the displayed value is '1:1'."}
   order_type: {column: order_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Order HANDLING type (OTT/Regular). LIMIT/MARKET/SCALED are ioi_type values, not these."}
   ioi_type: {column: ioi_type, products: ["ECM"], description: "ECM-ONLY (hard NULL on DCM). Indication-of-interest type (LIMIT/MARKET/SCALED…). SCALED means the order's demand is a price/quantity CURVE — several indications, one per limit price — and this view carries no curve, so on a SCALED order with blank demand say the indication is a curve not surfaced here and offer the limit price as context. 'Scaled back' in a sentence about allocation is NOT this field — that is demand minus allocation."}
-  order_allocation: {column: order_allocation, description: "Allocation on this order (ECM: a SHARE count, or BONDS on convertibles per equity_type — never read its unit from demand_unit; DCM: money) — project it in order listings. NULL = no allocation recorded (say 'Not recorded', as for a blank indication); 0 = a stored zero, allocated nothing."}
+  order_allocation: {column: order_allocation, description: "Allocation on this order (ECM: a SHARE count, or BONDS on convertibles per equity_type — never read its unit from demand_unit; DCM: money) — project it in order listings. NULL = no allocation recorded (say 'Not recorded', as for a blank indication); 0 = a stored zero, allocated nothing — a 'zero allocation' ask reports BOTH buckets (eq 0, is_null), never merged."}
   order_demand_qty: {column: order_demand_qty, description: "THE indication/demand field — ECM: a SHARE count (BONDS on convertibles by equity_type) whatever demand_unit says: the desk's normalised quantity, else the submitted quantity where its unit was shares/bonds, else the source's own conversion of a money/face bid; DCM: money (the same stored number as order_amount). Project it in order listings; THE ranking key for 'largest order' asks (never order_amount, a LIMIT PRICE). BLANK with demand_as_submitted filled = a bid nobody converted: quote it with demand_unit, never convert it, never say 'no demand recorded'; BLANK with demand_as_submitted blank = no quantity recorded."}
   demand_unit: {column: demand_unit, description: "Unit of demand_as_submitted — the bid AS PLACED — NOT of order_demand_qty / order_allocation (those are shares or bonds). ECM: SHARES, BOND, CURRENCY, PERCENT, FACE, DEALSIZEPERCENT, CONVPREF, CONVCURRENCY (~90% SHARES); DCM: always CURRENCY. Show it beside demand_as_submitted; never sum demand_as_submitted across units."}
   demand_as_submitted: {column: demand_as_submitted, description: "The bid AS THE INVESTOR PLACED IT, in demand_unit (the money amount for a currency bid, face for a face bid) — filled even where order_demand_qty is blank. Per-order display only: never aggregate it, never compare it across units."}
@@ -586,7 +585,7 @@ filters:
       is an allocation cut, ranked by demand minus allocation instead.
   order_allocation:
     column: order_allocation
-    operators: [gt, gte, lt, lte, between, eq]
+    operators: [gt, gte, lt, lte, between, eq, is_null, is_not_null]
     description: >-
       ROW-LEVEL allocation threshold ("orders larger than 1m shares"). Distinct
       from a HAVING on total_allocation, which thresholds an investor's TOTAL.
