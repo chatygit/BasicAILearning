@@ -843,5 +843,24 @@ allocation on the same rows. The NVL is gone (OPUS and Ipreo PRIVATE_ALLOC,
 DCM FINAL_ALLOC): NULL = not recorded, 0 = a stored zero. SUM-based metrics
 ignore NULL (unchanged); `order_allocation eq 0` now means a stored zero
 only; `gt 0` unchanged. Same batch as the status exclusion; deploy-check
-28/28b (INFO — orders with no allocation recorded, by product); census
-db-asks L3 shows the source NULL / 0 / positive split first.
+28/28b (INFO — orders with no allocation recorded, by product). Census L3
+(UAT 2026-09-29, base rows incl. versions): OB_ECM_ORDER ~97k NULL (61,926 of
+them UNACKNOWLEDGED) vs 392 stored zeros; IPREO_OB_ECM_ORDER 113,749 NULL /
+104,624 zero / 458,828 positive; OB_ORDER non-RQ 1,107,717 NULL / 12,257 zero
+/ 196,264 positive — NULL is the normal "not allocated" state at every
+source, so the NVL had been turning most books into "0 allocated".
+
+## ADDENDUM 14 — 2026-09-29 the new OPUS source shape (census L1/L2)
+Deals since Oct-2025 (UAT: the EMEA ECM sprint deals, ids 75076060-75078113)
+store PRODUCT_EQUITY_TYPE_VALUE = 'Equity' and a compound
+PRODUCT_OFFERING_TYPE_VALUE: 'Common Stk - Follow on' / '- IPO' / '- Block
+Trade' / '- ADR' / '- Broking' / '- Private Equity' / '- AEO' / '- SPAC IPO'
+/ '- COP', 'Convertible - Debt', 'Capital Markets Advisory'; DEAL_SIZE NULL
+on every sampled row. The views pass both through as stored; the catalogs now
+match IPO asks with like '%IPO%' and read the security from the prefix when
+equity_type is 'Equity'. A view-side SECURITY MAP is staged in BACKLOG §3
+(approval-gated). Separately, OFFERING_TYPE is blank on 17,307 of 17,310
+Ipreo Common Stock deals (the mirror does not carry it) — db-asks M lists the
+raw Ipreo columns to find a source. Ipreo Common Stock LAST date 2099-02-15 =
+a source placeholder date (trailing windows end at tomorrow, so it never
+shows unless asked for).

@@ -11,52 +11,12 @@
 -- allocation recorded, by product — INFO, expect > 0 now).
 
 -- ===========================================================================
--- L. PO ECM LABELLING FEEDBACK 2026-09-29 (UAT, before the deploy above).
--- Four statements, run as a script. Results into ~/Desktop/ADK.
+-- M. IPREO OFFERING TYPE (UAT). L1 showed OFFERING_TYPE blank on 17,307 of
+-- 17,310 Ipreo Common Stock deals, so "IPOs of 2008" cannot find Visa. The
+-- mirror does not carry it; the raw tables may. Column lists first (three
+-- SELECTs on the dictionary — instant), values next round.
 -- ===========================================================================
-
--- L1. Equity-type vocabulary on ECM deals (PO item 4: 'IPO' / 'Equity' show
---     up in the SECURITY column — they are deal types recorded as the equity
---     type at source). Counts per value, split by offering type and source.
-SELECT EQUITY_TYPE, OFFERING_TYPE, COUNT(*) AS DEALS,
-       COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN 1 END) AS IPREO_DEALS,
-       TO_CHAR(MIN(FIRST_PRICED), 'YYYY-MM-DD') AS EARLIEST,
-       TO_CHAR(MAX(FIRST_PRICED), 'YYYY-MM-DD') AS LATEST
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-WHERE  PRODUCT = 'ECM'
-GROUP  BY EQUITY_TYPE, OFFERING_TYPE
-ORDER  BY DEALS DESC;
-
--- L2. The deals behind the odd values — the names say whether they are real.
-SELECT DEAL_ID, DEAL_NAME, EQUITY_TYPE, OFFERING_TYPE,
-       TO_CHAR(FIRST_PRICED, 'YYYY-MM-DD') AS PRICED, DEAL_SIZE
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-WHERE  PRODUCT = 'ECM' AND EQUITY_TYPE IN ('IPO', 'Ipo', 'Equity', 'EQUITY')
-ORDER  BY FIRST_PRICED DESC NULLS LAST
-FETCH FIRST 20 ROWS ONLY;
-
--- L3. Allocation at source: NULL vs 0 vs positive (PO item 2 — the view has
---     been turning NULL into 0). Base tables carry every DG version, so read
---     these as proportions. One statement per source.
-SELECT 'OB_ECM_ORDER' AS SRC, ALLOCATION_STATUS,
-       CASE WHEN PRIVATE_ALLOC IS NULL THEN 'NULL' WHEN PRIVATE_ALLOC = 0 THEN 'ZERO' ELSE 'POSITIVE' END AS ALLOC,
-       COUNT(*) AS ROWS_
-FROM   DGSTREAM.OB_ECM_ORDER
-GROUP  BY ALLOCATION_STATUS,
-          CASE WHEN PRIVATE_ALLOC IS NULL THEN 'NULL' WHEN PRIVATE_ALLOC = 0 THEN 'ZERO' ELSE 'POSITIVE' END
-ORDER  BY 1, 2, 3;
-
-SELECT 'IPREO_OB_ECM_ORDER' AS SRC,
-       CASE WHEN PRIVATE_ALLOC IS NULL THEN 'NULL' WHEN PRIVATE_ALLOC = 0 THEN 'ZERO' ELSE 'POSITIVE' END AS ALLOC,
-       COUNT(*) AS ROWS_
-FROM   DGSTREAM.IPREO_OB_ECM_ORDER
-GROUP  BY CASE WHEN PRIVATE_ALLOC IS NULL THEN 'NULL' WHEN PRIVATE_ALLOC = 0 THEN 'ZERO' ELSE 'POSITIVE' END
-ORDER  BY 2;
-
-SELECT 'OB_ORDER (non-RQ)' AS SRC,
-       CASE WHEN FINAL_ALLOC IS NULL THEN 'NULL' WHEN FINAL_ALLOC = 0 THEN 'ZERO' ELSE 'POSITIVE' END AS ALLOC,
-       COUNT(*) AS ROWS_
-FROM   DGSTREAM.OB_ORDER
-WHERE  (ITEM_SOURCE IS NULL OR UPPER(ITEM_SOURCE) <> 'RQ')
-GROUP  BY CASE WHEN FINAL_ALLOC IS NULL THEN 'NULL' WHEN FINAL_ALLOC = 0 THEN 'ZERO' ELSE 'POSITIVE' END
-ORDER  BY 2;
+SELECT TABLE_NAME, COLUMN_ID, COLUMN_NAME, DATA_TYPE
+FROM   ALL_TAB_COLUMNS
+WHERE  OWNER = 'DGSTREAM' AND TABLE_NAME IN ('IPREO_ISSUE', 'IPREO_PRODUCT', 'IPREO_TRANCHE')
+ORDER  BY TABLE_NAME, COLUMN_ID;

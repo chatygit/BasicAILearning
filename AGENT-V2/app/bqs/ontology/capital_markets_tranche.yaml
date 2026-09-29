@@ -324,7 +324,7 @@ dimensions:
   tranche_status: {column: tranche_status, products: ["DCM"], description: "DCM. Tranche lifecycle status (same column as deal_status on DCM). cancelled / postponed / deleted / archived are EXCLUDED by the view — structurally zero. A count ask with no stage named = priced or freeToTrade, said in the answer. NULL on ECM; use deal_status."}
 
 # -------------------------------- FILTERS -----------------------------------
-  offering_type: {column: offering_type, products: ["ECM"], description: "ECM offering type ferried at tranche grain (helper wave) — IPO / Follow-On asks per tranche without the deal hop. NULL on DCM."}
+  offering_type: {column: offering_type, products: ["ECM"], description: "ECM deal type ferried to tranche grain — deal-object values and filters (IPO asks like '%IPO%'). NULL on DCM."}
   execution_status: {column: execution_status, products: ["ECM"], description: "ECM status-type label (pairs with deal_status); NULL on DCM."}
 filters:
   offering_type:
@@ -333,7 +333,7 @@ filters:
     operators: [eq, ne, in, not_in, like]
     suggestable: true
     case_insensitive: true
-    description: ECM only ('IPO', 'Follow-On'...); NULL on every DCM row.
+    description: ECM only — deal-object values; IPO asks like '%IPO%'; NULL on DCM.
   product:
     column: product
     operators: [eq, in]

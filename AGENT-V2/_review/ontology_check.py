@@ -1699,6 +1699,23 @@ check(has(SKILL, "TABLE CELLS ARE BARE NUMBERS") and has(AGENTS, "cells are bare
 check(not has(SKILL, "inline figures keep their label"),
       "[units] SKILL.md: 'inline figures keep their label' is back — the agent "
       "read it as a licence to suffix table cells")
+# NEW OPUS SOURCE SHAPE (UAT census L1/L2, 2026-09-29): deals since Oct-2025
+# store PRODUCT_EQUITY_TYPE_VALUE = 'Equity' (a placeholder) and a compound
+# PRODUCT_OFFERING_TYPE_VALUE ('Common Stk - IPO', 'Common Stk - Follow on',
+# 'Common Stk - Block Trade', 'Convertible - Debt', 'Capital Markets
+# Advisory'…). 'IPO'/'FO' eq filters miss them; the security is the prefix.
+# Also: OFFERING_TYPE is blank on 17,307 of 17,310 Ipreo Common Stock deals.
+check(has(DEAL, "Common Stk - IPO") and has(ORDER, "Common Stk - IPO") and has(TRANCHE, "IPO asks like '%IPO%'"),
+      "[values] a catalog lost the Oct-2025 offering_type vocabulary — IPO asks "
+      "go back to eq 'IPO' and miss every new-shape deal (PO 2026-09-29 item 4)")
+check(has(DEAL, "'Equity' (deals since Oct-2025) is a placeholder"),
+      "[values] deal card: the 'Equity' placeholder rule is gone — the Security "
+      "column shows 'Equity' / the deal type again")
+check("operators: [eq, ne, in, like, is_null, is_not_null]" in text(ORDER),
+      "[values] order card: offering_type lost `like` — 'investors in IPOs' "
+      "cannot match 'Common Stk - IPO'")
+check(not has(DEAL, "ONLY TWO literals are stored") and not has(ORDER, "'IPO' and 'FO' only"),
+      "[values] a catalog claims offering_type holds only IPO/FO again (false since Oct-2025)")
 check("products" in text(ONTOLOGY_PY),
       "[product] ontology.py: the specs no longer carry `products` — per-product "
       "applicability is back to prose, which is what let the bug ship")

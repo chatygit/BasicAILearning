@@ -142,8 +142,9 @@ how_to_use:
      says): sector 'Oil & Gas' is a SEPARATE value from 'Energy'; use_of_proceeds
      spells it 'M & A' WITH SPACES and splits refinancing across THREE literals —
      'Refinance', 'Debt Repayment' and DCM's 'Repay Outstanding Borrowings';
-     offering_type holds ONLY 'IPO' and 'FO'; equity_type stores 'Exchangable
-     Notes' misspelled. Match these with 'like'/'in', never a single eq, and say
+     offering_type is 'IPO'/'FO' or, since Oct-2025, 'Common Stk - IPO' style
+     (IPO asks: like '%IPO%'); equity_type stores 'Exchangable Notes'
+     misspelled. Match these with 'like'/'in', never a single eq, and say
      which values the answer covered."
 
 # ------------------------------- METRICS -----------------------------------
@@ -262,8 +263,8 @@ dimensions:
   ticker: {column: ticker, description: "Issuer ticker symbol. A ticker is a direct filter, never an entity to resolve."}
   sector: {column: sector, description: "Issuer industry sector. Closed list of 28 stored labels (enumerated on the sector filter) — 'Oil & Gas' is a SEPARATE value from 'Energy', and 'Information Technology' is separate from 'Technology'."}
   use_of_proceeds: {column: use_of_proceeds, description: "Purpose of raised funds. Stored literals include 'M & A' (with spaces); refinancing is split across 'Refinance', 'Debt Repayment' and DCM's 'Repay Outstanding Borrowings'. The DCM vocabulary is only three literals — see the filter."}
-  equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…). 'common stock'/'common shares' asks belong HERE, not on tranche product_type. NULL on DCM."}
-  offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Offering type — only 'IPO' and 'FO' (follow-on) are stored. 'Rights' is a tranche product_type, 'Convertible' an equity_type; block trade / bought deal / ABB / SPAC = a deal CLASS not exposed yet ('not available yet'). NULL on DCM."}
+  equity_type: {column: equity_type, products: ["ECM"], description: "ECM. The SECURITY (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…). 'common stock' asks belong HERE, not on tranche product_type. 'Equity' (deals since Oct-2025) is a placeholder: the security is offering_type's prefix — 'Common Stk - …' = common stock, 'Convertible - …' = convertible bonds. NULL on DCM."}
+  offering_type: {column: offering_type, products: ["ECM"], description: "ECM. The DEAL TYPE: 'IPO' / 'FO' on older deals; since Oct-2025 'Common Stk - IPO / Follow on / Block Trade / ADR / SPAC IPO', 'Convertible - Debt', 'Capital Markets Advisory'. Blank on most 10-digit-id deals; NULL on DCM."}
   deal_status: {column: deal_status, description: "Deal lifecycle status. CASE VARIANTS ARE REAL — 'priced'/'Priced' and 'announced'/'Announced' are distinct stored values on DCM (Q17), so match case-insensitively and merge the variants before reporting a breakdown or the buckets will not sum. On DCM this is MAX() across the deal's tranche statuses and can disagree with the tranche object."}
   execution_status: {column: execution_status, products: ["ECM"], description: "DEAD COLUMN — carries no information and has no filter. The view fills it from a subquery already restricted to one status type, so every ECM row reads the same literal and every DCM row is NULL. Any 'execution status' ask is a deal_status ask. Kept only because an exposed column is never removed. Do not project it."}
   deal_region: {column: deal_region, description: "Deal-level region (NAM/EMEA/APAC, rare JAPAN/LATAM). On BOTH products since the 2026-08-18 view batch (DCM was a NULL placeholder before). Sparse — blanks mean 'not captured', never 'no region'."}
@@ -467,11 +468,10 @@ filters:
     suggestable: true
     case_insensitive: true
     description: >-
-      ECM. Offering type. ONLY TWO literals are stored — 'IPO' and 'FO'
-      (follow-on, also said as "secondary"). 'Rights Issue' is a tranche
-      product_type, 'Convertible' is an equity_type, and 'Block' is not stored
-      anywhere; filtering any of them here returns zero. DCM has NO offering type
-      (the column is NULL on every DCM row), so scope ECM before using it.
+      ECM. Values: see the dimension ('IPO' / 'FO' to 2025; 'Common Stk - IPO'
+      style since Oct-2025). IPO asks: like '%IPO%'; follow-ons: in ['FO',
+      'Common Stk - Follow on']. NULL on nearly every 10-digit-id deal and on
+      every DCM row.
   equity_type:
     column: equity_type
     products: ["ECM"]
@@ -479,12 +479,11 @@ filters:
     suggestable: true
     case_insensitive: true
     description: >-
-      ECM. Equity instrument CLASS — this is where class words land: 'common
-      stock', 'common shares', 'convertible', 'preferred', 'warrants'. The known
-      set is: Common Stock, Convertible Preferred, Convertible Bonds, Equity
-      Units, Warrants, 'Exchangable Notes' (sic — stored MISSPELLED, match
-      '%EXCHANG%'), American Depository, Global Depository. Env lists vary, so
-      treat that as a superset rather than a closed enum.
+      ECM. The SECURITY — where class words land ('common stock', 'convertible',
+      'preferred', 'warrants'). Known set: Common Stock, Convertible Preferred,
+      Convertible Bonds, Equity Units, Warrants, 'Exchangable Notes' (sic —
+      match '%EXCHANG%'), American / Global Depository, and the 'Equity'
+      placeholder (see the dimension).
       Match the CLASS WORD with like ('%COMMON%', '%CONVERT%', '%PREFERRED%'),
       never equality on the user's phrasing — the stored label varies. NEVER OR
       this with the tranche object's product_type: they are different axes, and

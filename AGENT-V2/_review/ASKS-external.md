@@ -223,6 +223,20 @@ to the offer date and trade date today.
 
 ---
 
+### §5 addendum 2026-09-29 — the new OPUS deal shape (data owner / OPUS team)
+UAT deals created since Oct-2025 (EMEA ECM sprint deals) carry
+PRODUCT_EQUITY_TYPE_VALUE = 'Equity' and PRODUCT_OFFERING_TYPE_VALUE in
+'Common Stk - Follow on / IPO / Block Trade / ADR / Broking / Private Equity /
+AEO / SPAC IPO / COP', 'Convertible - Debt', 'Capital Markets Advisory', with
+DEAL_SIZE NULL. Questions: (1) is this the shape PROD will carry once the
+platform release lands, or a UAT-only configuration? (2) what do AEO and COP
+stand for (we will not invent expansions)? (3) is 'Capital Markets Advisory'
+a mandate without a book (no orders, no size), to be excluded from deal
+counts? (4) will the security (common stock / convertible / units) be stored
+in its own field again, or must we derive it from the offering-type prefix?
+(5) Ipreo mirror: PRODUCT_OFFERING_TYPE_VALUE is blank on 17,307 of 17,310
+Common Stock deals — which raw Ipreo column carries IPO vs follow-on?
+
 ## 6. Vinit — status exclusion (status: ANSWERED 2026-09-28, built in the repo; three follow-ups)
 
 Answered: drop cancelled / postponed / deleted / archived DCM tranches; drop DCM

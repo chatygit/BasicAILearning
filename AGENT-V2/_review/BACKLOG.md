@@ -162,6 +162,27 @@ Batch B:
 - [ ] V6 DEAL_SHARING_TYPE folded into the syndicate member block per product — two scans of a 377k-row table for one ask (rows 8, 1q, 18, 20 recorded before, 20b, ad-hoc ECM SOLO count; `_CITI_RX` count 3; QA 23)
 - [ ] V5 ECM deal branch in the lever-C shape (D = T⋈S grouped; deal-keyed blocks top-level; 41 aliases) — uniform shape + cheaper entity branches, not a latency claim (rows 7, 1e, 1o, 1w, 4, 4b, 15b, 15c; K10 vs K2; multi-transaction issuer hash probe; QA 2, 4, 11; T PARTITION BY unchanged pending census)
 - [ ] Standing check S3 gains a Starburst EXPLAIN of `WHERE product = 'DCM'` on vw_deal_summary — CHAR(3) literal pushdown unverified (type change if it fails; own decision)
+- [ ] SECURITY MAP for the new OPUS shape (census L1/L2, UAT 2026-09-29;
+      approval-gated, NOT in the pending batch): deals since Oct-2025 store
+      PRODUCT_EQUITY_TYPE_VALUE = 'Equity' and a compound offering type
+      ('Common Stk - Follow on', 'Common Stk - IPO', '- Block Trade', '- ADR',
+      '- Broking', '- Private Equity', '- AEO', '- SPAC IPO', '- COP',
+      'Convertible - Debt', 'Capital Markets Advisory'); deal size NULL on all
+      20 sampled (EMEA ECM sprint deals). On the six ECM branches:
+      `CASE WHEN T.PRODUCT_EQUITY_TYPE_VALUE = 'Equity' AND
+      T.PRODUCT_OFFERING_TYPE_VALUE LIKE 'Common Stk%' THEN 'Common Stock'
+      WHEN T.PRODUCT_EQUITY_TYPE_VALUE = 'Equity' AND
+      T.PRODUCT_OFFERING_TYPE_VALUE LIKE 'Convertible%' THEN 'Convertible Bonds'
+      ELSE T.PRODUCT_EQUITY_TYPE_VALUE END AS EQUITY_TYPE`. OFFERING_TYPE stays
+      as stored (the catalogs match it with like '%IPO%' / in ['FO', 'Common
+      Stk - Follow on']); a canonical map waits for the source team's meaning
+      of AEO / COP / 'Capital Markets Advisory' (ASKS-external §5). Deploy-
+      check row when built: no 'Equity' left beside a 'Common Stk' / 
+      'Convertible' offering type.
+- [ ] IPREO OFFERING TYPE (census L1): blank on 17,307 of 17,310 Ipreo Common
+      Stock deals (216 IPO / 73 FO carried) — "IPOs of 2008" cannot find Visa.
+      Fill from the raw tables once db-asks M names the column
+      (IPREO_ISSUE / IPREO_PRODUCT / IPREO_TRANCHE dictionary listing).
 - [ ] DEAL_CLASS on the deal/tranche/order ECM branches (OPUS_ECM_TRANSACTION.
       PRODUCT_EQUITY_CLASS_VALUE — censused UAT 2026-09-18): the EXECUTION
       FORMAT / VEHICLE axis, not a unit axis. Values: Fully Marketed, Marketed,
@@ -443,9 +464,9 @@ implemented (config + views). Only what is still open is listed.
 | TC3 / TC4 | Travelers by name; 5-year tranche demand | product recipe fixed 2026-09-17; tenors ferried → rerun 18 |
 | PROD ticket | Limit returned as Demand / Indication | AC1-AC2 fixed in views + ontology (not in PROD); AC3 SKILL rule shippable now; AC6 QA sign-off = prompts 2 + 24 + deploy-check rows 21/21b |
 | PO 2026-09-29 #1 | Convertible Preferred indications / allocations labelled shares (UAT chat 4edda2f5) | SRV-9 in repo (equity_type auto-projected + unit_note + SKILL §6b "read the unit BEFORE labelling"), ships on the train; verify QA 42 |
-| PO 2026-09-29 #2 | blank indication = "Not recorded" but allocation = "0 shares" | OURS: the order view coalesced NULL to 0 on all three branches — NVL dropped (same pending view batch), order card rewritten, deploy-check 28/28b, census db-asks L3; verify QA 45 after the view deploy |
+| PO 2026-09-29 #2 | blank indication = "Not recorded" but allocation = "0 shares" | OURS: the order view coalesced NULL to 0 on all three branches — NVL dropped (same pending view batch), order card rewritten, deploy-check 28/28b. Census L3 (UAT, base rows): OPUS ECM NULL ~97k vs ZERO 392; Ipreo NULL 113,749 / ZERO 104,624 / POSITIVE 458,828; DCM non-RQ NULL 1,107,717 / ZERO 12,257 / POSITIVE 196,264 — NULL is the normal 'not allocated' state everywhere; verify QA 45 after the view deploy |
 | PO 2026-09-29 #3 | "shares / units / bonds" behind every value in the rows | SKILL §6b + agents: table cells are bare numbers, the unit sits in prose or the Security column (headers already bare); SKILL promotable now; verify QA 44 |
-| PO 2026-09-29 #4 | deal types shown in the Security column | the Security column is the stored PRODUCT_EQUITY_TYPE_VALUE; UAT carries 'IPO' / 'Equity' there (census 2026-09-18). db-asks L1/L2 quantify and name the deals; same census on PROD by an access holder; then a source ticket (data entry) or a view-side map — decision after the counts |
+| PO 2026-09-29 #4 | deal types shown in the Security column | CENSUS L1/L2 (UAT): a NEW OPUS shape since Oct-2025 — equity type 'Equity' (placeholder) + compound offering type 'Common Stk - Block Trade' / 'Capital Markets Advisory' / … on the EMEA ECM sprint deals (deal size NULL). Catalogs rewritten (vocabulary, like '%IPO%', 'Equity' = read the prefix; ships on the train); SECURITY MAP view item staged in §3; source questions in ASKS-external §5; same census on PROD by an access holder |
 
 MRM: DCM 85 % (minimum 80 %), ECM 94 %; the PO holds the DCM submission until
 our push lands — coordinate timing (a mid-cycle change invalidates the sample).
