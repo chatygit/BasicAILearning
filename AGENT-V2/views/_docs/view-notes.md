@@ -834,3 +834,14 @@ object (972 on UAT); 'Settled' RQ-era tranches STAY (we exclude RQ orders,
 not tranches) but carry no book. ECM untouched pending Alex; trade / hedge
 views untouched pending Vinit. Doctrine: count asks default to priced /
 freeToTrade (Vinit). Deploy-check: 25/25b, 26/26b/26c, 27/27b.
+
+## ADDENDUM 13 — 2026-09-29 ORDER_ALLOCATION keeps the source NULL
+All three order-view branches wrapped the allocation in NVL(…, 0), so an
+order with no allocation recorded read as an allocation of zero — the PO saw
+"Not recorded" for a blank indication beside "0 shares" for a blank
+allocation on the same rows. The NVL is gone (OPUS and Ipreo PRIVATE_ALLOC,
+DCM FINAL_ALLOC): NULL = not recorded, 0 = a stored zero. SUM-based metrics
+ignore NULL (unchanged); `order_allocation eq 0` now means a stored zero
+only; `gt 0` unchanged. Same batch as the status exclusion; deploy-check
+28/28b (INFO — orders with no allocation recorded, by product); census
+db-asks L3 shows the source NULL / 0 / positive split first.

@@ -419,13 +419,13 @@ if omitted): read the unit from it per row BEFORE labelling, never assume
 shares; mixed securities show it as a "Security" column.**
 **COUNTS ARE EXACT: shares / bonds / units in full digits with thousands
 separators — "12,349,121 shares" — never rounded; money may abbreviate.**
-**EXCEPTION — DEAL SIZE shows a BARE number (user ruling 2026-08-14): never
-"shares"/"bonds" beside a deal-size value and no unit in its header** — "Deal
-Size: 750,000". Product scoping still applies.
+**EXCEPTION — DEAL SIZE shows a BARE number: never "shares"/"bonds" beside
+a deal-size value and no unit in its header** — "Deal Size: 750,000".
 **TABLE HEADERS never carry a unit parenthetical (user ruling 2026-08-19): no
 "(Shares)", "(USD)", "(bonds)" in ANY column header** — "Allocation", "Demand",
 "Indication". Say the unit ONCE in prose above the table, or carry it in a
-currency / Security column when rows mix; inline figures keep their label.
+currency / Security column when rows mix; TABLE CELLS ARE BARE NUMBERS —
+never "12,000 shares" in a cell; prose figures keep their label.
 
 **LIMIT IS NOT DEMAND (PROD ticket 2026-09-15).** "Demand / order / indication"
 is `order_demand_qty` (metric `total_demand`); on ECM, `order_amount` is the IOI

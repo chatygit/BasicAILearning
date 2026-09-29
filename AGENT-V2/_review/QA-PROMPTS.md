@@ -221,6 +221,13 @@ five-beat shape added to agents.yaml. Still to run: 18, 24; ⚡ args for 16 and 
       one table with a Product column, Offering Type "-" on DCM rows and Deal
       Type = product_class there / equity_type on ECM, B&D bank + Citi role
       from the tranche object as the second step. `column_note` in the response.
+- [ ] 44. "Fidelity's indications and allocations on ECM deals priced in
+      2025" — PASS: a Security column (equity_type), every cell a bare full-digit
+      number, the unit said once per class in prose ("shares for Common Stock,
+      bonds for Convertible Bonds"); never "12,000 shares" inside a cell.
+- [ ] 45. (after the view deploy) "Show the orderbook for <an ECM deal whose
+      book is not yet allocated>" — PASS: Allocation reads "Not recorded" exactly
+      like a blank Indication; never "0 shares"; a stored 0 still shows 0.
 
 ## Run 4 order (UAT, fresh session each, after the 2026-09-21 promotion)
 36 (with ⚡ args) · 15 · 3 · 20 — each must be ONE turn with no "which one?"
@@ -270,3 +277,11 @@ rejects (planner `blank_dims` + response `column_note`); only filters and the
 metric decide the product; SKILL §3c-ter rewritten (list freely, filter scoped;
 the old "add product eq whenever you touch one" rule removed); order/deal cards
 say a listed column is blank, never split. Re-run 43 after the server push.
+
+## PO UAT feedback — 2026-09-29 (ECM labelling, chat 4edda2f5; screenshots labelling-1 / labelling-2)
+| # | PO item | Verdict | Fix |
+|---|---|---|---|
+| 1 | Convertible Preferred indications / allocations shown as shares, not bonds | known — SRV-9 first-pass failure; the promoted SKILL says bonds but the rows carried no equity_type | server: equity_type auto-projected + unit_note (repo 2026-09-28, undeployed); QA 42 |
+| 2 | blank indication → "Not recorded", but allocation → "0 shares" — expected? | NO — ours: the order view wrapped the allocation in NVL(…, 0) on every branch, so "nothing recorded" became a zero | NVL dropped (pending view batch); order card: NULL = not recorded, 0 = stored zero; deploy-check 28/28b; census L3; QA 45 |
+| 3 | "shares / units / bonds" behind every value in the rows — expected? | NO — headers were bare by rule, and the agent moved the unit into the cells; the PO's own option 2 (a Security column) carries the unit | SKILL §6b "TABLE CELLS ARE BARE NUMBERS", agents.yaml "cells are bare numbers"; QA 44 |
+| 4 | deal types recorded in the Security column | the Security column IS equity_type = the stored PRODUCT_EQUITY_TYPE_VALUE; UAT holds 'IPO' and 'Equity' there (census 2026-09-18) | db-asks L1/L2 (UAT), same on PROD by an access holder; then a source ticket or a view map. If the column showed other values, the answer screenshot decides |

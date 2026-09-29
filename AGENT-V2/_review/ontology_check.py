@@ -1679,6 +1679,26 @@ check(not has(SKILL, "`settlement_ts` (tranche)"),
       "on both products since the Ipreo branch")
 check(has(ORDER, "merely LISTED") and has(DEAL, "merely LISTED"),
       "[product] order/deal cards lost the listed-column-is-blank rule")
+
+# PO ECM LABELLING FEEDBACK (UAT 2026-09-29, four items). (2) a blank
+# indication rendered "Not recorded" beside an allocation of "0 shares" — OUR
+# view coalesced a NULL allocation to 0 on all three branches; the NVL is gone
+# so NULL = not recorded, 0 = a stored zero. (3) "shares / units / bonds"
+# behind every value in the rows — cells are bare numbers, the unit lives in
+# prose or the Security column (headers already carried no unit).
+_ORDER_VIEW = text(ROOT / "views" / "vw_order_detail.sql")
+check("NVL(O.PRIVATE_ALLOC, 0)" not in _ORDER_VIEW and "NVL(O.FINAL_ALLOC, 0)" not in _ORDER_VIEW
+      and _ORDER_VIEW.count("AS ORDER_ALLOCATION") == 3,
+      "[units] vw_order_detail.sql: ORDER_ALLOCATION coalesces NULL to 0 again — "
+      "'no allocation recorded' reads as '0 shares' (PO 2026-09-29 item 2)")
+check(has(ORDER, "NULL = no allocation recorded"),
+      "[units] order card: order_allocation lost the NULL-vs-0 reading")
+check(has(SKILL, "TABLE CELLS ARE BARE NUMBERS") and has(AGENTS, "cells are bare numbers"),
+      "[units] SKILL/agents lost the bare-cell rule — units go behind every "
+      "value in the rows again (PO 2026-09-29 item 3)")
+check(not has(SKILL, "inline figures keep their label"),
+      "[units] SKILL.md: 'inline figures keep their label' is back — the agent "
+      "read it as a licence to suffix table cells")
 check("products" in text(ONTOLOGY_PY),
       "[product] ontology.py: the specs no longer carry `products` — per-product "
       "applicability is back to prose, which is what let the bug ship")

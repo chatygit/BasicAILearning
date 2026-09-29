@@ -381,7 +381,14 @@ Batch B:
       5.83M → ~1.25M. Open: Vinit's three follow-ups (RQ-era Settled in
       counts, trades/hedges on excluded tranches, 'discarded'), Alex on ECM
       Postponed — ASKS-external §6. Deploy with the next view batch, then
-      B-DCM / C / D-DCM. History:
+      B-DCM / C / D-ECM / D-DCM. SAME BATCH, added 2026-09-29 (PO item 2):
+      ORDER_ALLOCATION keeps the source NULL — the three NVL(…, 0) dropped
+      (OPUS + Ipreo PRIVATE_ALLOC, DCM FINAL_ALLOC), so 'no allocation
+      recorded' reads "Not recorded" like a blank indication and 0 is a
+      stored zero; SUM metrics unchanged; `order_allocation eq 0` = stored
+      zeros only. Census db-asks L3 (source NULL/0/positive split) before the
+      deploy; deploy-check 28/28b after; catalog order_allocation rewritten
+      (ships on the train — true once the views are live). History:
 - [x] STATUS EXCLUSION (Vinit 2026-09-21) — censused UAT (db-asks K, closed):
       TRANCHES: DCM only (ECM tranche status is NULL on 50,510/50,518) — exclude
       UPPER(STATUS) IN (ARCHIVED 975, CANCELLED 335, POSTPONED 54, DELETED 3;
@@ -435,6 +442,10 @@ implemented (config + views). Only what is still open is listed.
 | TC2 | "Did BlueFin trading indicate…" | SKILL routing fixed 2026-09-16; BlueFin absent from QA → retest on UAT |
 | TC3 / TC4 | Travelers by name; 5-year tranche demand | product recipe fixed 2026-09-17; tenors ferried → rerun 18 |
 | PROD ticket | Limit returned as Demand / Indication | AC1-AC2 fixed in views + ontology (not in PROD); AC3 SKILL rule shippable now; AC6 QA sign-off = prompts 2 + 24 + deploy-check rows 21/21b |
+| PO 2026-09-29 #1 | Convertible Preferred indications / allocations labelled shares (UAT chat 4edda2f5) | SRV-9 in repo (equity_type auto-projected + unit_note + SKILL §6b "read the unit BEFORE labelling"), ships on the train; verify QA 42 |
+| PO 2026-09-29 #2 | blank indication = "Not recorded" but allocation = "0 shares" | OURS: the order view coalesced NULL to 0 on all three branches — NVL dropped (same pending view batch), order card rewritten, deploy-check 28/28b, census db-asks L3; verify QA 45 after the view deploy |
+| PO 2026-09-29 #3 | "shares / units / bonds" behind every value in the rows | SKILL §6b + agents: table cells are bare numbers, the unit sits in prose or the Security column (headers already bare); SKILL promotable now; verify QA 44 |
+| PO 2026-09-29 #4 | deal types shown in the Security column | the Security column is the stored PRODUCT_EQUITY_TYPE_VALUE; UAT carries 'IPO' / 'Equity' there (census 2026-09-18). db-asks L1/L2 quantify and name the deals; same census on PROD by an access holder; then a source ticket (data entry) or a view-side map — decision after the counts |
 
 MRM: DCM 85 % (minimum 80 %), ECM 94 %; the PO holds the DCM submission until
 our push lands — coordinate timing (a mid-cycle change invalidates the sample).

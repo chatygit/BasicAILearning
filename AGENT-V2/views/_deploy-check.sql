@@ -409,7 +409,8 @@ WITH agg AS (
                     THEN INVESTOR_CATEGORY END) AS ecm_ipreo_cat,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                      AND ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS')
-                    THEN 1 END) AS ecm_ipreo_excluded
+                    THEN 1 END) AS ecm_ipreo_excluded,
+         COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS ecm_alloc_null
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'ECM'
 )
@@ -446,6 +447,9 @@ UNION ALL
 SELECT '24c. Ipreo cancelled/deleted/pass orders excluded', 'Y',
        CASE WHEN ecm_ipreo_excluded = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_ipreo_excluded = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT '28. ECM orders with NO allocation recorded (INFO — NULL kept since 2026-09-29; was 0 by construction)',
+       '(info)', TO_CHAR(ecm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
 -- D-DCM.
@@ -460,7 +464,8 @@ WITH agg AS (
          COUNT(SALES_PERSON) AS sales_,
          COUNT(PRODUCT_CLASS) AS dcm_class,
          SUM(CASE WHEN UPPER(ORDER_STATUS) NOT IN ('ACCEPTED', 'BOOKED', 'UPDATED', 'NEW') THEN 1 ELSE 0 END) AS dcm_out_of_scope,
-         COUNT(CASE WHEN ORDER_STATUS IS NULL THEN 1 END) AS dcm_null_status
+         COUNT(CASE WHEN ORDER_STATUS IS NULL THEN 1 END) AS dcm_null_status,
+         COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS dcm_alloc_null
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'DCM'
 )
@@ -500,6 +505,9 @@ SELECT '26b. DCM order rows (INFO — QA 5,826,467 before; the RQ load was 75 %,
 UNION ALL
 SELECT '26c. DCM NULL-status orders (INFO — all were RQ; expect 0)', '(info)',
        TO_CHAR(dcm_null_status), 'INFO' FROM agg
+UNION ALL
+SELECT '28b. DCM orders with NO allocation recorded (INFO — NULL kept since 2026-09-29; was 0 by construction)',
+       '(info)', TO_CHAR(dcm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
 -- E. HEDGE ORDER VIEW — ONE scan (new in V3).
