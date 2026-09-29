@@ -821,3 +821,42 @@ ISSUERVIEW_* block, DEAL_ORDERBOOK_* block, EXEC_DEAL_REGION.
 ### VG_BCOSMOS_CUSTOMER_ACCOUNT — OUT OF DOMAIN: a banking account/
 # balance table (balances, cycles, SWIFT). Empty anyway. The deal-domain
 # firm account = OB_ECM_TRADE_BOOK_INVESTOR_TRADE.FIRM_ACCOUNT_*.
+
+### IPREO_ISSUE / IPREO_PRODUCT / IPREO_TRANCHE (ALL_TAB_COLUMNS, UAT 2026-09-29 — db-asks M)
+# The raw Ipreo tables behind the IPREO_* mirrors. Every one ends with the DG
+# audit block: SOURCE_SYSTEM, CLASSIFICATION, APP_ID, DATASET, VERSION,
+# SOURCE_PUBLISHED_TS, DG_PROCESSED_BY, DG_PROCESSED_TS, DG_ENTITY_KEY,
+# DG_ENTITY_ID, DG_EVENT_ID, DG_VERSION (raw rows carry every version —
+# dedupe on the business key + DG_VERSION DESC / ROWID before counting).
+# IPREO_ISSUE (48 cols): UUID, IP_ISS_ID, ISS_ID (the 10-digit deal id),
+#   ISSUE_CD, ISSUE_NM, DEAL_STATE_CD, EXT_NOTE_TXT, OFFER_DT, SETTLEMENT_DT,
+#   ACTUAL_INST_RET_QTY, USE_QTY_IND, SELECTED_IND, CCY_ID,
+#   FX_RATE_AT_SETTLEMENT, FX_RATE_AT_OFFERING, FILE_DT,
+#   CURRENTLY_MARKETED_IND, ISSUE_TYPE_CD, REVISION_ID,
+#   SHOW_TO_INTERNAL_MASK, SHOW_TO_EXTERNAL_MASK, TIME_STAMP, PRICING_DT,
+#   PRICING_DT_ZONE, CCY_CD, MGR_ACCT_NUM, RETAIL_ACCT_NUM, SHRT_ACCT_NUM,
+#   OVERALLOTMENT_MAX_QTY, EXT_ISS_CD, ISSUE_SIZE_AMT, CURR_FILE_SIZE_QTY,
+#   OFFERING_TYPE (NUMBER — a code), ISSUE_TYPE_NM, PIPES_IND (NUMBER),
+#   OFFER_TERMN_DT + audit block.
+#   → offering-type candidates: ISSUE_TYPE_CD / ISSUE_TYPE_NM / OFFERING_TYPE
+#     (values: db-asks N1/N3). Also unexposed: FX at offering/settlement,
+#     institutional retention, deal state, PIPE flag, overallotment max.
+# IPREO_PRODUCT (32 cols): UUID, IP_PRD_ID, PRD_ID, ISS_ID, DEC_PAR_VALUE,
+#   COUPON_RATE, MAT_DT, OFFER_PX, SEC_TYPE_CD, BASE_PRD_IND, CCY_ID,
+#   PAR_VALUE, SYMBOL, CONVERSION_FACTOR, REVISION_ID, TIME_STAMP,
+#   INIT_FILE_PX_LO, INIT_FILE_PX_HI, FILE_PX, PRD_CCY_CD + audit block.
+#   → SEC_TYPE_CD = the security type per product (db-asks N2);
+#     INIT_FILE_PX_LO / _HI + FILE_PX + OFFER_PX = the IPO filing range vs the
+#     final price ("priced above / below the range") — unexposed today
+#     (pricing-sentiment gap); SYMBOL = ticker; COUPON_RATE / MAT_DT /
+#     CONVERSION_FACTOR for convertibles.
+# IPREO_TRANCHE (38 cols): UUID, IP_TRN_ID, TRN_ID, ISS_ID, TRN_NM,
+#   TRN_OWNER_NM, DEFAULT_PRD_ID, DTC_TRK_PER_START_DT, DTC_TRK_PER_END_DT,
+#   TRN_NM_CD, ACTIVE_TRANCHE_SIZE_QTY, TRN_UW_SIZE_QTY (OCR reads it
+#   TRN_UN_ — the real name is TRN_UW_, verified 2026-09-22), STATUS,
+#   REVISION_ID, LAST_PROCESSED_FP_DT, RESRV_SHRS_TRN_OP_LESS_GS_QTY,
+#   TRN_UW_SIZE_AMT, OVERALLOTMENT_AMT, OVERALLOTMENT_QTY, FP_SENT_DT,
+#   TIME_STAMP, POT_SPLIT_TXT, TARGET_RESRV_QTY,
+#   DEAL_OWNER_CALENDAR_ROLE_CD, DEAL_OWNER_CALENDAR_ROLE_NM, SEQ_NUM + audit.
+#   → DEAL_OWNER_CALENDAR_ROLE_NM = Citi's role on the tranche (db-asks N4,
+#     optional); POT_SPLIT_TXT, TARGET_RESRV_QTY, TRN_OWNER_NM unexposed.

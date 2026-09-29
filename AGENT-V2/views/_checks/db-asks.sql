@@ -11,12 +11,42 @@
 -- allocation recorded, by product — INFO, expect > 0 now).
 
 -- ===========================================================================
--- M. IPREO OFFERING TYPE (UAT). L1 showed OFFERING_TYPE blank on 17,307 of
--- 17,310 Ipreo Common Stock deals, so "IPOs of 2008" cannot find Visa. The
--- mirror does not carry it; the raw tables may. Column lists first (three
--- SELECTs on the dictionary — instant), values next round.
+-- N. IPREO OFFERING TYPE — VALUES (UAT). M listed the columns: IPREO_ISSUE has
+-- ISSUE_TYPE_CD / ISSUE_TYPE_NM / OFFERING_TYPE (a NUMBER code) and
+-- IPREO_PRODUCT has SEC_TYPE_CD. Three statements decide the view fill; N4
+-- is OPTIONAL (Citi's role per tranche, a separate lead).
 -- ===========================================================================
-SELECT TABLE_NAME, COLUMN_ID, COLUMN_NAME, DATA_TYPE
-FROM   ALL_TAB_COLUMNS
-WHERE  OWNER = 'DGSTREAM' AND TABLE_NAME IN ('IPREO_ISSUE', 'IPREO_PRODUCT', 'IPREO_TRANCHE')
-ORDER  BY TABLE_NAME, COLUMN_ID;
+
+-- N1. Issue type vocabulary (raw rows carry every DG version — read the
+--     DISTINCT ISS_ID column).
+SELECT ISSUE_TYPE_CD, ISSUE_TYPE_NM, OFFERING_TYPE,
+       COUNT(*) AS ROWS_, COUNT(DISTINCT ISS_ID) AS ISSUES
+FROM   DGSTREAM.IPREO_ISSUE
+GROUP  BY ISSUE_TYPE_CD, ISSUE_TYPE_NM, OFFERING_TYPE
+ORDER  BY ISSUES DESC;
+
+-- N2. Security type code per product.
+SELECT SEC_TYPE_CD, COUNT(*) AS ROWS_, COUNT(DISTINCT ISS_ID) AS ISSUES
+FROM   DGSTREAM.IPREO_PRODUCT
+GROUP  BY SEC_TYPE_CD
+ORDER  BY ISSUES DESC;
+
+-- N3. The mapping key: for the ~313 Ipreo deals whose mirror row DOES carry
+--     an offering type, which raw issue type sits behind 'IPO' and 'FO'.
+SELECT I.ISSUE_TYPE_CD, I.ISSUE_TYPE_NM, I.OFFERING_TYPE,
+       ET.PRODUCT_OFFERING_TYPE_VALUE AS MIRROR_OFFERING_TYPE,
+       COUNT(DISTINCT I.ISS_ID) AS ISSUES
+FROM   DGSTREAM.IPREO_ISSUE I
+JOIN   DGSTREAM.IPREO_OPUS_ECM_TRANSACTION ET
+       ON ET.DEAL_TRANSACTION_ID = TO_CHAR(I.ISS_ID)
+WHERE  ET.PRODUCT_OFFERING_TYPE_VALUE IS NOT NULL
+GROUP  BY I.ISSUE_TYPE_CD, I.ISSUE_TYPE_NM, I.OFFERING_TYPE, ET.PRODUCT_OFFERING_TYPE_VALUE
+ORDER  BY ISSUES DESC;
+
+-- N4 (OPTIONAL). Citi's role per Ipreo tranche — a direct answer to "Citi's
+--     role" on 10-digit-id deals if the vocabulary is clean.
+SELECT DEAL_OWNER_CALENDAR_ROLE_CD, DEAL_OWNER_CALENDAR_ROLE_NM,
+       COUNT(*) AS ROWS_, COUNT(DISTINCT ISS_ID) AS ISSUES
+FROM   DGSTREAM.IPREO_TRANCHE
+GROUP  BY DEAL_OWNER_CALENDAR_ROLE_CD, DEAL_OWNER_CALENDAR_ROLE_NM
+ORDER  BY ISSUES DESC;
