@@ -181,20 +181,29 @@ Batch B:
       'Convertible' offering type.
 - [ ] IPREO OFFERING TYPE (census L1): blank on 17,307 of 17,310 Ipreo Common
       Stock deals (216 IPO / 73 FO carried) — "IPOs of 2008" cannot find Visa.
-      db-asks M (2026-09-29) named the candidates: IPREO_ISSUE.ISSUE_TYPE_CD /
-      ISSUE_TYPE_NM / OFFERING_TYPE (a NUMBER code) and IPREO_PRODUCT.
-      SEC_TYPE_CD; db-asks N1-N3 census the values and the mapping to the
-      mirror's 'IPO' / 'FO' on the 313 deals that carry one. Build: the II
-      block (already joined on the three views) projects the mapped value and
-      OFFERING_TYPE becomes NVL(T.PRODUCT_OFFERING_TYPE_VALUE, II.<mapped>)
-      on the Ipreo branch of deal / tranche / order; deploy-check row: Ipreo
-      deals with an offering type (expect ~19k, was 313).
+      SOURCE GAP, not a mirror gap (db-asks N, UAT 2026-09-29): the raw
+      IPREO_ISSUE.OFFERING_TYPE (1 = IPO, 2 = FO) is populated on the same 313
+      issues the mirror carries (late 2013 on); the ~19,300 older issues store
+      no IPO-vs-FO anywhere (ISSUE_TYPE_CD is the security, not the offering).
+      Nothing to fill from. Candidate DERIVATION: a filing range
+      (IPREO_PRODUCT.INIT_FILE_PX_LO/_HI) marks an IPO — db-asks O1 tests it
+      on the 313 labelled issues, O2 measures history coverage. Build only if
+      O1 is near-clean, as OFFERING_TYPE = NVL(stored, CASE range → 'IPO') with
+      an OFFERING_TYPE_SOURCE column ('stored' / 'derived') so the agent can
+      say so; otherwise the honest doctrine stands — pre-2014 Ipreo IPO asks
+      cannot be filtered by type (deal card says so). The deal name is NEVER
+      the source (§3c-bis).
 - [ ] IPREO LEADS from the same dictionary (not built): IPREO_PRODUCT
       INIT_FILE_PX_LO / _HI + FILE_PX + OFFER_PX = the IPO filing range vs the
       final price ("priced above / within / below the range" — the pricing-
       sentiment gap's first real column); IPREO_TRANCHE
-      DEAL_OWNER_CALENDAR_ROLE_NM = Citi's role per tranche (N4 optional
-      census); IPREO_ISSUE FX_RATE_AT_OFFERING / ACTUAL_INST_RET_QTY /
+      DEAL_OWNER_CALENDAR_ROLE_NM = Citi's role per tranche (N4: clean
+      vocabulary JBR / PBR / LM / CM / SBR / CLM / JBRP but NULL on 19,268 of
+      ~19.6k issues — a fallback for the recent deals only, the syndicate-
+      member derivation stays the source); IPREO_PRODUCT.SEC_TYPE_CD (N2)
+      distinguishes ADR/ADS 367 + ADS 126 + GDR/GDS 58 issues the mirror
+      folds into Common Stock — could refine Ipreo equity_type to the OPUS
+      'American / Global Depository' labels; IPREO_ISSUE FX_RATE_AT_OFFERING / ACTUAL_INST_RET_QTY /
       PIPES_IND / DEAL_STATE_CD; IPREO_PRODUCT SYMBOL (ticker), COUPON_RATE /
       MAT_DT / CONVERSION_FACTOR (convertible terms). Reference:
       views/_reference/base-table-columns.md (Ipreo section).

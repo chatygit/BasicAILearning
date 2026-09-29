@@ -468,10 +468,10 @@ filters:
     suggestable: true
     case_insensitive: true
     description: >-
-      ECM. Values: see the dimension ('IPO' / 'FO' to 2025; 'Common Stk - IPO'
-      style since Oct-2025). IPO asks: like '%IPO%'; follow-ons: in ['FO',
-      'Common Stk - Follow on']. NULL on nearly every 10-digit-id deal and on
-      every DCM row.
+      ECM. Values: see the dimension. IPO asks: like '%IPO%'; follow-ons: in
+      ['FO', 'Common Stk - Follow on']. NULL on the Ipreo history — IPO vs FO
+      was never recorded before late 2013, so say so on older IPO asks (never
+      search the name) — and on every DCM row.
   equity_type:
     column: equity_type
     products: ["ECM"]

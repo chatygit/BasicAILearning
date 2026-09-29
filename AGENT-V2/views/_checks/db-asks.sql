@@ -11,42 +11,44 @@
 -- allocation recorded, by product — INFO, expect > 0 now).
 
 -- ===========================================================================
--- N. IPREO OFFERING TYPE — VALUES (UAT). M listed the columns: IPREO_ISSUE has
--- ISSUE_TYPE_CD / ISSUE_TYPE_NM / OFFERING_TYPE (a NUMBER code) and
--- IPREO_PRODUCT has SEC_TYPE_CD. Three statements decide the view fill; N4
--- is OPTIONAL (Citi's role per tranche, a separate lead).
+-- O. CAN AN IPO BE DERIVED ON THE IPREO HISTORY? (UAT, two statements.)
+-- N showed IPREO_ISSUE.OFFERING_TYPE (1 = IPO, 2 = FO) populated on the same
+-- 313 issues the mirror carries; the other ~19,300 have nothing. The one
+-- stored signal an IPO leaves is a FILING RANGE (IPREO_PRODUCT INIT_FILE_PX_LO
+-- / _HI) — follow-ons price off the market. O1 tests that signal on the 313
+-- labelled issues; O2 says how much of the history it would cover. Build the
+-- derived fill only if O1 shows the range on (nearly) every IPO and (nearly)
+-- no FO.
 -- ===========================================================================
 
--- N1. Issue type vocabulary (raw rows carry every DG version — read the
---     DISTINCT ISS_ID column).
-SELECT ISSUE_TYPE_CD, ISSUE_TYPE_NM, OFFERING_TYPE,
-       COUNT(*) AS ROWS_, COUNT(DISTINCT ISS_ID) AS ISSUES
-FROM   DGSTREAM.IPREO_ISSUE
-GROUP  BY ISSUE_TYPE_CD, ISSUE_TYPE_NM, OFFERING_TYPE
-ORDER  BY ISSUES DESC;
-
--- N2. Security type code per product.
-SELECT SEC_TYPE_CD, COUNT(*) AS ROWS_, COUNT(DISTINCT ISS_ID) AS ISSUES
-FROM   DGSTREAM.IPREO_PRODUCT
-GROUP  BY SEC_TYPE_CD
-ORDER  BY ISSUES DESC;
-
--- N3. The mapping key: for the ~313 Ipreo deals whose mirror row DOES carry
---     an offering type, which raw issue type sits behind 'IPO' and 'FO'.
-SELECT I.ISSUE_TYPE_CD, I.ISSUE_TYPE_NM, I.OFFERING_TYPE,
-       ET.PRODUCT_OFFERING_TYPE_VALUE AS MIRROR_OFFERING_TYPE,
-       COUNT(DISTINCT I.ISS_ID) AS ISSUES
-FROM   DGSTREAM.IPREO_ISSUE I
+-- O1. Filing range vs the known label (an issue with several products may
+--     count in two buckets — read proportions).
+SELECT ET.PRODUCT_OFFERING_TYPE_VALUE AS LABEL,
+       CASE WHEN P.INIT_FILE_PX_LO IS NOT NULL OR P.INIT_FILE_PX_HI IS NOT NULL
+            THEN 'RANGE' ELSE 'NO RANGE' END AS FILING_RANGE,
+       CASE WHEN P.FILE_PX IS NOT NULL THEN 'FILE_PX' ELSE 'NO FILE_PX' END AS FILE_PX_,
+       COUNT(DISTINCT P.ISS_ID) AS ISSUES
+FROM   DGSTREAM.IPREO_PRODUCT P
 JOIN   DGSTREAM.IPREO_OPUS_ECM_TRANSACTION ET
-       ON ET.DEAL_TRANSACTION_ID = TO_CHAR(I.ISS_ID)
+       ON ET.DEAL_TRANSACTION_ID = TO_CHAR(P.ISS_ID)
 WHERE  ET.PRODUCT_OFFERING_TYPE_VALUE IS NOT NULL
-GROUP  BY I.ISSUE_TYPE_CD, I.ISSUE_TYPE_NM, I.OFFERING_TYPE, ET.PRODUCT_OFFERING_TYPE_VALUE
-ORDER  BY ISSUES DESC;
+GROUP  BY ET.PRODUCT_OFFERING_TYPE_VALUE,
+          CASE WHEN P.INIT_FILE_PX_LO IS NOT NULL OR P.INIT_FILE_PX_HI IS NOT NULL
+               THEN 'RANGE' ELSE 'NO RANGE' END,
+          CASE WHEN P.FILE_PX IS NOT NULL THEN 'FILE_PX' ELSE 'NO FILE_PX' END
+ORDER  BY 1, 2, 3;
 
--- N4 (OPTIONAL). Citi's role per Ipreo tranche — a direct answer to "Citi's
---     role" on 10-digit-id deals if the vocabulary is clean.
-SELECT DEAL_OWNER_CALENDAR_ROLE_CD, DEAL_OWNER_CALENDAR_ROLE_NM,
-       COUNT(*) AS ROWS_, COUNT(DISTINCT ISS_ID) AS ISSUES
-FROM   DGSTREAM.IPREO_TRANCHE
-GROUP  BY DEAL_OWNER_CALENDAR_ROLE_CD, DEAL_OWNER_CALENDAR_ROLE_NM
+-- O2. The same signal across the unlabelled history, with the years it spans.
+SELECT CASE WHEN P.INIT_FILE_PX_LO IS NOT NULL OR P.INIT_FILE_PX_HI IS NOT NULL
+            THEN 'RANGE' ELSE 'NO RANGE' END AS FILING_RANGE,
+       CASE WHEN P.FILE_PX IS NOT NULL THEN 'FILE_PX' ELSE 'NO FILE_PX' END AS FILE_PX_,
+       COUNT(DISTINCT P.ISS_ID) AS ISSUES,
+       TO_CHAR(MIN(I.OFFER_DT), 'YYYY') AS FIRST_YEAR,
+       TO_CHAR(MAX(I.OFFER_DT), 'YYYY') AS LAST_YEAR
+FROM   DGSTREAM.IPREO_PRODUCT P
+JOIN   DGSTREAM.IPREO_ISSUE I ON I.ISS_ID = P.ISS_ID
+WHERE  I.OFFERING_TYPE IS NULL
+GROUP  BY CASE WHEN P.INIT_FILE_PX_LO IS NOT NULL OR P.INIT_FILE_PX_HI IS NOT NULL
+               THEN 'RANGE' ELSE 'NO RANGE' END,
+          CASE WHEN P.FILE_PX IS NOT NULL THEN 'FILE_PX' ELSE 'NO FILE_PX' END
 ORDER  BY ISSUES DESC;

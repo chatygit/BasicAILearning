@@ -860,7 +860,11 @@ on every sampled row. The views pass both through as stored; the catalogs now
 match IPO asks with like '%IPO%' and read the security from the prefix when
 equity_type is 'Equity'. A view-side SECURITY MAP is staged in BACKLOG §3
 (approval-gated). Separately, OFFERING_TYPE is blank on 17,307 of 17,310
-Ipreo Common Stock deals (the mirror does not carry it) — db-asks M lists the
-raw Ipreo columns to find a source. Ipreo Common Stock LAST date 2099-02-15 =
+Ipreo Common Stock deals — and db-asks M/N showed the raw source has no more:
+IPREO_ISSUE.OFFERING_TYPE (1 = IPO, 2 = FO) exists on the same 313 issues
+the mirror carries (late 2013 on); ISSUE_TYPE_CD (C / CB / CP / EU) is the
+security. A filing-range derivation (IPREO_PRODUCT.INIT_FILE_PX_LO/_HI) is
+under test (db-asks O); until then pre-2014 IPO asks cannot be filtered by
+type and the deal card says so. Ipreo Common Stock LAST date 2099-02-15 =
 a source placeholder date (trailing windows end at tomorrow, so it never
 shows unless asked for).

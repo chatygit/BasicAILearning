@@ -838,14 +838,25 @@ ISSUERVIEW_* block, DEAL_ORDERBOOK_* block, EXEC_DEAL_REGION.
 #   OVERALLOTMENT_MAX_QTY, EXT_ISS_CD, ISSUE_SIZE_AMT, CURR_FILE_SIZE_QTY,
 #   OFFERING_TYPE (NUMBER — a code), ISSUE_TYPE_NM, PIPES_IND (NUMBER),
 #   OFFER_TERMN_DT + audit block.
-#   → offering-type candidates: ISSUE_TYPE_CD / ISSUE_TYPE_NM / OFFERING_TYPE
-#     (values: db-asks N1/N3). Also unexposed: FX at offering/settlement,
+#   → VALUES (db-asks N1/N3, UAT 2026-09-29): ISSUE_TYPE_CD is the SECURITY,
+#     populated on every issue — C 17,596 (Common), CB 1,249 (Convertible
+#     Bond, incl. 2 'Exchangable Notes'), CP ~532 (Convertible Pref), EU 269
+#     (Equity Units); ISSUE_TYPE_NM is filled only where OFFERING_TYPE is.
+#     OFFERING_TYPE (1 = IPO, 2 = FO) exists on 313 issues ONLY — the same 313
+#     the mirror's PRODUCT_OFFERING_TYPE_VALUE carries (216 C-IPO, 73 C-FO,
+#     20 CB-IPO, 4 CP-IPO, from late 2013). The ~19,300 older issues have NO
+#     stored IPO-vs-FO anywhere in these tables (db-asks O tests a filing-
+#     range derivation). Also unexposed: FX at offering/settlement,
 #     institutional retention, deal state, PIPE flag, overallotment max.
 # IPREO_PRODUCT (32 cols): UUID, IP_PRD_ID, PRD_ID, ISS_ID, DEC_PAR_VALUE,
 #   COUPON_RATE, MAT_DT, OFFER_PX, SEC_TYPE_CD, BASE_PRD_IND, CCY_ID,
 #   PAR_VALUE, SYMBOL, CONVERSION_FACTOR, REVISION_ID, TIME_STAMP,
 #   INIT_FILE_PX_LO, INIT_FILE_PX_HI, FILE_PX, PRD_CCY_CD + audit block.
-#   → SEC_TYPE_CD = the security type per product (db-asks N2);
+#   → SEC_TYPE_CD (db-asks N2, ~45 free-ish codes): COMMON 16,763, BND 827,
+#     PFD 492, CU 423, ADR/ADS 367, EU 267, CSrN 259, ORD SHR 239, ADS 126,
+#     GDR/GDS 58, SUCN 47, Common 24, ExSrNts 22, EqtyUts 20, CvtPfdMan 18,
+#     CSN 18, ExSrUnSNt 15, CSrSn 12, then a long tail (WAR, PIERS, 144A - CS,
+#     Units …). Adds the ADR / GDR distinction the mirror folds into Common;
 #     INIT_FILE_PX_LO / _HI + FILE_PX + OFFER_PX = the IPO filing range vs the
 #     final price ("priced above / below the range") — unexposed today
 #     (pricing-sentiment gap); SYMBOL = ticker; COUPON_RATE / MAT_DT /
@@ -858,5 +869,9 @@ ISSUERVIEW_* block, DEAL_ORDERBOOK_* block, EXEC_DEAL_REGION.
 #   TRN_UW_SIZE_AMT, OVERALLOTMENT_AMT, OVERALLOTMENT_QTY, FP_SENT_DT,
 #   TIME_STAMP, POT_SPLIT_TXT, TARGET_RESRV_QTY,
 #   DEAL_OWNER_CALENDAR_ROLE_CD, DEAL_OWNER_CALENDAR_ROLE_NM, SEQ_NUM + audit.
-#   → DEAL_OWNER_CALENDAR_ROLE_NM = Citi's role on the tranche (db-asks N4,
-#     optional); POT_SPLIT_TXT, TARGET_RESRV_QTY, TRN_OWNER_NM unexposed.
+#   → DEAL_OWNER_CALENDAR_ROLE_CD/NM (db-asks N4): NULL on 19,658 rows /
+#     19,268 issues; JBR Joint Bookrunner 232, PBR Passive Bookrunner 113, LM
+#     Lead Manager/Bookrunner 30, CM(US) Co-Manager 7, SBR Sole Bookrunner 2,
+#     CLM Co-Lead Manager 1, JBRP Joint Bookrunner - Passive ~1 — clean
+#     vocabulary, recent deals only: a FALLBACK for Citi's role, never the
+#     source. POT_SPLIT_TXT, TARGET_RESRV_QTY, TRN_OWNER_NM unexposed.
