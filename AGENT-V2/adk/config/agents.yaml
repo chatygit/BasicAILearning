@@ -235,7 +235,7 @@ agents:
       an at-a-glance line, the table, 2-3 'what stands out' bullets, numbered
       next steps. Table headers NEVER carry a unit parenthetical — 'Allocation',
       not 'Allocation (Shares)'; cells are bare numbers and the unit goes in
-      prose or a currency / Security column.
+      prose or a currency / Deal Type column.
       NEVER PRINT MORE THAN 50 DATA ROWS — show the first 50 (cut to ~25
       when the table is WIDE: 8+ columns or pipe-list cells). A TOTAL ONLY
       COMES FROM A COUNT METRIC — the response's
@@ -284,8 +284,8 @@ agents:
       ("USD 2.1bn", "3,000,000 shares") — EXCEPT deal size, always a BARE number
       (no unit beside it or in its header) — put data in a markdown table with
       ids, keep pipe-delimited values (identifiers, syndicate lists) in
-      ONE cell, never split across columns (identifier-focused
-      asks list one row per Type/Value instead; never HTML or bold inside a
+      ONE cell, never split across columns (identifier asks list
+      one row per Type/Value instead; never HTML or bold inside a
       cell — it renders literally), and state counts
       honestly — the number you state equals the rows you show, and a top-N that
       found fewer reports the FOUND count.

@@ -2788,12 +2788,26 @@ for _srv in (ROOT / "app" / "mcpserver.py", ROOT / "app" / "bqs" / "ontology.py"
           f"[server] {_srv.name} still tells the agent to re-run with one exact name on a disambiguation")
 
 # BANKER UNITS (PO feedback via user, 2026-09-18): ECM figures are counts in the
-# SECURITY's unit — equity_type decides shares vs bonds; counts are exact (full
-# digits, commas, never "3.0mm shares"); mixed-class tables carry a Security
-# column. A convertible's allocation printed as shares was the reported defect.
-check(has(SKILL, "the SECURITY sets the\nunit of every demand / allocation figure") and has(SKILL, "COUNTS ARE EXACT")
+# DEAL TYPE's unit — equity_type decides shares vs bonds; counts are exact (full
+# digits, commas, never "3.0mm shares"); mixed-class tables carry a Deal Type
+# column (user 2026-10-05: never 'Security' — the PO's own word is Deal Type). A convertible's allocation printed as shares was the reported defect.
+check(has(SKILL, "the DEAL TYPE sets the\nunit of every demand / allocation figure") and has(SKILL, "COUNTS ARE EXACT")
       and has(SKILL, "Convertible Preferred /\nExchangeable Notes → bonds") and has(SKILL, "PAR AMOUNT for the second"),
       "[units] SKILL lost the demand_unit / par-size / exact-count doctrine (PO + census J, 2026-09-21)")
+# COLUMN HEADER IS "DEAL TYPE" (user 2026-10-05, after a table headed
+# 'Security' and 'preferred shares' prose): equity_type renders as Deal Type,
+# deal_class as Deal Class; Convertible Preferred counts in bonds.
+check(has(SKILL, '"Deal Type" column') and not has(SKILL, '"Security" column')
+      and has(AGENTS, "Deal Type column") and not has(AGENTS, "Security column"),
+      "[label] SKILL/agents head the equity_type column 'Security' again — the banker's word is 'Deal Type'")
+check(not has(DEAL, "The SECURITY") and not has(ORDER, "as a Security") and not has(TRANCHE, "Security type label")
+      and has(DEAL, "header it 'Deal Type'") and has(ORDER, "header 'Deal Type'") and has(TRANCHE, "header 'Deal Type'"),
+      "[label] a card calls equity_type the 'Security' again")
+check(has(ORDER, "never 'preferred shares'") and "never 'preferred shares'" in text(ROOT / "app" / "services" / "domain_query_service.py")
+      and "never \"\n                    \"'Security'" in text(ROOT / "app" / "services" / "domain_query_service.py"),
+      "[label] the Convertible-Preferred-is-bonds / Deal-Type-header wording left the order card or unit_note")
+check(has(DEAL, "header it 'Deal Class'") and has(ORDER, "header 'Deal Class'") and has(TRANCHE, "header 'Deal Class'"),
+      "[label] deal_class lost its 'Deal Class' header rule — it would collide with Deal Type")
 check(not has(SKILL, "mm shares"),
       "[units] SKILL abbreviates a share count again ('mm shares') — counts are exact")
 # 2026-09-24: the unit is the SECURITY's (equity_type), never demand_unit —
@@ -2846,15 +2860,15 @@ check(has(SKILL, "An ORDER listing always projects `order_demand_qty`, `order_al
 _SIZE_CAPS = {
     SKILL: 63_402,
     AGENTS: 20_611,
-    ONT / "capital_markets_deal.yaml": 58_442,
+    ONT / "capital_markets_deal.yaml": 58_544,
     ONT / "capital_markets_designation.yaml": 7_861,
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 65_819,
+    ONT / "capital_markets_order.yaml": 65_962,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
-    ONT / "capital_markets_tranche.yaml": 90_855,
+    ONT / "capital_markets_tranche.yaml": 90_956,
 }
 for _p, _cap in _SIZE_CAPS.items():
     _n = len(_p.read_bytes())

@@ -268,7 +268,9 @@ Batch B:
       and DCM flags carry data. QA stores a value on EVERY row of the Y-flags
       (callable / tap) where UAT stores NULL — cards now say eq 'Y', never
       is_not_null (db-asks Q names the QA negative). B-DCM hung on QA: the
-      order-book row B11 is now a separate optional statement.
+      order-book row B11 is now a separate optional statement; the split
+      B-DCM ran in 62 s (B09 / B10 / B12 PASS; 21,058 DCM deals, 20,860
+      classed, 13,145 with country). QA VERIFICATION COMPLETE.
       Deliberately NOT in this batch (next): USD-normalised book / allocation
       sizes (ORDER_BOOK_SIZE_USD is text today), coupon as a number, launch /
       books-close timestamps, road-show dates, Ipreo ADR/GDR refinement from
@@ -559,6 +561,7 @@ implemented (config + views). Only what is still open is listed.
 | PO 2026-09-29 #1 | Convertible Preferred indications / allocations labelled shares (UAT chat 4edda2f5) | SRV-9 in repo (equity_type auto-projected + unit_note + SKILL §6b "read the unit BEFORE labelling"), ships on the train; verify QA 42 |
 | PO 2026-09-29 #2 | blank indication = "Not recorded" but allocation = "0 shares" | OURS: the order view coalesced NULL to 0 on all three branches — NVL dropped (same pending view batch), order card rewritten, deploy-check 28/28b. Census L3 (UAT, base rows): OPUS ECM NULL ~97k vs ZERO 392; Ipreo NULL 113,749 / ZERO 104,624 / POSITIVE 458,828; DCM non-RQ NULL 1,107,717 / ZERO 12,257 / POSITIVE 196,264 — NULL is the normal 'not allocated' state everywhere; verify QA 45 after the view deploy |
 | PO 2026-09-29 #3 | "shares / units / bonds" behind every value in the rows | SKILL §6b + agents: table cells are bare numbers, the unit sits in prose or the Security column (headers already bare); SKILL promotable now; verify QA 44 |
+| user 2026-10-05 | agent table headed 'Security' (and 'preferred shares' prose) | OURS — renamed: equity_type renders as 'Deal Type' (never 'Security'), deal_class as 'Deal Class'; Convertible Preferred = bonds wording in the order card + unit_note; SKILL/agents promotable now, cards/unit_note on the train |
 | PO 2026-09-29 #4 | deal types shown in the Security column | CENSUS L1/L2 (UAT): a NEW OPUS shape since Oct-2025 — equity type 'Equity' (placeholder) + compound offering type 'Common Stk - Block Trade' / 'Capital Markets Advisory' / … on the EMEA ECM sprint deals (deal size NULL). Catalogs rewritten (vocabulary, like '%IPO%', 'Equity' = read the prefix; ships on the train); SECURITY MAP view item staged in §3; source questions in ASKS-external §5; same census on PROD by an access holder |
 
 MRM: DCM 85 % (minimum 80 %), ECM 94 %; the PO holds the DCM submission until

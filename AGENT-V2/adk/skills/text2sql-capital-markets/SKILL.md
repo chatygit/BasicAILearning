@@ -377,7 +377,7 @@ and `investor_count` undercounts — say so on a headcount.
   `tranche_id` — or ties reshuffle and pages repeat or drop rows.
 - **An ORDER listing always projects `order_demand_qty`, `order_allocation`
   and the unit** (`equity_type` → shares/bonds on ECM, `currency` on DCM; a
-  Security column when deals mix) — a list of orders without the figures is not
+  Deal Type column when deals mix) — a list of orders without the figures is not
   an answer. An aggregate projects the group keys.
 - **Coverage = demand ÷ tranche size** costs two requests: state the
   ratio and both inputs. Fill rate (allocation ÷ demand) is
@@ -399,31 +399,31 @@ and `investor_count` undercounts — say so on a headcount.
   DCM orders across 586 deals are on the card and absent from the order
   object). If both appear, label which is which.
 
-### 6b. Units doctrine — the PRODUCT and the SECURITY set the unit
+### 6b. Units doctrine — the PRODUCT and the DEAL TYPE set the unit
 DCM sizes/allocations/demand are notional **MONEY** (a single `currency`; the
-deal size is not currency-scoped; no FX column). ECM: **the SECURITY sets the
+deal size is not currency-scoped; no FX column). ECM: **the DEAL TYPE sets the
 unit of every demand / allocation figure**, by `equity_type`: Common Stock /
 Equity Units / Warrants → shares; Convertible Bonds / Convertible Preferred /
 Exchangeable Notes → bonds. `demand_unit` is the unit of `demand_as_submitted`
 ONLY (the bid as placed); a CURRENCY / PERCENT / FACE bid with a BLANK
 `order_demand_qty` was never converted: quote it as submitted, never convert
 it. **ECM DEAL SIZE is a share count for the first group and a PAR AMOUNT for the second**
-— never divide or compare a convertible's deal size with its book.
+— never compare a convertible's deal size with its book.
 Never total across products or equity types: `product` (and, on ECM,
 `equity_type`) go in `dimensions`; every size/allocation/demand metric
 REQUIRES a `product` filter.
 **Every ECM demand / allocation request projects `equity_type` (server-added
 if omitted): read the unit from it per row BEFORE labelling, never assume
-shares; mixed securities show it as a "Security" column.**
-**COUNTS ARE EXACT: shares / bonds / units in full digits with thousands
-separators — "12,349,121 shares" — never rounded; money may abbreviate.**
+shares; mixed deal types show it as a "Deal Type" column — never "Security".**
+**COUNTS ARE EXACT: shares / bonds / units in full digits with commas —
+"12,349,121 shares" — never rounded; money may abbreviate.**
 **EXCEPTION — DEAL SIZE shows a BARE number: never "shares"/"bonds" beside
 a deal-size value and no unit in its header** — "Deal Size: 750,000".
 **TABLE HEADERS never carry a unit parenthetical (user ruling 2026-08-19): no
 "(Shares)", "(USD)", "(bonds)" in ANY column header** — "Allocation", "Demand",
 "Indication". Say the unit ONCE in prose above the table, or carry it in a
-currency / Security column when rows mix; TABLE CELLS ARE BARE NUMBERS —
-never "12,000 shares" in a cell; prose figures keep their label.
+currency / Deal Type column when rows mix; TABLE CELLS ARE BARE NUMBERS —
+never "12,000 shares" in a cell; prose keeps its label.
 
 **LIMIT IS NOT DEMAND (PROD ticket 2026-09-15).** "Demand / order / indication"
 is `order_demand_qty` (metric `total_demand`); on ECM, `order_amount` is the IOI
@@ -492,7 +492,7 @@ and filter on the STORED value, never the user's word. Match case-insensitively;
 `like` the distinguishing token where values are label variants; a colloquial
 word is not a value — name the valid ones rather than run doomed SQL. Traps are in §7c.
 
-- `product` (all) — ECM · DCM. Nothing else is a product: security types →
+- `product` (all) — ECM · DCM. Nothing else is a product: deal types →
   `product_type`/`equity_type` (ECM), bond classes → `product_class` (DCM).
 - Statuses: DCM `deal_status`/`tranche_status` are ONE column with case variants
   (priced/Priced) — merge them; ECM `deal_status` is the transaction's execution

@@ -72,7 +72,7 @@ how_to_use:
      order/IOI type, meeting type, investor category/region, 'top investors', and
      'how many deals/tranches did <investor> touch' (COUNT DISTINCT on deal/tranche
      while filtering the investor)."
-  - "ALWAYS set 'product'. ECM allocations/demand are counts in the security's
+  - "ALWAYS set 'product'. ECM allocations/demand are counts in the deal type's
      unit (equity_type); DCM order amounts are notional MONEY — scope one
      'currency' or group by 'currency' for DCM money totals. State the unit.
      Product unknown (no product word)? never guess one — filter product in ['ECM','DCM']
@@ -113,7 +113,7 @@ how_to_use:
      investor-given OR issuer-given — projects: investor_name ·
      issuer_name · pricing_date · deal_name · tenors · tranche_name ·
      order_demand_qty · order_allocation · currency, plus transaction_id when
-     the ask names one, and on ECM demand_unit (+ equity_type as a Security
+     the ask names one, and on ECM demand_unit (+ equity_type as a Deal Type
      column when deals mix). An order listing WITHOUT the two figures is not an
      answer (issuer-given puts issuer_name, pricing_date, deal_name first). ONE ROW PER TRANCHE — DCM deals are
      multi-tranche; never collapse to deal grain. Sort: investor-given →
@@ -332,9 +332,9 @@ dimensions:
   tenors: {column: tenors, products: ["DCM"], description: "DCM tranche tenor ferried onto orders ('5-YEAR' style, VALUE-PERIOD) — 'the 5year tranche' orderbook asks are ONE request here; like-match, never eq. Show BOTH tenors and tranche_name in DCM matrices (banker ruling 2026-09-15). NULL on ECM."}
   product_class: {column: product_class, products: ["DCM"], description: "DCM bond class ferried onto orders — same closed list as the tranche object (Investment Grade, High Yield, SSA…; expand IG/HY/EM first). 'Top investors across ALL Investment Grade deals' is ONE request here — never a sampled deal-id ferry. NULL on ECM."}
   billed_by: {column: billed_by, description: "The bank that billed/settled THIS order (B&D), on BOTH products — names on most rows, broker CODES on the newer ECM source. Order-level truth: it VARIES within a tranche, so it can legitimately disagree with the tranche object's BND_BANK designation list — for 'billed by' asks, THIS column wins. NULL = no billing bank recorded (~10% ECM, ~26% DCM)."}
-  offering_type: {column: offering_type, products: ["ECM"], description: "ECM. The deal type at order grain — deal-object values ('IPO'/'FO'; 'Common Stk - IPO' style since Oct-2025; blank on most Ipreo deals). 'Investors in IPOs' = like '%IPO%' HERE. NULL on DCM."}
-  deal_class: {column: deal_class, products: ["ECM"], description: "ECM. Deal EXECUTION FORMAT ferried to order grain (Blocktrade, Bought Deal, Accelerated Bookbuild, SPAC, PIPE, Rights, Fully Marketed…) — 'investors in block trades / SPAC IPOs' is ONE request HERE (like-match). Blank on 10-digit-id deals; NULL on DCM."}
-  equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS at order grain = THE UNIT of every demand/allocation figure: Common Stock / Equity Units / Warrants → shares; Convertible Bonds / Convertible Preferred / Exchangeable Notes → bonds. Projected on every ECM demand ask (server-added if omitted); label from it. NULL on DCM."}
+  offering_type: {column: offering_type, products: ["ECM"], description: "ECM. Offering type at order grain — deal-object values ('IPO'/'FO'; 'Common Stk - IPO' style since Oct-2025; blank on most Ipreo deals). 'Investors in IPOs' = like '%IPO%' HERE. NULL on DCM."}
+  deal_class: {column: deal_class, products: ["ECM"], description: "ECM. Deal EXECUTION FORMAT (header 'Deal Class', never 'Deal Type') ferried to order grain (Blocktrade, Bought Deal, Accelerated Bookbuild, SPAC, PIPE, Rights, Fully Marketed…) — 'investors in block trades / SPAC IPOs' is ONE request HERE (like-match). Blank on 10-digit-id deals; NULL on DCM."}
+  equity_type: {column: equity_type, products: ["ECM"], description: "ECM. The DEAL TYPE at order grain (header 'Deal Type', never 'Security') = THE UNIT of every demand/allocation figure: Common Stock / Equity Units / Warrants → shares; Convertible Bonds / Convertible Preferred / Exchangeable Notes → bonds (Convertible Preferred counts in BONDS, never 'preferred shares'). Projected on every ECM demand ask (server-added if omitted); label from it. NULL on DCM."}
   order_ownership: {column: order_ownership, products: ["ECM"], description: "ECM. HOME = our (owned) book, AWAY = orders seen away. BOTH are in every total since release 2 (before it, every figure was HOME-only — ECM population grew ~45% at the flip). 'Our orders'/'Citi's book' = HOME. NULL = flag not stored. NULL on DCM (no such flag)."}
   sales_person: {column: sales_person, description: "Both products (ECM = the investor salesperson name; DCM since release 3). Covering salesperson, first + last name (~30% populated). 'Orders covered by <person>' filters here; NULL = not recorded."}
   transaction_id: {column: transaction_id, description: "Transaction id (release 3). ECM: identical to deal_id. DCM: the origination transaction id — FORWARD-POPULATED (recent Ipreo deals only; NULL on history) — a NULL means the deal predates the link, not 'no transaction'. TEXT, quote it. 'Transaction 75041397' asks filter here. ONE TRANSACTION CAN MAP TO SEVERAL DEALS (re-created copies, relaunches): on a transaction ask project deal_id + deal_name, partition by deal_id as well as tranche, and when several deals come back answer per deal — never merge their books."}
