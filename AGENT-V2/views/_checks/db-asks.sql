@@ -19,5 +19,6 @@
 -- valid; the Ipreo mirror carries ISSUER_COUNTRY_NAME, nothing else of the
 -- batch). Deploy vw_deal_summary, vw_tranche_summary, vw_order_detail (the
 -- deal view also carries the currency roll-up fix from 2026-09-29), then run
--- views/_deploy-check.sql: A0, A (row 1x expects 24), B-ECM (29), B-DCM (29b),
--- C (30 / 30b). Sections D-ECM / D-DCM are unchanged by this batch.
+-- views/_deploy-check.sql (rewritten 2026-10-05): A0, A (A01-A03 = the three
+-- views' column counts 43 / 89 / 65), B-ECM (B08), B-DCM (B14), C (C08 / C09).
+-- Sections D-ECM / D-DCM are unchanged by this batch.

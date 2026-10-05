@@ -28,11 +28,13 @@ A failure becomes a gate-1 pin wherever it can be mechanised.
    from the view files; last full version in git at 2026-09-21, section S1 of
    db-asks.sql) — every statement "no rows selected" on the target environment. Files go over verbatim
    and comment-free; a failed Flyway script aborts every later script.
-2. **After the view deploy, before any prompt** — `views/_deploy-check.sql`:
-   A0 shows nine LAST_DDL_TIMEs of today; structure rows 17, 1y, 1z, 18 PASS;
-   grain rows 7 (ECM and DCM), 8, 9 (ECM and DCM), 10b, 11b, 12b PASS;
-   population rows 15, 15b, 20b, 21, 21b, and from the Ipreo release 22, 22c,
-   23, 24, 24c; section K timings screenshotted (K8 / K9 = the Ipreo branch).
+2. **After the view deploy, before any prompt** — `views/_deploy-check.sql`
+   (rewritten 2026-10-05, rows labelled by section): A0 shows today's
+   LAST_DDL_TIME on every changed view; section A (A01-A09 = column count per
+   view against the repo, A10-A12 types) all PASS; every PASS/FAIL row in
+   B-ECM / B-DCM / C / D-ECM / D-DCM / E PASS (grain, currency names, Ipreo
+   presence, status exclusions, order statuses); INFO rows judged zero-vs-
+   healthy; section K timings screenshotted (K3 / K4 = the Ipreo branch).
    Sections B and D are one statement PER PRODUCT since 2026-09-23 (QA hit the
    instance PGA limit materialising all branches at once); never add session
    commands (ALTER SESSION …) to the check — the user's account would be
@@ -68,7 +70,7 @@ ships that way first.
 - [ ] Deploy-check A0 + structure + grain on PROD after every view release,
       then the S3 Trino check through Starburst.
 - [ ] ECM issuer names in PROD (screenshot 2026-09-21: five real 2026 IPOs with
-      no issuer name): run A0 (which view revision is live) and row 1e (ECM
+      no issuer name): run A0 (which view revision is live) and section B-ECM (ECM
       deals with issuer name), plus this count — it says whether the party
       master, the intended PROD source, carries names for ECM at all:
       `SELECT COUNT(DISTINCT T.DEAL_TRANSACTION_ID) AS ECM_TXNS_, COUNT(DISTINCT

@@ -1,282 +1,167 @@
 -- ===========================================================================
--- POST-DEPLOY CHECK — independent statements. Run as a script (F5).
--- 2026-08-19 (2nd revision): B/C/D each read their view EXACTLY ONCE — the
--- first revision ran one scalar subquery per row (7 full evaluations of the
--- deal view alone) and took forever; all population facts now come from a
--- single conditional-aggregation pass (/*+ MATERIALIZE */ pins one scan).
--- Statement A is structural (all_tab_columns only — can never ORA-00904,
--- always reports WHICH views are current); an old view kills only its own
--- section. Every non-INFO row must read PASS. INFO expectations are
--- UAT-measured; in another env judge zero-vs-healthy, not exact.
---
--- 2026-09-02 (latency wave, levers B+C): NO column changes this wave, so
--- section A cannot detect it — statement A0 (LAST_DDL_TIME) shows whether
--- the five re-handed views were actually recreated. The existing grain
--- checks (7/8/9/10b/11b/12b) are the CORRECTNESS net for the widened
--- PARTITION BY keys: a duplicate row per id = lever B broke dedupe = FAIL.
--- New rows 15/15b guard the lever-C restructure (deal-view DCM demand
--- must still populate). Section K = TIMING probes: run with timing shown
--- and screenshot the ELAPSED TIMES — the row values matter less than the
--- seconds. Expectations: K1 seconds-not-minutes (was 30s-class), K2
--- seconds (was the 401s class), K3 slow is EXPECTED (inherent order-book
--- scan), K4 is the lever-D baseline (entity search, measured 40s), K5
--- stays slow UNTIL the requested OB_ORDER_TRADE(ROOT_ID) index lands.
+-- POST-DEPLOY CHECK — run as a script (F5) after every view deploy and
+-- screenshot into ~/Desktop/ADK. SELECTs only; never a session command.
+-- Every non-INFO row must read PASS. INFO rows were measured on UAT — in
+-- another environment judge zero-vs-healthy, not the exact number.
+-- Each view is scanned at most once per product (a literal PRODUCT predicate
+-- keeps Oracle to that branch set; QA 2026-09-23 hit the instance PGA limit
+-- materialising every branch at once). Rows are labelled by SECTION. When a
+-- view changes: regenerate the A counts (contract-test parser) and add the
+-- wave's PASS/FAIL row to its section; retire INFO rows once they stop moving.
+-- Rewritten 2026-10-05 (738 → ~330 lines); the history lives in git.
 -- ===========================================================================
 
--- A0. WHICH REVISION IS DEPLOYED — recreation timestamps for the wave's
--- five views. Expect today's date on all five; an old date = Flyway did
--- not rerun that script.
+-- A0. WHICH REVISION IS DEPLOYED — expect today's date on every changed view.
 SELECT object_name AS view_,
        TO_CHAR(last_ddl_time, 'DD-MON-YYYY HH24:MI') AS recreated_,
        'INFO' AS verdict_
 FROM   all_objects
 WHERE  owner = 'DGSTREAM' AND object_type = 'VIEW'
-AND    object_name IN ('VW_DEAL_SUMMARY','VW_ORDER_DETAIL','VW_TRADE_DETAIL',
-                       'VW_HEDGE_ORDER','VW_HEDGE_TRADE','VW_TRANCHE_SUMMARY',
-                       'VW_DESIGNATION','VW_TRADE_SYNDICATE','VW_ENTITY_SEARCH')
+AND    object_name IN ('VW_DEAL_SUMMARY','VW_TRANCHE_SUMMARY','VW_ORDER_DETAIL','VW_TRADE_DETAIL','VW_HEDGE_ORDER','VW_HEDGE_TRADE','VW_DESIGNATION','VW_TRADE_SYNDICATE','VW_ENTITY_SEARCH')
 ORDER BY object_name;
 
--- A1. TYPE CONTRACT (2026-09-03 wave): every cast metric column must publish
--- real precision/scale. Any row here = a column Starburst still has to guess
--- at (maps decimal(38,0); fractional values then fail to read). Expect ZERO.
-SELECT '17. metric columns with NO declared scale (expect none)' AS check_,
-       NVL(TO_CHAR(COUNT(*)), '0') AS actual_,
-       CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS verdict_
-FROM   all_tab_columns
-WHERE  owner = 'DGSTREAM'
-AND    table_name IN ('VW_DEAL_SUMMARY','VW_ORDER_DETAIL','VW_TRADE_DETAIL',
-                      'VW_HEDGE_ORDER','VW_HEDGE_TRADE','VW_TRANCHE_SUMMARY',
-                      'VW_DESIGNATION','VW_TRADE_SYNDICATE','VW_ENTITY_SEARCH')
-AND    data_type = 'NUMBER' AND data_scale IS NULL
-AND    column_name IN ('ORDER_AMOUNT','ORDER_DEMAND_QTY','ORDER_ALLOCATION',
-                       'TRANCHE_SIZE','DEAL_SIZE','ACTIVE_PRICE','ORDER_SIZE_CHANGE',
-                       'TOTAL_DEMAND','TOTAL_ALLOCATION','SUBSCRIPTION_RATIO',
-                       'ORDER_COUNT','INVESTOR_COUNT','TRANCHE_COUNT',
-                       'DEAL_FEE_MM','DEAL_SIZE_MM','BASE_PRICE',
-                       'REOFFER_LOW_PRICE','REOFFER_HIGH_PRICE','FX_RATE','PRICE',
-                       'TOTAL_FEE','UNDERWRITING_FEE','MANAGEMENT_FEES',
-                       'SELLING_CONCESSION_FEE','PRAECIPIUM_FEES','RETAIL_UW_FEE',
-                       'GROSS_SPREAD_PER_FEE','DESIGNATION_FEE',
-                       'OVER_ALLOTMENT_AUTHORIZED_SHARES','OVER_ALLOTMENT_EXERCISED_SHARES',
-                       'PRIMARY_SHARES','SECONDARY_SHARES','LAST_CLOSE_BEFORE_OFFER',
-                       'LAST_CLOSE_BEFORE_LAUNCH','INITIAL_DEAL_SIZE','TRANCHE_OFFER_AMOUNT',
-                       'TRADE_SIZE','TRADE_ALLOCATION','PRICE_BASIS_VALUE',
-                       'TRADE_PRICE','COMMISSION_RATE','HEDGE_AMOUNT',
-                       'HEDGE_ISN_AMOUNT','HEDGE_PCT_FACE','SECURITY_COUPON',
-                       'QUANTITY','DESIGNABLE_SHARES','POT_SPLIT',
-                       'POT_SPLIT_PERCENTAGE','SELLING_CONCESSION','UNDERWRITING_FEES',
-                       'EV','DESIGNATION_AMT','ADJUSTED_DESIGNATION_AMT',
-                       'ADJUSTED_DESIGNATION_PCT','CARVEOUT_AMT','DISTRIBUTED_CARVEOUT',
-                       'ENTITY_ACTIVITY_COUNT');
-
--- A. STRUCTURAL — always runs. FAIL here = that view is not this revision.
+-- A. STRUCTURE — one row per view: the column count must equal the repo's
+-- projection (views/_reference/view-columns.md). A mismatch names the view
+-- that is not this revision; it can never ORA-00904.
 SELECT check_, expected_, actual_,
        CASE WHEN actual_ = expected_ THEN 'PASS' ELSE 'FAIL' END AS verdict_
 FROM (
-  SELECT '1. order view has issuer/sector/tranche_size' AS check_,
-         '3' AS expected_,
+  SELECT 'A01. VW_DEAL_SUMMARY has every repo column' AS check_, '43' AS expected_,
          TO_CHAR(COUNT(*)) AS actual_
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
-  AND    column_name IN ('ISSUER_NAME','SECTOR','TRANCHE_SIZE')
+  FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_DEAL_SUMMARY'
   UNION ALL
-  SELECT '1b. order view has billed_by/offering_type (round 2)', '2',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
-  AND    column_name IN ('BILLED_BY','OFFERING_TYPE')
+  SELECT 'A02. VW_TRANCHE_SUMMARY has every repo column' AS check_, '89' AS expected_,
+         TO_CHAR(COUNT(*)) AS actual_
+  FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
   UNION ALL
-  SELECT '1c. tranche view has equity_type (round 2)', '1',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
-  AND    column_name = 'EQUITY_TYPE'
+  SELECT 'A03. VW_ORDER_DETAIL has every repo column' AS check_, '65' AS expected_,
+         TO_CHAR(COUNT(*)) AS actual_
+  FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
   UNION ALL
-  -- RELEASE 2: order view gained EQUITY_TYPE + ORDER_OWNERSHIP (away
-  -- orders included; HOME/AWAY exposed).
-  SELECT '1i. order view has equity_type/order_ownership (release 2)', '2',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
-  AND    column_name IN ('EQUITY_TYPE','ORDER_OWNERSHIP')
+  SELECT 'A04. VW_TRADE_DETAIL has every repo column' AS check_, '30' AS expected_,
+         TO_CHAR(COUNT(*)) AS actual_
+  FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_TRADE_DETAIL'
   UNION ALL
-  SELECT '1l. tranche view has settlement_ts (release 2)', '1',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
-  AND    column_name = 'SETTLEMENT_TS'
+  SELECT 'A05. VW_HEDGE_ORDER has every repo column' AS check_, '34' AS expected_,
+         TO_CHAR(COUNT(*)) AS actual_
+  FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_HEDGE_ORDER'
   UNION ALL
-  SELECT '1m. all three views expose TRANSACTION_ID (release 2/D1)', '3',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM' AND column_name = 'TRANSACTION_ID'
-  AND    table_name IN ('VW_DEAL_SUMMARY','VW_TRANCHE_SUMMARY','VW_ORDER_DETAIL')
+  SELECT 'A06. VW_HEDGE_TRADE has every repo column' AS check_, '33' AS expected_,
+         TO_CHAR(COUNT(*)) AS actual_
+  FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_HEDGE_TRADE'
   UNION ALL
-  -- RELEASE 3: issuer LEI (deal+tranche), salesperson (order).
-  SELECT '1n. ISSUER_LEI on deal+tranche, SALES_PERSON on order (rel 3)', '3',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM'
-  AND   ((column_name = 'ISSUER_LEI'
-          AND table_name IN ('VW_DEAL_SUMMARY','VW_TRANCHE_SUMMARY'))
-      OR (column_name = 'SALES_PERSON' AND table_name = 'VW_ORDER_DETAIL'))
+  SELECT 'A07. VW_DESIGNATION has every repo column' AS check_, '33' AS expected_,
+         TO_CHAR(COUNT(*)) AS actual_
+  FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_DESIGNATION'
   UNION ALL
-  -- BATCH C (2026-10-04): 24 banker-filter columns (deal 4, tranche 19, order 1).
-  SELECT '1x. batch C columns landed (deal 4 / tranche 19 / order 1)', '24',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM'
-  AND   ((table_name = 'VW_DEAL_SUMMARY' AND column_name IN
-            ('DEAL_CLASS','DCM_DEAL_CLASS','SIZE_UNIT','COUNTRY_OF_RISK'))
-      OR (table_name = 'VW_TRANCHE_SUMMARY' AND column_name IN
-            ('DEAL_CLASS','SIZE_UNIT','ISSUER_COUNTRY','COUNTRY_OF_RISK','PRIMARY_SHARES',
-             'SECONDARY_SHARES','LAST_CLOSE_BEFORE_OFFER','LAST_CLOSE_BEFORE_LAUNCH',
-             'INITIAL_DEAL_SIZE','TRANCHE_OFFER_AMOUNT','IS_CALLABLE','CALL_DATE',
-             'NON_CALL_PERIOD','IS_PUTTABLE','MAKE_WHOLE_CALLABLE','IS_TAP','IS_PERPETUAL',
-             'IS_CONVERTIBLE','GOVERNING_LAW'))
-      OR (table_name = 'VW_ORDER_DETAIL' AND column_name = 'DEAL_CLASS'))
+  SELECT 'A08. VW_TRADE_SYNDICATE has every repo column' AS check_, '8' AS expected_,
+         TO_CHAR(COUNT(*)) AS actual_
+  FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_TRADE_SYNDICATE'
   UNION ALL
-  -- V3 FINAL WAVE: the four new views exist.
-  SELECT '1u. four new views exist (hedge order/trade, designation, trade synd)', '4',
-         TO_CHAR(COUNT(DISTINCT table_name))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM'
-  AND    table_name IN ('VW_HEDGE_ORDER','VW_HEDGE_TRADE',
-                        'VW_DESIGNATION','VW_TRADE_SYNDICATE')
+  SELECT 'A09. VW_ENTITY_SEARCH has every repo column' AS check_, '8' AS expected_,
+         TO_CHAR(COUNT(*)) AS actual_
+  FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_ENTITY_SEARCH'
   UNION ALL
-  SELECT '1v. final-wave columns landed (trade/order/tranche/deal)', '10',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM'
-  AND   ((table_name = 'VW_TRADE_DETAIL' AND column_name IN
-            ('TRADE_PRICE','FIRM_ACCOUNT_NUMBER','EXECUTION_TS'))
-      OR (table_name = 'VW_ORDER_DETAIL' AND column_name IN
-            ('WALL_CROSSED','INVESTOR_CLASSIFICATION','ACTIVE_PRICE'))
-      OR (table_name = 'VW_TRANCHE_SUMMARY' AND column_name IN
-            ('GROSS_SPREAD_PER_FEE','OVER_ALLOTMENT_AUTHORIZED_SHARES'))
-      OR (table_name = 'VW_DEAL_SUMMARY' AND column_name IN
-            ('REOFFER_LOW_PRICE','ISSUER_DOMICILE')))
-  UNION ALL
-  SELECT '1y. order view has demand_unit/demand_as_submitted/tenors/product_class (2026-09-14/15)', '4',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
-  AND    column_name IN ('DEMAND_UNIT','DEMAND_AS_SUBMITTED','TENORS','PRODUCT_CLASS')
-  UNION ALL
-  SELECT '1z. tranche view has the three ALLOWED_ORDER_* columns (E7, 2026-09-15)', '3',
-         TO_CHAR(COUNT(*))
-  FROM   all_tab_columns
-  WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
-  AND    column_name IN ('ALLOWED_ORDER_SPREAD','ALLOWED_ORDER_YIELD','ALLOWED_ORDER_MAX_PRICE')
-  UNION ALL
-  SELECT '2. TRANCHE_SIZE is NUMBER (was VARCHAR2)',
-         'NUMBER,NUMBER',
+  SELECT 'A10. TRANCHE_SIZE is NUMBER on order + tranche', 'NUMBER,NUMBER',
          LISTAGG(data_type, ',') WITHIN GROUP (ORDER BY table_name)
   FROM   all_tab_columns
   WHERE  owner = 'DGSTREAM' AND column_name = 'TRANCHE_SIZE'
   AND    table_name IN ('VW_ORDER_DETAIL','VW_TRANCHE_SUMMARY')
   UNION ALL
-  -- maturity stays VARCHAR2 — the DATE conversion was REVERTED (ORA-01790).
-  SELECT '3. SECURITIES_MATURITY is VARCHAR2 (DATE was reverted)', 'VARCHAR2',
+  SELECT 'A11. SECURITIES_MATURITY stays VARCHAR2 (DATE reverted, ORA-01790)', 'VARCHAR2',
          MAX(data_type)
   FROM   all_tab_columns
   WHERE  owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
   AND    column_name = 'SECURITIES_MATURITY'
+  UNION ALL
+  -- Every cast metric column publishes precision/scale, or Starburst maps
+  -- decimal(38,0) and fractional values fail to read.
+  SELECT 'A12. metric columns with no declared scale', '0', TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM'
+  AND    table_name IN ('VW_DEAL_SUMMARY','VW_TRANCHE_SUMMARY','VW_ORDER_DETAIL','VW_TRADE_DETAIL','VW_HEDGE_ORDER','VW_HEDGE_TRADE','VW_DESIGNATION','VW_TRADE_SYNDICATE','VW_ENTITY_SEARCH')
+  AND    data_type = 'NUMBER' AND data_scale IS NULL
+  AND    column_name IN ('ORDER_AMOUNT','ORDER_DEMAND_QTY','ORDER_ALLOCATION',
+                         'TRANCHE_SIZE','DEAL_SIZE','ACTIVE_PRICE','ORDER_SIZE_CHANGE',
+                         'TOTAL_DEMAND','TOTAL_ALLOCATION','SUBSCRIPTION_RATIO',
+                         'ORDER_COUNT','INVESTOR_COUNT','TRANCHE_COUNT',
+                         'DEAL_FEE_MM','DEAL_SIZE_MM','BASE_PRICE',
+                         'REOFFER_LOW_PRICE','REOFFER_HIGH_PRICE','FX_RATE','PRICE',
+                         'TOTAL_FEE','UNDERWRITING_FEE','MANAGEMENT_FEES',
+                         'SELLING_CONCESSION_FEE','PRAECIPIUM_FEES','RETAIL_UW_FEE',
+                         'GROSS_SPREAD_PER_FEE','DESIGNATION_FEE',
+                         'OVER_ALLOTMENT_AUTHORIZED_SHARES','OVER_ALLOTMENT_EXERCISED_SHARES',
+                         'PRIMARY_SHARES','SECONDARY_SHARES','LAST_CLOSE_BEFORE_OFFER',
+                         'LAST_CLOSE_BEFORE_LAUNCH','INITIAL_DEAL_SIZE','TRANCHE_OFFER_AMOUNT',
+                         'TRADE_SIZE','TRADE_ALLOCATION','PRICE_BASIS_VALUE',
+                         'TRADE_PRICE','COMMISSION_RATE','HEDGE_AMOUNT',
+                         'HEDGE_ISN_AMOUNT','HEDGE_PCT_FACE','SECURITY_COUPON',
+                         'QUANTITY','DESIGNABLE_SHARES','POT_SPLIT',
+                         'POT_SPLIT_PERCENTAGE','SELLING_CONCESSION','UNDERWRITING_FEES',
+                         'EV','DESIGNATION_AMT','ADJUSTED_DESIGNATION_AMT',
+                         'ADJUSTED_DESIGNATION_PCT','CARVEOUT_AMT','DISTRIBUTED_CARVEOUT',
+                         'ENTITY_ACTIVITY_COUNT')
 )
 ORDER BY check_;
 
--- B. DEAL VIEW — split by product since QA 2026-09-23 (ORA-04036, instance
--- PGA limit): a literal PRODUCT predicate lets Oracle skip the other UNION
--- branches, so each statement materialises one product's branches only.
--- No session settings needed. B-ECM first, then B-DCM.
+-- B-ECM. DEAL VIEW, ECM branches (OPUS + Ipreo) — one scan.
 WITH agg AS (
   SELECT /*+ MATERIALIZE NO_PARALLEL */
          COUNT(*) AS rows_,
          COUNT(DISTINCT DEAL_ID) AS keys_,
-         COUNT(ISSUER_NAME) AS ecm_issuer,
-         COUNT(ISSUER_LEI) AS ecm_lei,
-         COUNT(REOFFER_LOW_PRICE) AS ecm_reoffer,
-         COUNT(ISSUER_DOMICILE) AS ecm_domicile,
          COUNT(CASE WHEN CURRENCIES IS NOT NULL
-                     AND REGEXP_LIKE(CURRENCIES, '[A-Za-z]')
-                    THEN 1 END) AS ecm_alpha,
+                     AND REGEXP_LIKE(CURRENCIES, '[A-Za-z]') THEN 1 END) AS ecm_alpha,
          COUNT(DISTINCT CASE WHEN CURRENCIES IS NOT NULL
                               AND REGEXP_LIKE(CURRENCIES, '(^|\| )[0-9]+( \||$)')
                              THEN DEAL_ID END) AS ecm_unmapped,
          COUNT(CASE WHEN TOTAL_ALLOCATION > 0 THEN 1 END) AS ecm_alloc_deals,
-         COUNT(CASE WHEN SUBSCRIPTION_RATIO IS NOT NULL THEN 1 END) AS subs_ratio_deals,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN 1 END) AS ecm_ipreo_rows,
-         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                     AND ORDER_COUNT > 0 THEN 1 END) AS ecm_ipreo_ordered,
-         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN LAST_PRICED END) AS ecm_ipreo_priced,
+         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') AND ORDER_COUNT > 0 THEN 1 END) AS ecm_ipreo_ordered,
+         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN LAST_PRICED END) AS ecm_ipreo_priced,
          COUNT(DEAL_CLASS) AS ecm_class,
          COUNT(CASE WHEN SIZE_UNIT = 'bonds' THEN 1 END) AS ecm_bond_unit
   FROM DGSTREAM.VW_DEAL_SUMMARY
   WHERE PRODUCT = 'ECM'
 )
-SELECT '1e. ECM deals with issuer name (INFO, expect ~6,892 UAT)' AS check_,
-       '(info)' AS expected_,
-       TO_CHAR(ecm_issuer) || ' of ' || TO_CHAR(rows_) AS actual_,
-       'INFO' AS verdict_
-FROM agg
+SELECT 'B01. deal grain, ECM (rows = DEAL_ID)' AS check_, 'Y' AS expected_,
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END AS verdict_ FROM agg
 UNION ALL
-SELECT '29. ECM deals with a DEAL_CLASS (INFO — batch C; OPUS source only, Ipreo blank)', '(info)',
-       TO_CHAR(ecm_class) || ' of ' || TO_CHAR(rows_) || ' (bonds unit: ' || TO_CHAR(ecm_bond_unit) || ')', 'INFO' FROM agg
-UNION ALL
-SELECT '1o. ECM deals with issuer LEI (INFO, expect ~83% — rel 3)', '(info)',
-       TO_CHAR(ecm_lei) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT '1w. ECM deals w/ reoffer price range / domicile (INFO — final wave)',
-       '(info)', TO_CHAR(ecm_reoffer) || ' range / ' ||
-       TO_CHAR(ecm_domicile) || ' domicile', 'INFO' FROM agg
-UNION ALL
--- broken CURRENCY_NAME join = ZERO alphabetic codes; healthy = thousands.
-SELECT '4. ECM currency names resolve (view logic)', 'Y',
+SELECT 'B02. ECM currency names resolve (a broken CURRENCY_NAME join = zero alphabetic codes)', 'Y',
        CASE WHEN ecm_alpha > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_alpha > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '4b. deals with unmapped currency tokens (INFO, ~377 UAT)', '(info)',
+SELECT 'B03. ECM deals with an unmapped numeric currency token (INFO, UAT ~377)', '(info)',
        TO_CHAR(ecm_unmapped), 'INFO' FROM agg
 UNION ALL
-SELECT '7. deal grain, ECM (rows = DEAL_ID)', 'Y',
-       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
-       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
-SELECT '15b. ECM deals still carry allocation (unchanged branch sanity)', 'Y',
+SELECT 'B04. ECM deals carry allocation (OD join intact)', 'Y',
        CASE WHEN ecm_alloc_deals > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_alloc_deals > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '15c. ECM deals with SUBSCRIPTION_RATIO (INFO — helper wave)', '(info)',
-       TO_CHAR(subs_ratio_deals), 'INFO' FROM agg
-UNION ALL
-SELECT '22. ECM deals from the Ipreo source landed (10-digit ids; QA 19,583)', 'Y',
+SELECT 'B05. Ipreo ECM deals landed (10-digit ids; UAT ~19.6k)', 'Y',
        CASE WHEN ecm_ipreo_rows > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_ipreo_rows > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '22b. Ipreo ECM deals with orders (INFO — the OD join; 0 = key mismatch)',
-       '(info)', TO_CHAR(ecm_ipreo_ordered) || ' of ' || TO_CHAR(ecm_ipreo_rows),
-       'INFO' FROM agg
-UNION ALL
-SELECT '22c. Ipreo ECM deals with LAST_PRICED (date windows need it)', 'Y',
+SELECT 'B06. Ipreo ECM deals carry LAST_PRICED (date windows need it)', 'Y',
        CASE WHEN ecm_ipreo_priced > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_ipreo_priced > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT 'B07. Ipreo ECM deals with orders (INFO — 0 = OD key mismatch)', '(info)',
+       TO_CHAR(ecm_ipreo_ordered) || ' of ' || TO_CHAR(ecm_ipreo_rows), 'INFO' FROM agg
+UNION ALL
+SELECT 'B08. ECM deals with DEAL_CLASS / bonds unit (INFO — batch C; OPUS ~25.8k classed)', '(info)',
+       TO_CHAR(ecm_class) || ' classed / ' || TO_CHAR(ecm_bond_unit) || ' bonds of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
--- B-DCM.
+-- B-DCM. DEAL VIEW, DCM branch — one scan.
 WITH agg AS (
   SELECT /*+ MATERIALIZE NO_PARALLEL */
          COUNT(*) AS rows_,
          COUNT(DISTINCT DEAL_ID) AS keys_,
-         COUNT(TRANSACTION_ID) AS dcm_txn,
-         COUNT(DEAL_REGION) AS dcm_region,
-         COUNT(SETTLEMENT_TS) AS dcm_settle,
          COUNT(CASE WHEN REGEXP_LIKE(CURRENCIES,
-                     '(^|\| )([A-Za-z]+)( \|.*\| | \| )\2( \||$)')
-                    THEN 1 END) AS dcm_dupcur,
+                     '(^|\| )([A-Za-z]+)( \|.*\| | \| )\2( \||$)') THEN 1 END) AS dcm_dupcur,
          COUNT(CASE WHEN TOTAL_DEMAND > 0 THEN 1 END) AS dcm_demand_deals,
          COUNT(CASE WHEN ORDER_COUNT > 0 THEN 1 END) AS dcm_ordered_deals,
-         COUNT(CASE WHEN SUBSCRIPTION_RATIO IS NOT NULL THEN 1 END) AS subs_ratio_deals,
          COUNT(CASE WHEN UPPER(DEAL_STATUS) IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')
                     THEN 1 END) AS dcm_excluded_status,
          COUNT(DCM_DEAL_CLASS) AS dcm_class,
@@ -284,79 +169,41 @@ WITH agg AS (
   FROM DGSTREAM.VW_DEAL_SUMMARY
   WHERE PRODUCT = 'DCM'
 )
-SELECT '1f. DCM deals with region (INFO, expect ~8,260 UAT)' AS check_,
-       '(info)' AS expected_,
-       TO_CHAR(dcm_region) || ' of ' || TO_CHAR(rows_) AS actual_,
-       'INFO' AS verdict_
-FROM agg
+SELECT 'B09. deal grain, DCM (rows = DEAL_ID)' AS check_, 'Y' AS expected_,
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END AS verdict_ FROM agg
 UNION ALL
-SELECT '29b. DCM deals with DCM_DEAL_CLASS / ISSUER_COUNTRY (INFO — batch C; J6 ~40k classed)', '(info)',
-       TO_CHAR(dcm_class) || ' class / ' || TO_CHAR(dcm_country) || ' country of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT '1p. DCM deals with TRANSACTION_ID (INFO, ~945 PROD, fwd-populated)',
-       '(info)', TO_CHAR(dcm_txn) || ' of ' || TO_CHAR(rows_), 'INFO'
-FROM agg
-UNION ALL
-SELECT '1g. DCM deals with settlement_ts (INFO, expect ~30,749 UAT)', '(info)',
-       TO_CHAR(dcm_settle) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT '5. DCM currencies deduped', 'Y',
+SELECT 'B10. DCM currency list deduped', 'Y',
        CASE WHEN dcm_dupcur = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_dupcur = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '7. deal grain, DCM (rows = DEAL_ID)', 'Y',
-       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
-       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+SELECT 'B11. DCM deals carry demand and orders (hoisted OC join intact)', 'Y',
+       CASE WHEN dcm_demand_deals > 0 AND dcm_ordered_deals > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_demand_deals > 0 AND dcm_ordered_deals > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
--- LATENCY WAVE (lever C): the DCM order aggregate moved from inside the
--- deal derived table to a top-level LEFT JOIN. If the hoisted join key is
--- wrong these go to zero.
-SELECT '15. DCM deals still carry demand (lever C hoist intact)', 'Y',
-       CASE WHEN dcm_demand_deals > 0 AND dcm_ordered_deals > 0
-            THEN 'Y' ELSE 'N' END,
-       CASE WHEN dcm_demand_deals > 0 AND dcm_ordered_deals > 0
-            THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
-SELECT '15c. DCM deals with SUBSCRIPTION_RATIO (INFO — helper wave)', '(info)',
-       TO_CHAR(subs_ratio_deals), 'INFO' FROM agg
-UNION ALL
-SELECT '27. DCM deals (INFO — status exclusion 2026-09-28: UAT 47,297 before, ~972 fewer expected)', '(info)',
-       TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT '27b. DCM deal status never an excluded value', 'Y',
+SELECT 'B12. no DCM deal carries an excluded status (status exclusion 2026-09-28)', 'Y',
        CASE WHEN dcm_excluded_status = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_excluded_status = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT 'B13. DCM deals (INFO — UAT ~46.3k after the exclusion)', '(info)',
+       TO_CHAR(rows_), 'INFO' FROM agg
+UNION ALL
+SELECT 'B14. DCM deals with DCM_DEAL_CLASS / ISSUER_COUNTRY (INFO — batch C)', '(info)',
+       TO_CHAR(dcm_class) || ' class / ' || TO_CHAR(dcm_country) || ' country of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
--- C. TRANCHE VIEW — ONE scan. Dies alone if VW_TRANCHE_SUMMARY is old.
+-- C. TRANCHE VIEW — one scan, all branches.
 WITH agg AS (
   SELECT /*+ MATERIALIZE */
          COUNT(*) AS rows_,
          COUNT(DISTINCT PRODUCT||'~'||DEAL_ID||'~'||TRANCHE_ID) AS keys_,
          COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_rows,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN TRANCHE_REGION END) AS ecm_region,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN SETTLEMENT_TS END) AS dcm_settle,
-         COUNT(CASE WHEN PRODUCT = 'DCM'
-                     AND SYNDICATE_MEMBER_NAME LIKE '%|%'
-                    THEN 1 END) AS dcm_multi_synd,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN TOTAL_FEE END) AS ecm_fee,
-         COUNT(CASE WHEN PRODUCT = 'ECM'
-                    THEN OVER_ALLOTMENT_AUTHORIZED_SHARES END) AS ecm_greenshoe,
-         COUNT(CASE WHEN IDENTIFIER_TYPE <> UPPER(IDENTIFIER_TYPE)
-                    THEN 1 END) AS lowercase_idtypes,
-         COUNT(CASE WHEN PRODUCT = 'DCM' AND DEAL_SHARING_TYPE = 'SOLO'
-                    THEN 1 END) AS dcm_solo,
-         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN 1 END) AS ecm_ipreo_rows,
-         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN TRANCHE_NAME END) AS ecm_ipreo_named,
-         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN SYNDICATE_MEMBER_NAME END) AS ecm_ipreo_synd,
-         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN TOTAL_FEE END) AS ecm_ipreo_fee,
-         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN PRICE END) AS ecm_ipreo_price,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN 1 END) AS dcm_rows,
+         COUNT(CASE WHEN IDENTIFIER_TYPE <> UPPER(IDENTIFIER_TYPE) THEN 1 END) AS lowercase_idtypes,
+         COUNT(CASE WHEN PRODUCT = 'DCM' AND DEAL_SHARING_TYPE = 'SOLO' THEN 1 END) AS dcm_solo,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN 1 END) AS ecm_ipreo_rows,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN TOTAL_FEE END) AS ecm_ipreo_fee,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRICE END) AS ecm_ipreo_price,
          COUNT(CASE WHEN PRODUCT = 'DCM' AND UPPER(TRANCHE_STATUS) IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')
                     THEN 1 END) AS dcm_excluded_tr,
          COUNT(CASE WHEN PRODUCT = 'ECM' THEN LAST_CLOSE_BEFORE_OFFER END) AS ecm_last_close,
@@ -370,140 +217,77 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN ISSUER_COUNTRY END) AS dcm_country
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
-SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
-       '(info)' AS expected_,
-       TO_CHAR(ecm_region) || ' of ' || TO_CHAR(ecm_rows) AS actual_,
-       'INFO' AS verdict_
-FROM agg
+SELECT 'C01. tranche grain (rows = PRODUCT+DEAL+TRANCHE)' AS check_, 'Y' AS expected_,
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END AS verdict_ FROM agg
 UNION ALL
-SELECT '30. ECM tranches: last close / primary shares / offer amount / initial size (INFO — batch C; raw UAT 27% / 72% / 78% / 80%)', '(info)',
-       TO_CHAR(ecm_last_close) || ' / ' || TO_CHAR(ecm_primary) || ' / ' || TO_CHAR(ecm_offer_amt) || ' / ' || TO_CHAR(ecm_initial) || ' of ' || TO_CHAR(ecm_rows), 'INFO' FROM agg
-UNION ALL
-SELECT '30b. DCM tranches: callable / tap / governing law / exchange / country (INFO — batch C; raw UAT rows ~14% / 13% / 13% / 13% / 27%)', '(info)',
-       TO_CHAR(dcm_callable) || ' / ' || TO_CHAR(dcm_tap) || ' / ' || TO_CHAR(dcm_law) || ' / ' || TO_CHAR(dcm_exchange) || ' / ' || TO_CHAR(dcm_country) || ' of ' || TO_CHAR(dcm_rows), 'INFO' FROM agg
-UNION ALL
-SELECT '1k. DCM tranches with settlement_ts (INFO, expect ~50,198 UAT)',
-       '(info)', TO_CHAR(dcm_settle), 'INFO'
-FROM agg
-UNION ALL
-SELECT '1q. DCM tranches with MULTI-member syndicate list (INFO — rel 3;' ||
-       ' 0 means the SYNM join did not land)',
-       '(info)', TO_CHAR(dcm_multi_synd), 'INFO'
-FROM agg
-UNION ALL
-SELECT '1x. ECM tranches w/ fees / greenshoe (INFO — final wave)', '(info)',
-       TO_CHAR(ecm_fee) || ' fee / ' || TO_CHAR(ecm_greenshoe) || ' greenshoe',
-       'INFO'
-FROM agg
-UNION ALL
-SELECT '8. tranche grain (rows = PRODUCT+DEAL+TRANCHE)', 'Y',
-       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
-       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
-SELECT '18. identifier types UPPER-normalized (2026-09-03 wave)', 'Y',
+SELECT 'C02. identifier types UPPER-normalised', 'Y',
        CASE WHEN lowercase_idtypes = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN lowercase_idtypes = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '20. DCM SOLO tranches (INFO — Citi rule 2026-09-15; UAT old 4,025 / new 14,250)',
-       '(info)', TO_CHAR(dcm_solo), 'INFO' FROM agg
-UNION ALL
-SELECT '20b. SOLO rule landed (plain Citigroup counted)', 'Y',
+SELECT 'C03. DCM SOLO rule landed (plain Citigroup counted; UAT ~14.2k)', 'Y',
        CASE WHEN dcm_solo > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_solo > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '23. ECM tranches from the Ipreo source landed (UAT ~20,044)', 'Y',
+SELECT 'C04. Ipreo ECM tranches landed (UAT ~20k)', 'Y',
        CASE WHEN ecm_ipreo_rows > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_ipreo_rows > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '23b. Ipreo tranches w/ name (raw IPREO_TRANCHE join) / syndicate (INFO)',
-       '(info)', TO_CHAR(ecm_ipreo_named) || ' named / ' ||
-       TO_CHAR(ecm_ipreo_synd) || ' syndicate of ' || TO_CHAR(ecm_ipreo_rows),
-       'INFO' FROM agg
-UNION ALL
-SELECT '23c. Ipreo tranches w/ fee (IPREO_PRODUCTFEE, QA ~12,266) / price (INFO)',
-       '(info)', TO_CHAR(ecm_ipreo_fee) || ' fee / ' || TO_CHAR(ecm_ipreo_price) ||
-       ' price of ' || TO_CHAR(ecm_ipreo_rows), 'INFO' FROM agg
-UNION ALL
-SELECT '25. DCM excluded tranche statuses absent (cancelled/postponed/deleted/archived)', 'Y',
+SELECT 'C05. no DCM tranche carries an excluded status (cancelled/postponed/deleted/archived)', 'Y',
        CASE WHEN dcm_excluded_tr = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_excluded_tr = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '25b. DCM tranche rows (INFO — UAT ~74.9k before, expect 1,367 fewer)', '(info)',
+SELECT 'C06. DCM tranches (INFO — UAT ~73.5k after the exclusion)', '(info)',
        TO_CHAR(dcm_rows), 'INFO' FROM agg
+UNION ALL
+SELECT 'C07. Ipreo tranches with fee / price (INFO — fee table + product detail joins)', '(info)',
+       TO_CHAR(ecm_ipreo_fee) || ' fee / ' || TO_CHAR(ecm_ipreo_price) || ' price of ' || TO_CHAR(ecm_ipreo_rows), 'INFO' FROM agg
+UNION ALL
+SELECT 'C08. ECM tranches: last close / primary shares / offer amount / initial size (INFO — batch C; raw UAT 27% / 72% / 78% / 80%)', '(info)',
+       TO_CHAR(ecm_last_close) || ' / ' || TO_CHAR(ecm_primary) || ' / ' || TO_CHAR(ecm_offer_amt) || ' / ' || TO_CHAR(ecm_initial) || ' of ' || TO_CHAR(ecm_rows), 'INFO' FROM agg
+UNION ALL
+SELECT 'C09. DCM tranches: callable / tap / governing law / exchange / country (INFO — batch C; raw UAT ~14% / 13% / 13% / 13% / 27%)', '(info)',
+       TO_CHAR(dcm_callable) || ' / ' || TO_CHAR(dcm_tap) || ' / ' || TO_CHAR(dcm_law) || ' / ' || TO_CHAR(dcm_exchange) || ' / ' || TO_CHAR(dcm_country) || ' of ' || TO_CHAR(dcm_rows), 'INFO' FROM agg
 ORDER BY 1;
 
--- D. ORDER VIEW — split by product (same reason as B). Dies alone if
--- VW_ORDER_DETAIL is old (DEV 2026-08-19: no BILLED_BY -> only this section
--- errors; A/B/C still report). D-ECM first, then D-DCM (the 5M-row scan).
+-- D-ECM. ORDER VIEW, ECM branches — one scan.
 WITH agg AS (
   SELECT /*+ MATERIALIZE NO_PARALLEL */
          COUNT(*) AS rows_,
          COUNT(DISTINCT ORDER_ID) AS keys_,
-         COUNT(BILLED_BY) AS billed_,
-         COUNT(CASE WHEN ORDER_OWNERSHIP = 'AWAY' THEN 1 END) AS away_,
-         COUNT(CASE WHEN ORDER_OWNERSHIP = 'HOME' THEN 1 END) AS home_,
-         COUNT(SALES_PERSON) AS sales_,
          COUNT(ORDER_DEMAND_QTY) AS ecm_demand,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN 1 END) AS ecm_ipreo_rows,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN ORDER_DEMAND_QTY END) AS ecm_ipreo_demand,
-         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN INVESTOR_CATEGORY END) AS ecm_ipreo_cat,
-         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                     AND ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS')
-                    THEN 1 END) AS ecm_ipreo_excluded,
+                     AND ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS') THEN 1 END) AS ecm_ipreo_excluded,
          COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS ecm_alloc_null
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'ECM'
 )
-SELECT '1d. ECM orders with billed_by (INFO)' AS check_,
-       '(info)' AS expected_,
-       TO_CHAR(billed_) || ' of ' || TO_CHAR(rows_) AS actual_,
-       'INFO' AS verdict_
-FROM agg
+SELECT 'D01. order grain, ECM (rows = ORDER_ID)' AS check_, 'Y' AS expected_,
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END AS verdict_ FROM agg
 UNION ALL
-SELECT '1j. ECM orders home vs away (INFO, release 2 — away was excluded)',
-       '(info)',
-       TO_CHAR(home_) || ' home / ' || TO_CHAR(away_) || ' away', 'INFO'
-FROM agg
-UNION ALL
-SELECT '1t. ECM orders with SALES_PERSON (INFO)', '(info)',
-       TO_CHAR(sales_) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT '21. ECM orders with a share-equivalent indication (INFO — IOI rebuild 2026-09-14; QA ~72% of live)',
-       '(info)', TO_CHAR(ecm_demand) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT '9. order grain, ECM (rows = ORDER_ID)', 'Y',
-       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
-       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
-SELECT '24. ECM orders from the Ipreo source landed (QA 658,680)', 'Y',
+SELECT 'D02. Ipreo ECM orders landed (UAT ~659k)', 'Y',
        CASE WHEN ecm_ipreo_rows > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_ipreo_rows > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '24b. Ipreo orders w/ share-equivalent demand / investor type (INFO)',
-       '(info)', TO_CHAR(ecm_ipreo_demand) || ' demand / ' ||
-       TO_CHAR(ecm_ipreo_cat) || ' typed of ' || TO_CHAR(ecm_ipreo_rows),
-       'INFO' FROM agg
-UNION ALL
-SELECT '24c. Ipreo cancelled/deleted/pass orders excluded', 'Y',
+SELECT 'D03. Ipreo cancelled/deleted/pass orders excluded', 'Y',
        CASE WHEN ecm_ipreo_excluded = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_ipreo_excluded = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '28. ECM orders with NO allocation recorded (INFO — NULL kept since 2026-09-29; was 0 by construction)',
-       '(info)', TO_CHAR(ecm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
+SELECT 'D04. ECM orders with a share-equivalent indication (INFO — IOI rebuild; UAT ~72%)', '(info)',
+       TO_CHAR(ecm_demand) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
+UNION ALL
+SELECT 'D05. ECM orders with no allocation recorded (INFO — NULL kept since 2026-09-29)', '(info)',
+       TO_CHAR(ecm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
--- D-DCM.
+-- D-DCM. ORDER VIEW, DCM branch — one scan (the large one).
 WITH agg AS (
   SELECT /*+ MATERIALIZE NO_PARALLEL */
          COUNT(*) AS rows_,
          COUNT(DISTINCT ORDER_ID) AS keys_,
-         COUNT(BILLED_BY) AS billed_,
          SUM(ORDER_ALLOCATION) AS dcm_alloc,
-         COUNT(INVESTOR_REGION) AS dcm_geo,
-         COUNT(INVESTOR_CATEGORY) AS dcm_cat,
-         COUNT(SALES_PERSON) AS sales_,
          COUNT(PRODUCT_CLASS) AS dcm_class,
          SUM(CASE WHEN UPPER(ORDER_STATUS) NOT IN ('ACCEPTED', 'BOOKED', 'UPDATED', 'NEW') THEN 1 ELSE 0 END) AS dcm_out_of_scope,
          COUNT(CASE WHEN ORDER_STATUS IS NULL THEN 1 END) AS dcm_null_status,
@@ -511,228 +295,80 @@ WITH agg AS (
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'DCM'
 )
-SELECT '1d. DCM orders with billed_by (INFO, ~74% UAT)' AS check_,
-       '(info)' AS expected_,
-       TO_CHAR(billed_) || ' of ' || TO_CHAR(rows_) AS actual_,
-       'INFO' AS verdict_
-FROM agg
+SELECT 'D06. order grain, DCM (rows = ORDER_ID)' AS check_, 'Y' AS expected_,
+       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END AS verdict_ FROM agg
 UNION ALL
-SELECT '1r. DCM orders w/ investor geography (INFO, ~95% source — rel 3)',
-       '(info)', TO_CHAR(dcm_geo), 'INFO' FROM agg
-UNION ALL
-SELECT '1s. DCM orders w/ investor type (INFO, ~67% source — rel 3)',
-       '(info)', TO_CHAR(dcm_cat), 'INFO' FROM agg
-UNION ALL
-SELECT '1t. DCM orders with SALES_PERSON (INFO, ~30% — rel 3)', '(info)',
-       TO_CHAR(sales_) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT '21b. DCM orders carry product_class (ferry 2026-09-15)', 'Y',
-       CASE WHEN dcm_class > 0 THEN 'Y' ELSE 'N' END,
-       CASE WHEN dcm_class > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
-SELECT '6. DCM allocation non-zero', 'Y',
+SELECT 'D07. DCM allocation present', 'Y',
        CASE WHEN dcm_alloc > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_alloc > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '9. order grain, DCM (rows = ORDER_ID)', 'Y',
-       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
-       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
+SELECT 'D08. DCM orders carry product_class (ferry)', 'Y',
+       CASE WHEN dcm_class > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_class > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '26. DCM order statuses in scope only (accepted/booked/updated/new)', 'Y',
+SELECT 'D09. DCM order statuses in scope only (accepted/booked/updated/new)', 'Y',
        CASE WHEN dcm_out_of_scope = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_out_of_scope = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT '26b. DCM order rows (INFO — QA 5,826,467 before; the RQ load was 75 %, expect ~1.25M)', '(info)',
+SELECT 'D10. no NULL-status DCM orders (the RQ load is gone)', 'Y',
+       CASE WHEN dcm_null_status = 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN dcm_null_status = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT 'D11. DCM orders (INFO — UAT ~1.25M after the exclusion)', '(info)',
        TO_CHAR(rows_), 'INFO' FROM agg
 UNION ALL
-SELECT '26c. DCM NULL-status orders (INFO — all were RQ; expect 0)', '(info)',
-       TO_CHAR(dcm_null_status), 'INFO' FROM agg
-UNION ALL
-SELECT '28b. DCM orders with NO allocation recorded (INFO — NULL kept since 2026-09-29; was 0 by construction)',
-       '(info)', TO_CHAR(dcm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
+SELECT 'D12. DCM orders with no allocation recorded (INFO — NULL kept since 2026-09-29)', '(info)',
+       TO_CHAR(dcm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
--- E. HEDGE ORDER VIEW — ONE scan (new in V3).
-WITH agg AS (
-  SELECT /*+ MATERIALIZE */
-         COUNT(*) AS rows_,
-         COUNT(DISTINCT HEDGE_ORDER_ID) AS keys_,
-         COUNT(DISTINCT INVESTOR_GP_ID) AS investors_,
-         COUNT(HEDGE_MANAGER) AS managed_
-  FROM DGSTREAM.VW_HEDGE_ORDER
-)
-SELECT '10. hedge orders (INFO, ~300,741 source)' AS check_, '(info)' AS expected_,
-       TO_CHAR(rows_) || ' rows / ' || TO_CHAR(investors_) || ' investors / ' ||
-       TO_CHAR(managed_) || ' managed' AS actual_, 'INFO' AS verdict_
-FROM agg
-UNION ALL
-SELECT '10b. hedge-order grain', 'Y',
-       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
-       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
-ORDER BY 1;
+-- E. THE OTHER FIVE VIEWS — grain only, one scan each.
+SELECT 'E1. hedge-order grain' AS check_, 'Y' AS expected_,
+       CASE WHEN COUNT(*) = COUNT(DISTINCT HEDGE_ORDER_ID) THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN COUNT(*) = COUNT(DISTINCT HEDGE_ORDER_ID) THEN 'PASS' ELSE 'FAIL' END AS verdict_
+FROM DGSTREAM.VW_HEDGE_ORDER;
 
--- F. HEDGE TRADE VIEW — ONE scan (new in V3).
-WITH agg AS (
-  SELECT /*+ MATERIALIZE */
-         COUNT(*) AS rows_, COUNT(DISTINCT HEDGE_TRADE_ID) AS keys_
-  FROM DGSTREAM.VW_HEDGE_TRADE
-)
-SELECT '11. hedge trades (INFO, ~155,693 source)' AS check_, '(info)' AS expected_,
-       TO_CHAR(rows_) AS actual_, 'INFO' AS verdict_ FROM agg
-UNION ALL
-SELECT '11b. hedge-trade grain', 'Y',
-       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
-       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
-ORDER BY 1;
+SELECT 'E2. hedge-trade grain' AS check_, 'Y' AS expected_,
+       CASE WHEN COUNT(*) = COUNT(DISTINCT HEDGE_TRADE_ID) THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN COUNT(*) = COUNT(DISTINCT HEDGE_TRADE_ID) THEN 'PASS' ELSE 'FAIL' END AS verdict_
+FROM DGSTREAM.VW_HEDGE_TRADE;
 
--- G. TRADE VIEW — ONE scan; now TWO branches.
-WITH agg AS (
-  SELECT /*+ MATERIALIZE */
-         COUNT(*) AS rows_, COUNT(DISTINCT PRODUCT||'~'||TRADE_ID) AS keys_,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN 1 END) AS dcm_,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN FIRM_ACCOUNT_NUMBER END) AS firm_
-  FROM DGSTREAM.VW_TRADE_DETAIL
-)
-SELECT '12. trades by product (INFO, ~489k DCM / ~724 ECM source)' AS check_,
-       '(info)' AS expected_,
-       TO_CHAR(dcm_) || ' DCM / ' || TO_CHAR(ecm_) || ' ECM / ' ||
-       TO_CHAR(firm_) || ' w/ firm acct' AS actual_, 'INFO' AS verdict_
-FROM agg
-UNION ALL
-SELECT '12b. trade grain', 'Y',
-       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
-       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
-ORDER BY 1;
+SELECT 'E3. trade grain (both products)' AS check_, 'Y' AS expected_,
+       CASE WHEN COUNT(*) = COUNT(DISTINCT PRODUCT||'~'||TRADE_ID) THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN COUNT(*) = COUNT(DISTINCT PRODUCT||'~'||TRADE_ID) THEN 'PASS' ELSE 'FAIL' END AS verdict_
+FROM DGSTREAM.VW_TRADE_DETAIL;
 
--- H. DESIGNATION VIEW — ONE scan (new in V3).
-WITH agg AS (
-  SELECT /*+ MATERIALIZE */
-         COUNT(*) AS rows_, COUNT(DISTINCT DESIGNATION_ID) AS keys_,
-         COUNT(FIRM_ACCOUNT) AS firm_
-  FROM DGSTREAM.VW_DESIGNATION
-)
-SELECT '13. designations (INFO, ~10,696 source)' AS check_, '(info)' AS expected_,
-       TO_CHAR(rows_) || ' rows / ' || TO_CHAR(firm_) || ' w/ firm acct'
-         AS actual_, 'INFO' AS verdict_ FROM agg
-UNION ALL
-SELECT '13b. designation grain', 'Y',
-       CASE WHEN rows_ = keys_ THEN 'Y' ELSE 'N' END,
-       CASE WHEN rows_ = keys_ THEN 'PASS' ELSE 'FAIL' END FROM agg
-ORDER BY 1;
+SELECT 'E4. designation grain' AS check_, 'Y' AS expected_,
+       CASE WHEN COUNT(*) = COUNT(DISTINCT DESIGNATION_ID) THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN COUNT(*) = COUNT(DISTINCT DESIGNATION_ID) THEN 'PASS' ELSE 'FAIL' END AS verdict_
+FROM DGSTREAM.VW_DESIGNATION;
 
--- I. TRADE SYNDICATE VIEW — expected EMPTY today (schema-only source;
--- forward-population possible). Any rows here = news, not a failure.
-SELECT '14. trade-syndicate rows (INFO, source EMPTY today)' AS check_,
+SELECT 'E5. trade-syndicate rows (INFO — source empty today; rows = news)' AS check_,
        '(info)' AS expected_, TO_CHAR(COUNT(*)) AS actual_, 'INFO' AS verdict_
 FROM DGSTREAM.VW_TRADE_SYNDICATE;
 
 -- ===========================================================================
--- K. TIMING PROBES — the wave's actual deliverable is SECONDS, so run these
--- with elapsed time visible and screenshot the timings. Each is one
--- statement so the tool reports per-probe elapsed. Values are INFO only.
+-- K. TIMING PROBES — run with elapsed time visible; the seconds are the
+-- result. Literal ids are the agent's shape (a scalar-subquery id is
+-- evaluated after the dedupe window and times 30x slower).
 -- ===========================================================================
+-- K1. Deal-scoped DCM orders (lever B: the deal id pushes into the window).
+SELECT 'K1 deal-scoped DCM orders, literal id' AS probe_, TO_CHAR(COUNT(*)) || ' rows' AS actual_
+FROM DGSTREAM.VW_ORDER_DETAIL WHERE PRODUCT = 'DCM' AND DEAL_ID = 'I-260831-113859365632';
 
--- K1. Lever B: deal-scoped DCM order listing via a SCALAR-SUBQUERY id. NOTE
--- (UAT 2026-09-18): 19.5 s here vs 0.6 s for K1b's literal id — the subquery
--- is evaluated after the window; K1b is the agent's shape. Keep both.
-SELECT 'K1 deal-scoped DCM orders (lever B)' AS probe_,
-       TO_CHAR(COUNT(*)) || ' rows for sampled deal' AS actual_
-FROM DGSTREAM.VW_ORDER_DETAIL
-WHERE PRODUCT = 'DCM'
-AND   DEAL_ID = (SELECT MIN(ROOT_ID) FROM DGSTREAM.OB_ORDER);
+-- K2. DCM deal count touching no demand column (lever C: order-book join eliminated).
+SELECT 'K2 DCM deal count, no demand cols' AS probe_, TO_CHAR(COUNT(*)) || ' DCM deals' AS actual_
+FROM DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'DCM';
 
--- K2. Lever C: DCM deal count touching NO demand columns. Oracle can now
--- eliminate the hoisted order-book join. Was: the 401s class. Expect: seconds.
-SELECT 'K2 DCM deal count, no demand cols (lever C)' AS probe_,
-       TO_CHAR(COUNT(*)) || ' DCM deals' AS actual_
-FROM DGSTREAM.VW_DEAL_SUMMARY
-WHERE PRODUCT = 'DCM';
-
--- K3. Control: DCM total demand DOES touch the order book — the 5.0M-row
--- aggregation is inherent here. Expected slow; the K2-vs-K3 gap IS lever C.
-SELECT 'K3 DCM total demand (inherent order-book scan)' AS probe_,
-       TO_CHAR(ROUND(SUM(TOTAL_DEMAND))) AS actual_
-FROM DGSTREAM.VW_DEAL_SUMMARY
-WHERE PRODUCT = 'DCM';
-
--- K4. Lever D baseline: full entity-search pass (view unchanged this wave;
--- measured 40s in the OCP log). Improvement here = lever C reaching the
--- entity view's deal branches; remainder is the materialized-view decision.
-SELECT 'K4 entity search full pass (lever D baseline)' AS probe_,
-       TO_CHAR(COUNT(*)) || ' entities' AS actual_
-FROM DGSTREAM.VW_ENTITY_SEARCH;
-
--- K5. Index-gap witness: deal-scoped DCM trades. OB_ORDER_TRADE has NO
--- ROOT_ID index yet (requested from the feed team) — expect this SLOW now
--- and fast after that index lands. Re-run this probe when it does.
-SELECT 'K5 deal-scoped DCM trades (awaits OB_ORDER_TRADE ROOT_ID index)' AS probe_,
-       TO_CHAR(COUNT(*)) || ' trades for sampled deal' AS actual_
-FROM DGSTREAM.VW_TRADE_DETAIL
-WHERE PRODUCT = 'DCM'
-AND   DEAL_ID = (SELECT MIN(ROOT_ID) FROM DGSTREAM.OB_ORDER_TRADE);
-
--- K6. Investor-name-scoped DCM order ask. The banker's dominant filter is NOT
--- a PARTITION BY key, so the dedupe window runs over every OB_ORDER row
--- first. Record ELAPSED before and after the V1 anti-join rewrite.
-SELECT COUNT(*) AS ORDERS_, SUM(ORDER_DEMAND_QTY) AS DEMAND_
-FROM   DGSTREAM.VW_ORDER_DETAIL
-WHERE  PRODUCT = 'DCM'
-AND    UPPER(INVESTOR_NAME) LIKE '%FIDELITY%'
-AND    PRICING_TS >= ADD_MONTHS(TRUNC(SYSDATE), -6);
-
--- K7. Unscoped aggregate over the order view — the V1 go/no-go: it must not
--- get slower after the anti-join rewrite.
-SELECT PRODUCT, COUNT(*) AS ORDERS_, SUM(ORDER_DEMAND_QTY) AS DEMAND_
-FROM   DGSTREAM.VW_ORDER_DETAIL
-GROUP  BY PRODUCT;
-
--- K1b. Same as K1 with a LITERAL deal id — the shape the agent actually sends.
--- K1's scalar subquery may be evaluated after the window instead of pushed
--- into it; if K1b is seconds-class while K1 is not, K1 was a probe artefact.
-SELECT 'K1b deal-scoped DCM orders, literal id' AS probe_,
-       TO_CHAR(COUNT(*)) || ' rows' AS actual_
-FROM DGSTREAM.VW_ORDER_DETAIL
-WHERE PRODUCT = 'DCM'
-AND   DEAL_ID = 'I-260831-113859365632';
-
--- K8. Ipreo ECM branch, the agent's deal-card shape: one Ipreo deal's orders
--- by a LITERAL 10-digit id (Caris Life Sciences on UAT, census N2-5). The
--- dedupe window is partitioned by DEAL_ID so the predicate must push in —
--- expect the K1b class (sub-second), not the K1 class.
-SELECT 'K8 deal-scoped Ipreo ECM orders, literal id' AS probe_,
+-- K3. Deal-scoped Ipreo ECM orders (Caris Life Sciences on UAT) — K1's class.
+SELECT 'K3 deal-scoped Ipreo ECM orders, literal id' AS probe_,
        TO_CHAR(COUNT(*)) || ' rows / ' || TO_CHAR(ROUND(SUM(ORDER_DEMAND_QTY))) || ' demand' AS actual_
-FROM DGSTREAM.VW_ORDER_DETAIL
-WHERE PRODUCT = 'ECM'
-AND   DEAL_ID = '1448094247';
+FROM DGSTREAM.VW_ORDER_DETAIL WHERE PRODUCT = 'ECM' AND DEAL_ID = '1448094247';
 
--- K9. Ipreo ECM deal count with no demand columns (the K2 shape on the new
--- branch — join elimination should skip the 677k-row order aggregate).
-SELECT 'K9 ECM deal count, no demand cols (both ECM branches)' AS probe_,
-       TO_CHAR(COUNT(*)) || ' ECM deals' AS actual_
-FROM DGSTREAM.VW_DEAL_SUMMARY
-WHERE PRODUCT = 'ECM';
+-- K4. ECM deal count, both ECM branches, no demand column.
+SELECT 'K4 ECM deal count, no demand cols' AS probe_, TO_CHAR(COUNT(*)) || ' ECM deals' AS actual_
+FROM DGSTREAM.VW_DEAL_SUMMARY WHERE PRODUCT = 'ECM';
 
--- K10. DEAL-SCOPED IPREO SMOKE (QA 2026-09-23: the full-scan sections B and D
--- die with ORA-04036 when the instance is over its PGA cap; these push the
--- deal id into the windows and stay small). Visa 1447528575 shows every
--- change of the 22-Sep redeploy: LAST_PRICED via the offer-date chain,
--- settlement, TRANCHE_SIZE = underwritten 406,000,000, PRICE 44, fees from
--- the fee table, "Citigroup (CITIUSA)" in the syndicate list, currency
--- orders with a share-equivalent demand and a money "as submitted".
-SELECT DEAL_ID, DEAL_NAME, ISSUER_NAME, EQUITY_TYPE, DEAL_STATUS, DEAL_SIZE, BASE_PRICE,
-       FIRST_PRICED, LAST_PRICED, SETTLEMENT_TS, ORDER_COUNT, INVESTOR_COUNT, TOTAL_DEMAND, TOTAL_ALLOCATION
-FROM   DGSTREAM.VW_DEAL_SUMMARY
-WHERE  PRODUCT = 'ECM' AND DEAL_ID = '1447528575';
-
-SELECT TRANCHE_ID, TRANCHE_NAME, TRANCHE_SIZE, PRODUCT_TYPE, PRICE, PRICING_TS, SETTLEMENT_TS, TRADE_TS,
-       TOTAL_FEE, UNDERWRITING_FEE, MANAGEMENT_FEES, SELLING_CONCESSION_FEE, OVER_ALLOTMENT_AUTHORIZED_SHARES,
-       DEAL_SHARING_TYPE, SYNDICATE_MEMBER_NAME
-FROM   DGSTREAM.VW_TRANCHE_SUMMARY
-WHERE  PRODUCT = 'ECM' AND DEAL_ID = '1447528575';
-
-SELECT INVESTOR_NAME, INVESTOR_CATEGORY, INVESTOR_REGION, DEMAND_UNIT, ORDER_DEMAND_QTY,
-       DEMAND_AS_SUBMITTED, ORDER_ALLOCATION, PRICING_TS, TRANCHE_SIZE, TRANCHE_NAME
-FROM   DGSTREAM.VW_ORDER_DETAIL
-WHERE  PRODUCT = 'ECM' AND DEAL_ID = '1447528575'
-ORDER  BY ORDER_ALLOCATION DESC FETCH FIRST 10 ROWS ONLY;
+-- K5. Full entity-search pass (lever D baseline, measured 40 s before the rewrite).
+SELECT 'K5 entity search full pass' AS probe_, TO_CHAR(COUNT(*)) || ' entities' AS actual_
+FROM DGSTREAM.VW_ENTITY_SEARCH;
