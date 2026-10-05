@@ -269,7 +269,7 @@ dimensions:
   deal_class: {column: deal_class, products: ["ECM"], description: "ECM. EXECUTION FORMAT / VEHICLE of the deal: Fully Marketed, Marketed, Accelerated Bookbuild, Bought Deal, Overnight, Blocktrade, Dutch Auction, Registered Direct, PIPE (two spellings), Rights, SPAC, REIT, MLP, BDC, Closed End Fund, Registered, Unregistered, Retail. 'Block trades / bought deals / ABBs / SPACs / PIPEs / rights issues' land HERE (like-match). Blank on 10-digit-id deals; NULL on DCM."}
   dcm_deal_class: {column: dcm_deal_class, products: ["DCM"], description: "DCM. Deal-level bond class list, comma-separated (Investment Grade, High Grade, High Yield, Emerging Markets, ABS, LevFin High Yield, Agencies, Preferred, Taxable Muni, RMBS, SSA, Sovereigns, Loans, CMBS…) — like-match; the tranche object's product_class is the per-tranche twin. NULL on ECM."}
   size_unit: {column: size_unit, description: "Unit of deal_size as a STORED FACT: 'shares' (common stock, units, warrants, depositary receipts), 'bonds' (convertible bonds / preferred, exchangeable notes — deal_size is then PAR), 'currency' (every DCM deal). Project it beside deal_size on any mixed list."}
-  country_of_risk: {column: country_of_risk, products: ["DCM"], description: "DCM. Issuer's country of risk (SMC record). NULL on ECM — use issuer_country / issuer_domicile there."}
+  country_of_risk: {column: country_of_risk, products: ["DCM"], description: "DCM. Issuer's country of risk, ISO-2 code (SMC). NULL on ECM — use issuer_country / issuer_domicile there."}
   deal_status: {column: deal_status, description: "Deal lifecycle status. CASE VARIANTS ARE REAL — 'priced'/'Priced' and 'announced'/'Announced' are distinct stored values on DCM (Q17), so match case-insensitively and merge the variants before reporting a breakdown or the buckets will not sum. On DCM this is MAX() across the deal's tranche statuses and can disagree with the tranche object."}
   execution_status: {column: execution_status, products: ["ECM"], description: "DEAD COLUMN — carries no information and has no filter. The view fills it from a subquery already restricted to one status type, so every ECM row reads the same literal and every DCM row is NULL. Any 'execution status' ask is a deal_status ask. Kept only because an exposed column is never removed. Do not project it."}
   deal_region: {column: deal_region, description: "Deal-level region (NAM/EMEA/APAC, rare JAPAN/LATAM). On BOTH products since the 2026-08-18 view batch (DCM was a NULL placeholder before). Sparse — blanks mean 'not captured', never 'no region'."}
@@ -288,9 +288,9 @@ dimensions:
   reoffer_low_price: {column: reoffer_low_price, products: ["ECM"], description: "ECM (V3). LOW end of the reoffer PRICE RANGE. With reoffer_high_price answers 'what was the price range' — the range refusal is DEAD. No STAGE history exists (Initial vs Revised is still not tracked — say so)."}
   reoffer_high_price: {column: reoffer_high_price, products: ["ECM"], description: "ECM (V3). HIGH end of the reoffer price range."}
   fx_rate: {column: fx_rate, products: ["ECM"], description: "ECM (V3). Deal FX rate (population unmeasured)."}
-  issuer_country: {column: issuer_country, description: "Issuer's country (names): ECM from the transaction, DCM from the SMC issuer record since batch C. Population unmeasured; blank = not captured."}
+  issuer_country: {column: issuer_country, description: "Issuer's country — ECM stores NAMES, DCM stores ISO-2 CODES (US, GB, CA, NL, FR…; ~27% populated): filter BOTH forms (in ['United States', 'US']), show as stored."}
   issuer_domicile: {column: issuer_domicile, products: ["ECM"], description: "ECM (V3). Issuer's DOMICILE country — 'incorporated in / domiciled in' asks land HERE; the old domicile refusal is DEAD for ECM (DCM: still not tracked)."}
-  offering_format: {column: offering_format, products: ["ECM"], description: "ECM (V3). Offering format (open vocabulary; population unmeasured)."}
+  offering_format: {column: offering_format, products: ["ECM"], description: "ECM. The ONLY stored value is '144A only' (~39% of OPUS transactions), else NULL — '144A ECM deals' = eq '144A only'."}
   deal_fee_mm: {column: deal_fee_mm, products: ["ECM"], description: "ECM (V3). Deal-level FEE in millions, paired with deal_fee_currency — the deal-fees refusal is DEAD for ECM. DCM deal-level fee = SUM the tranche object's total_fee instead."}
   deal_fee_currency: {column: deal_fee_currency, products: ["ECM"], description: "ECM (V3). Currency of deal_fee_mm — always present it with the fee figure."}
   deal_size_mm: {column: deal_size_mm, products: ["ECM"], description: "ECM (V3). Deal MONEY size in millions (paired with deal_size_currency) — ends the shares-vs-money ambiguity: deal_size is SHARES on ECM, THIS is the money figure."}
@@ -690,8 +690,10 @@ filters:
     description: >-
       ECM execution format: like '%BLOCK%' (Blocktrade), '%BOUGHT%', '%ACCELERATED%'
       (ABB), '%SPAC%', '%PIPE%' (two spellings), '%RIGHTS%', '%MARKETED%',
-      '%OVERNIGHT%', '%REIT%'. Blank on 10-digit-id deals and NULL on DCM, so a
-      'no block trades found' answer says the Ipreo history carries no class.
+      '%OVERNIGHT%', '%REIT%'; '%MARKETED%' matches 'Marketed' (the bulk, 14.7k)
+      AND 'Fully Marketed'. UAT counts: SPAC 606, Blocktrade 154, PIPE 4.2k,
+      Rights 999. Blank on 10-digit-id deals and NULL on DCM, so a 'no block
+      trades found' answer says the Ipreo history carries no class.
   dcm_deal_class:
     column: dcm_deal_class
     products: ["DCM"]
@@ -711,7 +713,7 @@ filters:
     products: ["DCM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     case_insensitive: true
-    description: "DCM issuer country of risk (SMC vocabulary, country NAMES — like-match)."
+    description: "DCM issuer country of risk — ISO-2 codes (US, GB, MX…)."
 
 usage_notes:
   - Always set a product filter ('ECM' for equity, 'DCM' for debt). Count metrics

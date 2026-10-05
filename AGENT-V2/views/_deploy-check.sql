@@ -376,10 +376,10 @@ SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
        'INFO' AS verdict_
 FROM agg
 UNION ALL
-SELECT '30. ECM tranches: last close / primary shares / offer amount / initial size (INFO — batch C; UAT 27% / ? / ? / 80%)', '(info)',
+SELECT '30. ECM tranches: last close / primary shares / offer amount / initial size (INFO — batch C; raw UAT 27% / 72% / 78% / 80%)', '(info)',
        TO_CHAR(ecm_last_close) || ' / ' || TO_CHAR(ecm_primary) || ' / ' || TO_CHAR(ecm_offer_amt) || ' / ' || TO_CHAR(ecm_initial) || ' of ' || TO_CHAR(ecm_rows), 'INFO' FROM agg
 UNION ALL
-SELECT '30b. DCM tranches: callable / tap / governing law / exchange / country (INFO — batch C, populations unmeasured before)', '(info)',
+SELECT '30b. DCM tranches: callable / tap / governing law / exchange / country (INFO — batch C; raw UAT rows ~14% / 13% / 13% / 13% / 27%)', '(info)',
        TO_CHAR(dcm_callable) || ' / ' || TO_CHAR(dcm_tap) || ' / ' || TO_CHAR(dcm_law) || ' / ' || TO_CHAR(dcm_exchange) || ' / ' || TO_CHAR(dcm_country) || ' of ' || TO_CHAR(dcm_rows), 'INFO' FROM agg
 UNION ALL
 SELECT '1k. DCM tranches with settlement_ts (INFO, expect ~50,198 UAT)',

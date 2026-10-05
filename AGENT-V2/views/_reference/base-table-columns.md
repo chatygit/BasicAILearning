@@ -215,6 +215,24 @@ if the source schema changes.
 # EXCHANGE_LISTING_VENUE, TAKEDOWN_BANK, BD_BANK.
 # NOTE: MATURITY_DATE is VARCHAR2 (59) — confirms the text-maturity fact at
 # source, not just in the view.
+# VALUES (db-asks P1/P2/P5, UAT 2026-10-05, raw rows ~75,200 incl. versions):
+#   CALL_IND 'Y' 10,827 / NULL 64,373 (no 'N'); IS_TAP 'Y' 10,025 / NULL;
+#   IS_CONVERTIBLE 'Y' 9,828 / NULL; MAKE_WHOLE_CALLABLE 'true' 10,373 /
+#   'false' 34,191 / NULL 30,636; PERPETUAL_MATURITY 'true' 210 / 'false'
+#   42,180 / NULL; PUT_IND 'true' 9,935 / 'false' 34,795 / NULL 23,364 + three
+#   stray text values. NON_CALL_PERIOD is the UNIT only ('M' 597, 'Y' 72, NULL
+#   74,531) — the number sits in NON_CALL_VALUE (184): the view renders
+#   '<value>-<unit>'. GOVERNING_LAW ~13%: 'State of New York' 9,514, 'Dutch'
+#   464, 'England and Wales' 42, 'State of Delaware' 40, 'German' 24,
+#   'Australian' 18, 'French' 8, 'Italian' 8, then singles. EXCHANGE_LISTING_
+#   VENUE ~13%, free text as typed (UAT mostly placeholders; 'Newyork' 433,
+#   'NewYorkStockExchange' 83, 'INDIA' 70, 'Luxembourg' 19, 'London' 16).
+#   SMC_ISSUER_COUNTRY ~27%, ISO-2 CODES: US 12,479, GB 1,062, CA 643, NL
+#   559, FR 412, AU 402, LU 332, JP 304, DE 250, KR 204, HK 198, IT 183, CN
+#   177. SFC_ROLE is the Hong Kong SFC capital-markets-intermediary capacity
+#   ('Out of Scope / N/A' 7,242, 'Overall Coordinator / Capital Markets
+#   Intermediary' 53 …), NOT Citi's syndicate role; CO_MANAGED_DEAL is 'N' or
+#   NULL only.
 
 | # | Column | Type |
 |---|---|---|
@@ -730,6 +748,14 @@ ISSUERVIEW_* block, DEAL_ORDERBOOK_* block, EXEC_DEAL_REGION.
 # dates: ANNOUNCE/PITCH/LAUNCH/PRICING/CLOSING/SETTLEMENT_TS,
 #   LAUNCH_OCCURRED, FILING_OCCURRED, TIME_ZONE
 # state: ISSUE_STATE_{ID,VALUE}, OFFERING_FORMAT, USE_OF_PROCEEDS
+# VALUES (db-asks P4, UAT 2026-10-05, ~29,800 transactions): OFFERING_FORMAT
+#   is '144A only' 11,771 or NULL 18,018 — nothing else. PRODUCT_EQUITY_CLASS_
+#   VALUE: Marketed 14,705, NULL 4,049, 'Private Investment Public Equity
+#   (PIPE)' 2,883, 'PIPE (Private Investment Public Equity)' 1,352, Rights
+#   999, Dutch Auction 949, Overnight 917, Registered 879, Retail 710, SPAC
+#   606, Unregistered 577, 'REIT (Real Estate InvestmentTrust)' 527, BDC 419,
+#   Blocktrade 154, MLP 23, Closed End Fund 22, Fully Marketed / Accelerated
+#   Bookbuild / Registered Direct / Bought Deal (single digits).
 # external deal ids: BB_DEAL_ID, DMS_DEAL_ID, ISSUE_NET_DEAL_ID,
 #   CMG_DEAL_ID, DEAL_LOGIC_DEAL_ID, DEAL_EXPENSE_NUMBER
 # money: CURRENCY_{ID,CODE,NAME,SYMBOL}, SETTLEMENT_CURRENCY_{...},
@@ -771,6 +797,11 @@ ISSUERVIEW_* block, DEAL_ORDERBOOK_* block, EXEC_DEAL_REGION.
 #   NOTIONAL_OVER_ALLOTMENT_{EXERCISED,AUTHORIZED},
 #   TOTAL_SHARES_OVER_ALLOTMENT_{AUTHORIZED,EXERCISED} — the greenshoe
 #   refusal can DIE post-exposure
+# TYPES + POPULATIONS (db-asks P0/P3, UAT 2026-10-05, 50,611 raw rows):
+#   BASE_PRIMARY_SHARES / BASE_SECONDARY_SHARES are VARCHAR2 (36,270 /
+#   36,243 filled — TO_NUMBER DEFAULT NULL in the view); FINAL_TRANCHE_
+#   OFFER_AMOUNT NUMBER 39,636; INITIAL_DEAL_AMOUNT NUMBER 40,494;
+#   LAST_TRADE_PRICE_BEFORE_OFFER NUMBER 13,662; _LAUNCH NUMBER 17,085.
 # market context: LAST_TRADE_PRICE_BEFORE_{FILING,LAUNCH,OFFER},
 #   POST_OFFERING_SHARES, INITIAL_DEAL_AMOUNT, DEAL_CAPTAIN,
 #   BASE_{PRIMARY,SECONDARY}_SHARES, FNL/REVISED_PAR_VALUE/PER_OF_PAR,

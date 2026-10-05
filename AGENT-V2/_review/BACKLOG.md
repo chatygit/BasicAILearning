@@ -250,10 +250,22 @@ Batch B:
       → deploy the three views → A0 + 1x + B-ECM / B-DCM / C → server train
       (catalogs) → promote SKILL (§3c-bis rows name deal_class — only after
       the views and catalogs are live). Then the focused run (QA 46-62).
+      CENSUS P (2026-10-05) CLEARED IT: all 21 names valid; flags are 'Y'/NULL
+      (call, tap, convertible) or 'true'/'false'/NULL (make-whole, perpetual,
+      put); NON_CALL_PERIOD is a UNIT — the view now renders NON_CALL_VALUE ||
+      '-' || unit ('3-Y'); GOVERNING_LAW 13% ('State of New York', 'England
+      and Wales'); EXCHANGE_LISTING_VENUE free text 13%; SMC_ISSUER_COUNTRY
+      ISO-2 CODES 27% (ECM stores names — catalogs say filter both forms);
+      OFFERING_FORMAT = '144A only' or NULL; ECM tranche populations 72% /
+      72% / 27% / 34% / 80% / 78%. Tranche Ipreo branch now fills
+      ISSUER_COUNTRY from the mirror transaction (P0 found the column).
       Deliberately NOT in this batch (next): USD-normalised book / allocation
-      sizes (ORDER_BOOK_SIZE_USD is text today), coupon as a number, SFC_ROLE
-      (P5 first), launch / books-close timestamps, road-show dates, Ipreo
-      ADR/GDR refinement from SEC_TYPE_CD.
+      sizes (ORDER_BOOK_SIZE_USD is text today), coupon as a number, launch /
+      books-close timestamps, road-show dates, Ipreo ADR/GDR refinement from
+      SEC_TYPE_CD, an ISO-2 → country-name map for DCM issuer_country (a
+      normalise-at-load job for the Iceberg core layer). CLOSED: SFC_ROLE is
+      the Hong Kong SFC capital-markets-intermediary capacity, not Citi's
+      syndicate role — Citi's DCM role stays the syndicate-member derivation.
 - [x] DEAL_CLASS — BUILT in batch C (2026-10-04). Original item: on the deal/tranche/order ECM branches (OPUS_ECM_TRANSACTION.
       PRODUCT_EQUITY_CLASS_VALUE — censused UAT 2026-09-18): the EXECUTION
       FORMAT / VEHICLE axis, not a unit axis. Values: Fully Marketed, Marketed,

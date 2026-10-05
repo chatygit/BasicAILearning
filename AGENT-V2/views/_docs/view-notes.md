@@ -896,3 +896,12 @@ DCM from EXCHANGE_LISTING_VENUE. Order: DEAL_CLASS ferried (ECM). Ipreo
 branches carry NULL stubs for everything but SIZE_UNIT until db-asks P0 says
 which of these columns the mirrors have. Deploy-check 1x, 29/29b, 30/30b;
 db-asks P0 validates the 21 source names BEFORE the deploy.
+2026-10-05, census P: all 21 names valid; two corrections before the
+deploy — NON_CALL_PERIOD at source is only the UNIT ('M' / 'Y'), the
+number lives in NON_CALL_VALUE, so the view renders '<value>-<unit>'
+('3-Y') the way TENORS does; and the Ipreo tranche branch fills
+ISSUER_COUNTRY from the mirror transaction (the one Ipreo column P0
+found). Known shapes recorded in the cards: DCM flags are 'Y'/NULL or
+'true'/'false'/NULL, DCM issuer country is an ISO-2 code while ECM stores
+names, EXCHANGE on DCM is free text, OFFERING_FORMAT is '144A only' or
+NULL. SFC_ROLE is a Hong Kong SFC capacity, not Citi's role.

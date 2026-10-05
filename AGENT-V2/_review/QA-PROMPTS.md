@@ -259,18 +259,19 @@ available yet", never a name search or a guess) and after batch C deploys
 - [ ] 55. "ECM tranches over $500m in 2025" — AFTER: tranche_offer_amount gte
       500000000 with currency (never deal_size, which is shares).
 - [ ] 56. "Callable high-yield bonds priced in 2025 with their first call date"
-      — AFTER: is_callable is_not_null, call_date / non_call_period shown, the
-      flag value SHOWN not interpreted.
-- [ ] 57. "NC3 bonds issued this year" — AFTER: non_call_period like '%3%',
-      matched values quoted.
-- [ ] 58. "Taps and re-openings in 2026" — AFTER: is_tap is_not_null, value shown.
+      — AFTER: is_callable eq 'Y', call_date / non_call_period shown.
+- [ ] 57. "NC3 bonds issued this year" — AFTER: non_call_period like '3-Y%'
+      ('<value>-<unit>'); under 1% populated — the answer says so.
+- [ ] 58. "Taps and re-openings in 2026" — AFTER: is_tap eq 'Y'.
 - [ ] 59. "Perpetual bonds priced since 2024" — AFTER: is_perpetual (never a
       parse of securities_maturity).
 - [ ] 60. "Mexican issuers, both products, last 12 months" — AFTER: deal object,
-      issuer_country like '%MEXICO%' across both products in ONE request
-      (Product column, no split); DCM adds country_of_risk when it differs.
+      issuer_country in ['Mexico', 'MX'] (ECM names, DCM ISO-2 codes) across
+      both products in ONE request (Product column, no split); DCM adds
+      country_of_risk when it differs.
 - [ ] 61. "New York law bonds vs English law, count 2025" — AFTER: governing_law
-      like, two buckets, NULL bucket disclosed.
+      like '%NEW YORK%' vs '%ENGLAND%' (stored 'England and Wales'), two
+      buckets, the ~87% NULL bucket disclosed.
 - [ ] 62. "Convertibles: deal sizes in 2025 — are they shares or par?" — AFTER:
       size_unit projected beside deal_size ('bonds' = PAR), never totalled
       with common stock.
@@ -339,3 +340,4 @@ say a listed column is blank, never split. Re-run 43 after the server push.
 | 3 | "shares / units / bonds" behind every value in the rows — expected? | NO — headers were bare by rule, and the agent moved the unit into the cells; the PO's own option 2 (a Security column) carries the unit | SKILL §6b "TABLE CELLS ARE BARE NUMBERS", agents.yaml "cells are bare numbers"; QA 44 |
 | 4 | deal types recorded in the Security column | census L1/L2 (UAT 2026-09-29): deals since Oct-2025 carry equity type 'Equity' and a compound offering type ('Common Stk - Block Trade', 'Capital Markets Advisory'…) — a new OPUS source shape, not an agent guess | catalogs: vocabulary + like '%IPO%' + 'Equity' = read the security from the offering-type prefix (train); view SECURITY MAP staged (BACKLOG §3); source questions ASKS-external §5; PROD census |
 Census L (UAT 2026-09-29, screenshots 1-5): L1 ECM deals by security × deal type — Common Stock 17,310 (17,307 Ipreo, offering type blank; latest date 2099-02-15 = a source placeholder) + 6,283 IPO + 3,425 FO; Equity Units 3,974 FO / 2,284 IPO / 273 blank; Convertible Bonds 3,881 blank (1,229 Ipreo) / 688 FO / 249 IPO; Convertible Preferred 1,315 / 193 / 102; Warrants 365 FO / 292 IPO; Exchangable Notes 162 / 61 / 46; NEW SHAPE 'Equity' × 'Capital Markets Advisory' 49, 'Common Stk - Follow on' 36, '- IPO' 8, '- Block Trade', '- ADR', '- Broking', '- Private Equity' 2, '- AEO' 1, '- SPAC IPO' 1, '- COP' 1, 'Convertible - Debt' (Oct-2025 → Sep-2026); one 'IPO' × 'IPO' deal (2023-08-12). L2: the 20 newest 'Equity' deals are EMEA ECM sprint deals (75076060-75078113), deal size NULL. L3: allocation NULL / ZERO / POSITIVE — OB_ECM_ORDER ~97k NULL (61,926 UNACKNOWLEDGED + 35,246) / 392 zero; IPREO_OB_ECM_ORDER 113,749 / 104,624 / 458,828; OB_ORDER non-RQ 1,107,717 / 12,257 / 196,264.
+Census P (UAT 2026-10-05, shots P0-P5): P0 all 21 source names valid (+ the Ipreo mirror's ISSUER_COUNTRY_NAME); BASE_PRIMARY/SECONDARY_SHARES are VARCHAR2. P1 DCM flags: CALL_IND / IS_TAP / IS_CONVERTIBLE = 'Y' or NULL; MAKE_WHOLE_CALLABLE / PERPETUAL_MATURITY / PUT_IND = 'true' / 'false' / NULL (perpetual true 210). P2: NON_CALL_PERIOD is a unit (M/Y) — value in NON_CALL_VALUE; GOVERNING_LAW 'State of New York' 9,514 / 'England and Wales' 42; EXCHANGE_LISTING_VENUE free text; SMC_ISSUER_COUNTRY ISO-2 codes (US 12,479). P3 ECM tranche populations: primary 72%, secondary 72%, last close 27% / 34%, initial 80%, offer amount 78%. P4: OFFERING_FORMAT = '144A only' or NULL; deal class counts (Marketed 14,705, PIPE 4,235 over two spellings, Rights 999, SPAC 606, Blocktrade 154). P5: SFC_ROLE = HK SFC intermediary capacity, not Citi's role — lead closed.

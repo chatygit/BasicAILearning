@@ -2846,7 +2846,7 @@ check(has(SKILL, "An ORDER listing always projects `order_demand_qty`, `order_al
 _SIZE_CAPS = {
     SKILL: 63_402,
     AGENTS: 20_611,
-    ONT / "capital_markets_deal.yaml": 58_231,
+    ONT / "capital_markets_deal.yaml": 58_442,
     ONT / "capital_markets_designation.yaml": 7_861,
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
@@ -2854,7 +2854,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_order.yaml": 65_819,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
-    ONT / "capital_markets_tranche.yaml": 90_171,
+    ONT / "capital_markets_tranche.yaml": 90_564,
 }
 for _p, _cap in _SIZE_CAPS.items():
     _n = len(_p.read_bytes())
