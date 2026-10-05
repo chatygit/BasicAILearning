@@ -229,6 +229,59 @@ five-beat shape added to agents.yaml. Still to run: 18, 24; ⚡ args for 16 and 
       book is not yet allocated>" — PASS: Allocation reads "Not recorded" exactly
       like a blank Indication; never "0 shares"; a stored 0 still shows 0.
 
+## FOCUSED RUN — SPACs and the filters bankers actually ask (written 2026-10-04)
+Run each prompt TWICE: now (views without batch C — the honest answer is "not
+available yet", never a name search or a guess) and after batch C deploys
+(the column answers). UAT, fresh session each, ⚡ args captured.
+- [ ] 46. "How many SPAC IPOs did we price in 2025?" — NOW: "not available yet"
+      (no deal class; never deal_name like '%SPAC%'). AFTER: deal object,
+      deal_class like '%SPAC%' + product ECM, a count with the caveat that
+      10-digit-id deals carry no class.
+- [ ] 47. "List block trades and bought deals in the last 12 months with size
+      and issuer" — AFTER: deal_class in ['Blocktrade','Bought Deal'], Deal Class
+      column shown, size_unit beside deal_size, no unit in cells.
+- [ ] 48. "Accelerated bookbuilds vs fully marketed deals, count by year since
+      2023" — AFTER: deal_count by deal_class × year (time_grain), two classes.
+- [ ] 49. "Top investors in SPAC IPOs in 2025" — AFTER: order object, ONE
+      request (deal_class ferried), equity_type projected (Equity Units).
+- [ ] 50. "PIPEs and registered directs priced in 2026" — AFTER: both PIPE
+      spellings matched (like '%PIPE%'), 'Registered Direct' second filter in
+      the same in-list.
+- [ ] 51. "Rights issues in EMEA since 2024" — AFTER: deal_class like '%RIGHTS%'
+      + deal_region (sparse — say so) or issuer_country.
+- [ ] 52. "ECM deals that priced at more than a 10% discount to last close" —
+      AFTER: tranche object, last_close_before_offer is_not_null + price,
+      discount computed in the answer per row, population caveat (~27%).
+- [ ] 53. "Which deals were upsized in 2025?" — AFTER: initial_deal_size vs
+      tranche_size, both figures shown, never a bare 'upsized' label.
+- [ ] 54. "Pure secondary sell-downs (no primary shares) last 2 years" — AFTER:
+      primary_shares eq 0 / is_null caveat + secondary_shares gt 0.
+- [ ] 55. "ECM tranches over $500m in 2025" — AFTER: tranche_offer_amount gte
+      500000000 with currency (never deal_size, which is shares).
+- [ ] 56. "Callable high-yield bonds priced in 2025 with their first call date"
+      — AFTER: is_callable is_not_null, call_date / non_call_period shown, the
+      flag value SHOWN not interpreted.
+- [ ] 57. "NC3 bonds issued this year" — AFTER: non_call_period like '%3%',
+      matched values quoted.
+- [ ] 58. "Taps and re-openings in 2026" — AFTER: is_tap is_not_null, value shown.
+- [ ] 59. "Perpetual bonds priced since 2024" — AFTER: is_perpetual (never a
+      parse of securities_maturity).
+- [ ] 60. "Mexican issuers, both products, last 12 months" — AFTER: deal object,
+      issuer_country like '%MEXICO%' across both products in ONE request
+      (Product column, no split); DCM adds country_of_risk when it differs.
+- [ ] 61. "New York law bonds vs English law, count 2025" — AFTER: governing_law
+      like, two buckets, NULL bucket disclosed.
+- [ ] 62. "Convertibles: deal sizes in 2025 — are they shares or par?" — AFTER:
+      size_unit projected beside deal_size ('bonds' = PAR), never totalled
+      with common stock.
+Works TODAY (control prompts, run once): "greenshoe exercised in 2025"
+(over_allotment_exercised_shares), "lockups expiring next month" (lockup_ts),
+"IPOs priced below the range" (reoffer_low_price vs base_price), "144A deals
+2025" (reg_category / delivery_type), "green bonds 2026" (esg_bond),
+"floating-rate notes 2025" (coupon_type / frn_coupon_index), "US-listed ECM
+deals" (exchange like '%NYSE%' / '%NASDAQ%'), "IG USD benchmarks over $1bn"
+(product_class + currency + tranche_size).
+
 ## Run 4 order (UAT, fresh session each, after the 2026-09-21 promotion)
 36 (with ⚡ args) · 15 · 3 · 20 — each must be ONE turn with no "which one?"
 menu — then 18 · 24 · 33 · 34 · 35. Screenshot the answer and the session

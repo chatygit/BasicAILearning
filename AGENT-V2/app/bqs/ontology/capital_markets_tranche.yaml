@@ -290,13 +290,23 @@ dimensions:
   trade_ts: {column: trade_ts, description: "Tranche trade date (both products)."}
   first_trade_ts: {column: first_trade_ts, products: ["ECM"], description: "ECM (V3). First trade date."}
   lockup_ts: {column: lockup_ts, products: ["ECM"], description: "ECM (V3). Managers' lockup date — 'when does the lockup expire' lands here."}
+  deal_class: {column: deal_class, products: ["ECM"], description: "ECM. Deal EXECUTION FORMAT ferried to tranche grain — the deal object's values and filters (Blocktrade, Bought Deal, Accelerated Bookbuild, SPAC, PIPE, Rights, Fully Marketed…); like-match. Blank on 10-digit-id deals; NULL on DCM."}
+  size_unit: {column: size_unit, description: "Unit of tranche_size / deal_size as a STORED FACT: 'shares', 'bonds' (convertibles — sizes are PAR), 'currency' (every DCM tranche). Project it on mixed lists."}
+  issuer_country: {column: issuer_country, description: "Issuer's country (names): ECM from the transaction, DCM from the SMC issuer record. Population unmeasured; blank = not captured."}
+  country_of_risk: {column: country_of_risk, products: ["DCM"], description: "DCM. Issuer's country of risk (SMC). NULL on ECM."}
+  primary_shares: {column: primary_shares, products: ["ECM"], description: "ECM. Base PRIMARY shares (new money raised by the issuer). With secondary_shares answers 'primary vs secondary / sell-down' asks. Population unmeasured; blank = not captured."}
+  secondary_shares: {column: secondary_shares, products: ["ECM"], description: "ECM. Base SECONDARY shares (sold by existing holders). secondary_shares gt 0 with primary_shares 0 = a pure sell-down. Population unmeasured."}
+  last_close_before_offer: {column: last_close_before_offer, products: ["ECM"], description: "ECM. Last traded price before the offer. Discount to last close = (last_close_before_offer − price) ÷ last_close_before_offer, computed in the answer from the two columns. ~27% populated (UAT); blank = not captured."}
+  last_close_before_launch: {column: last_close_before_launch, products: ["ECM"], description: "ECM. Last traded price before launch (~34% populated, UAT)."}
+  initial_deal_size: {column: initial_deal_size, products: ["ECM"], description: "ECM. Deal amount at launch (~80% populated) — compare with tranche_size / deal_size for 'upsized / downsized' asks and show both figures."}
+  tranche_offer_amount: {column: tranche_offer_amount, products: ["ECM"], description: "ECM. Final offer AMOUNT of the tranche in MONEY (the currency column) — the money size of an ECM tranche; tranche_size stays the share count. Population unmeasured."}
   target_market: {column: target_market, products: ["DCM"], description: "DCM (V3). Target market label (~7.8k rows) — NOT a region; tranche_name carries target-market labels on ECM."}
   frn_coupon_index: {column: frn_coupon_index, products: ["DCM"], description: "DCM (V3). Floating-rate coupon index (SOFR/EURIBOR…) for FRN tranches."}
   tranche_region: {column: tranche_region, description: "Tranche target region (NAM/EMEA/APAC). This is the TRANCHE's market, not the investor's geography (that lives on capital_markets_order). ~1 in 5 DCM tranches carry one; ECM effectively empty."}
   # --- ECM-only ---
   product_type: {column: product_type, products: ["ECM"], description: "ECM. Fine-grained security type ('Common Shares', '144A Common Stock', 'ADR', 'Conv. Bond'). NEVER match with equality — the values are label variants; use like on the class word. For the instrument CLASS ('common stock', 'convertible') use equity_type."}
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…) — denormalized from the deal, so class asks ranked by tranche metrics are ONE request. Same values and rules as the deal object's equity_type. NULL on DCM."}
-  exchange: {column: exchange, products: ["ECM"], description: "ECM. Listing venue — holds FULL venue names AND sometimes the abbreviation itself ('NYSE'); match both tokens with like, never equality."}
+  exchange: {column: exchange, description: "Listing venue (both products since batch C) — holds FULL venue names AND sometimes the abbreviation itself ('NYSE'); match both tokens with like, never equality."}
   # --- syndicate (aligned pipe lists) ---
   syndicate_member_name: {column: syndicate_member_name, description: "ECM: pipe-delimited syndicate banks, ordered the same way as syndicate_role/broker_code/bnd_broker. A member token may carry an inline '(true)'/'(false)' suffix duplicating the B&D flag — never filter on it, STRIP it when displaying. On ECM deals with 10-digit ids members are BROKER CODES (ABNROTH, BARCAP, CITIUSA…) with Citi shown as 'Citigroup (CITIUSA)' — a bank-NAME filter can miss those rows; match Citi with like '%CITIGROUP%'. DCM: the full deduped member list (older tranches: the B&D bank only); roles/broker codes NULL on DCM, so no role attribution there."}
   syndicate_role: {column: syndicate_role, products: ["ECM"], description: "ECM. Pipe-delimited roles aligned with syndicate_member_name; labels differ by source (like-match) — 10-digit-id deals: Co-Manager, Underwriter, Joint Bookrunner, Selling Group, Lead Manager/Bookrunner, Passive Bookrunner, Joint Lead Manager, Senior Co-Manager, Co-Lead Manager, Sole Bookrunner…; other ECM rows: see the filter list. NULL on DCM."}
@@ -308,6 +318,15 @@ dimensions:
   identifier_type: {column: identifier_type, description: "Pipe-delimited identifier types (CUSIP/ISIN/FIGI/RIC/VALOREN/'SMCP ID'/'DIRECTBOOKS ID'), zip-aligned with identifier_value. UPPER-normalized."}
   identifier_value: {column: identifier_value, description: "Pipe-delimited identifier values, zip-aligned with identifier_type. Display ZIPPED with the type list into one cell per tranche. A security identifier is never a deal_id and never an entity."}
   # --- DCM-only ---
+  is_callable: {column: is_callable, products: ["DCM"], description: "DCM. Call flag as stored (vocabulary unmeasured — treat it as a flag: is_not_null / like). With call_date, non_call_period and make_whole_callable it answers 'callable / NC3 / make-whole' asks. NULL on ECM."}
+  call_date: {column: call_date, products: ["DCM"], description: "DCM. First call date (timestamp). NULL = none recorded."}
+  non_call_period: {column: non_call_period, products: ["DCM"], description: "DCM. Non-call period as stored text — 'NC3'-style asks like-match it. NULL = none recorded."}
+  is_puttable: {column: is_puttable, products: ["DCM"], description: "DCM. Put flag as stored (vocabulary unmeasured)."}
+  make_whole_callable: {column: make_whole_callable, products: ["DCM"], description: "DCM. Make-whole call flag as stored (vocabulary unmeasured)."}
+  is_tap: {column: is_tap, products: ["DCM"], description: "DCM. Tap / re-opening flag as stored (vocabulary unmeasured) — 'taps' and 're-openings' land here."}
+  is_perpetual: {column: is_perpetual, products: ["DCM"], description: "DCM. Perpetual-maturity flag as stored — 'perps / perpetuals' land here (securities_maturity is text)."}
+  is_convertible: {column: is_convertible, products: ["DCM"], description: "DCM. Convertible flag on a bond tranche as stored (ECM convertibles are equity_type)."}
+  governing_law: {column: governing_law, products: ["DCM"], description: "DCM. Governing law as stored ('New York', 'English'… — like-match; vocabulary unmeasured). NULL on ECM."}
   product_class: {column: product_class, products: ["DCM"], description: "DCM. Bond class — a closed 15-value list (Investment Grade, High Yield, SSA, ABS…). Expand IG/HY/EM before filtering."}
   allowed_order_spread: {column: allowed_order_spread, products: ["DCM"], description: "DCM tranche flag Y/N — may investors place SPREAD-based orders on this tranche. NULL = not recorded (~72% of UAT tranches, older feed rows), never 'not allowed'."}
   allowed_order_yield: {column: allowed_order_yield, products: ["DCM"], description: "DCM tranche flag Y/N — YIELD-based orders allowed. NULL = not recorded."}
@@ -661,12 +680,11 @@ filters:
       breakdown column), not the filter. NEVER blend the two axes.
   exchange:
     column: exchange
-    products: ["ECM"]
     operators: [like, in, not_in]
     suggestable: true
     case_insensitive: true
     description: >-
-      ECM. Listing venue. The column holds FULL venue names AND, on some rows,
+      Listing venue (both products). The column holds FULL venue names AND, on some rows,
       the ABBREVIATION itself — both spellings are stored, so equality is always
       wrong (eq 'NYSE' returns zero on every full-name row) and neither single
       'like' token is guaranteed complete. Filters are ANDed and there is no OR,
@@ -923,6 +941,117 @@ filters:
     column: pricing_ts
     operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
     description: "Tranche pricing timestamp. Trailing windows need both bounds (gte start, lt tomorrow-midnight)."
+
+  deal_class:
+    column: deal_class
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM execution format, same literals as the deal object: like '%BLOCK%',
+      '%BOUGHT%', '%ACCELERATED%' (ABB), '%SPAC%', '%PIPE%', '%RIGHTS%',
+      '%MARKETED%'. Blank on 10-digit-id deals; NULL on DCM.
+  size_unit:
+    column: size_unit
+    operators: [eq, ne, in]
+    case_insensitive: true
+    values: ["shares", "bonds", "currency"]
+    description: "Unit of tranche_size — scope 'shares' or 'bonds' before totalling ECM sizes."
+  issuer_country:
+    column: issuer_country
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    case_insensitive: true
+    description: "Issuer country NAME, both products (like-match; spellings vary by source)."
+  country_of_risk:
+    column: country_of_risk
+    products: ["DCM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM issuer country of risk (SMC vocabulary — like-match)."
+  primary_shares:
+    column: primary_shares
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: "ECM base primary shares — gt 0 = new money raised."
+  secondary_shares:
+    column: secondary_shares
+    products: ["ECM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: "ECM base secondary shares — gt 0 = a sell-down component."
+  last_close_before_offer:
+    column: last_close_before_offer
+    products: ["ECM"]
+    operators: [gt, gte, lt, lte, between, is_null, is_not_null]
+    description: "ECM last close before the offer (is_not_null = the discount can be computed)."
+  last_close_before_launch:
+    column: last_close_before_launch
+    products: ["ECM"]
+    operators: [gt, gte, lt, lte, between, is_null, is_not_null]
+    description: "ECM last close before launch."
+  initial_deal_size:
+    column: initial_deal_size
+    products: ["ECM"]
+    operators: [gt, gte, lt, lte, between, is_null, is_not_null]
+    description: "ECM deal amount at launch — for upsized / downsized asks project it with tranche_size."
+  tranche_offer_amount:
+    column: tranche_offer_amount
+    products: ["ECM"]
+    operators: [gt, gte, lt, lte, between, is_null, is_not_null]
+    description: "ECM tranche money amount — '$500m+ ECM tranches' asks scope here (with currency)."
+  is_callable:
+    column: is_callable
+    products: ["DCM"]
+    operators: [eq, ne, like, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM call flag as stored — vocabulary unmeasured: filter is_not_null or like, never guess a literal."
+  call_date:
+    column: call_date
+    products: ["DCM"]
+    operators: [eq, gt, gte, lt, lte, between, is_null, is_not_null]
+    description: "DCM first call date."
+  non_call_period:
+    column: non_call_period
+    products: ["DCM"]
+    operators: [like, in, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM non-call period text — like '%3%' for NC3-style asks; say what matched."
+  is_puttable:
+    column: is_puttable
+    products: ["DCM"]
+    operators: [eq, ne, like, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM put flag as stored (vocabulary unmeasured)."
+  make_whole_callable:
+    column: make_whole_callable
+    products: ["DCM"]
+    operators: [eq, ne, like, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM make-whole flag as stored (vocabulary unmeasured)."
+  is_tap:
+    column: is_tap
+    products: ["DCM"]
+    operators: [eq, ne, like, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM tap flag as stored (vocabulary unmeasured)."
+  is_perpetual:
+    column: is_perpetual
+    products: ["DCM"]
+    operators: [eq, ne, like, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM perpetual flag as stored (vocabulary unmeasured)."
+  is_convertible:
+    column: is_convertible
+    products: ["DCM"]
+    operators: [eq, ne, like, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM convertible flag as stored (vocabulary unmeasured)."
+  governing_law:
+    column: governing_law
+    products: ["DCM"]
+    operators: [like, in, not_in, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM governing law — like '%NEW YORK%', '%ENGLISH%'."
 
 computed_filters:
   bill_and_deliver:
@@ -1268,3 +1397,18 @@ examples:
 #   * Whether MAX(EXCHANGE) is lossless across the duplicate product-detail
 #     rows, i.e. whether a dual-listed tranche loses a venue.
 # ---------------------------------------------------------------------------
+  - question: Callable high-yield tranches priced in 2025 (DCM)
+    request:
+      source: capital_markets_tranche
+      metric: row_count
+      dimensions: [deal_name, deal_id, tranche_id, tranche_name, product_class, is_callable, call_date, non_call_period, coupon, currency, tranche_size, pricing_date]
+      filters:
+        - {field: product, op: eq, value: DCM}
+        - {field: product_class, op: like, value: "%High Yield%"}
+        - {field: is_callable, op: is_not_null}
+        - {field: pricing_date, op: gte, value: "2025-01-01"}
+        - {field: pricing_date, op: lt, value: "2026-01-01"}
+      order: [{field: pricing_date, direction: desc}, {field: deal_id, direction: asc}, {field: tranche_id, direction: asc}]
+      limit: 50
+      # is_callable is a stored flag whose vocabulary is unmeasured: filter
+      # is_not_null and SHOW the value, never eq a guessed literal.

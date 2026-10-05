@@ -1324,7 +1324,8 @@ if ONTOLOGY.exists():
 # order_ownership qualifies BY CONSTRUCTION (release 2): the view's CASE
 # can only emit HOME/AWAY/NULL — closed like deal_sharing_type, not a
 # QA-measured list.
-KNOWN_COMPLETE_ENUMS = {"product", "entity_type", "deal_sharing_type",
+KNOWN_COMPLETE_ENUMS = {"product", "entity_type", "size_unit",  # batch C: CASE output, exactly shares / bonds / currency
+    "deal_sharing_type",
                         "order_ownership",
     # E7 (2026-09-15 census): Y/N flags — only Y, N and NULL exist
     "allowed_order_spread", "allowed_order_yield", "allowed_order_max_price",
@@ -1680,6 +1681,36 @@ check(not has(SKILL, "`settlement_ts` (tranche)"),
 check(has(ORDER, "merely LISTED") and has(DEAL, "merely LISTED"),
       "[product] order/deal cards lost the listed-column-is-blank rule")
 
+# BATCH C — BANKER FILTERS (repo 2026-10-04, approval-gated deploy). 24 additive
+# columns: the views, the catalogs and the worked examples must stay in step.
+_BATCH_C_DEAL = ("DEAL_CLASS", "DCM_DEAL_CLASS", "SIZE_UNIT", "COUNTRY_OF_RISK")
+_BATCH_C_TRANCHE = ("DEAL_CLASS", "SIZE_UNIT", "ISSUER_COUNTRY", "COUNTRY_OF_RISK",
+                    "PRIMARY_SHARES", "SECONDARY_SHARES", "LAST_CLOSE_BEFORE_OFFER",
+                    "LAST_CLOSE_BEFORE_LAUNCH", "INITIAL_DEAL_SIZE", "TRANCHE_OFFER_AMOUNT",
+                    "IS_CALLABLE", "CALL_DATE", "NON_CALL_PERIOD", "IS_PUTTABLE",
+                    "MAKE_WHOLE_CALLABLE", "IS_TAP", "IS_PERPETUAL", "IS_CONVERTIBLE",
+                    "GOVERNING_LAW")
+_DEAL_VIEW_C = text(ROOT / "views" / "vw_deal_summary.sql")
+_TRANCHE_VIEW_C = text(ROOT / "views" / "vw_tranche_summary.sql")
+for _c in _BATCH_C_DEAL:
+    check(_DEAL_VIEW_C.count(f" AS {_c}") >= 3 and has(DEAL, f"  {_c.lower()}:"),  # the D block aliases add a 4th
+          f"[batchC] deal: {_c} missing from a branch of vw_deal_summary or from the deal card")
+for _c in _BATCH_C_TRANCHE:
+    check(_TRANCHE_VIEW_C.count(f" AS {_c}") == 3 and has(TRANCHE, f"  {_c.lower()}:"),
+          f"[batchC] tranche: {_c} missing from a branch of vw_tranche_summary or from the tranche card")
+check(text(ROOT / "views" / "vw_order_detail.sql").count(" AS DEAL_CLASS") == 3 and has(ORDER, "  deal_class:"),
+      "[batchC] order: DEAL_CLASS missing from a branch of vw_order_detail or from the order card")
+check("ODT.EXCHANGE_LISTING_VENUE AS EXCHANGE" in _TRANCHE_VIEW_C
+      and not re.search(r"  exchange:\n    column: exchange\n    products:", text(TRANCHE)),
+      "[batchC] tranche: EXCHANGE is NULL on DCM again or the card still declares it ECM-only")
+check("D.ISSUER_COUNTRY AS ISSUER_COUNTRY" in _DEAL_VIEW_C
+      and not re.search(r"  issuer_country:\n    column: issuer_country\n    products:", text(DEAL)),
+      "[batchC] deal: ISSUER_COUNTRY is NULL on DCM again or the card still declares it ECM-only")
+check(has(DEAL, "question: How many SPAC IPOs priced in 2025")
+      and has(TRANCHE, "question: Callable high-yield tranches priced in 2025")
+      and has(ORDER, "question: Top 15 investors by allocation in SPAC IPOs"),
+      "[batchC] a worked example for the new filters is gone (examples beat prose)")
+
 # PO ECM LABELLING FEEDBACK (UAT 2026-09-29, four items). (2) a blank
 # indication rendered "Not recorded" beside an allocation of "0 shares" — OUR
 # view coalesced a NULL allocation to 0 on all three branches; the NVL is gone
@@ -1749,6 +1780,10 @@ check("products" in text(ONTOLOGY_PY),
 _PRODUCT_PINS = [
     ("capital_markets_deal.yaml", "equity_type", "ECM"),
     ("capital_markets_deal.yaml", "offering_type", "ECM"),
+    # ("capital_markets_deal.yaml", "issuer_country", "ECM") — RETIRED 2026-10-04
+    # (batch C fills DCM from SMC_ISSUER_COUNTRY); [batchC] pins the fill.
+    # ("capital_markets_tranche.yaml", "exchange", "ECM") — RETIRED 2026-10-04
+    # (batch C fills DCM from EXCHANGE_LISTING_VENUE); [batchC] pins the fill.
     # ("capital_markets_deal.yaml", "deal_region", "ECM") — RETIRED 2026-08-18:
     # the batch-3 views populate DCM deal_region (MAX(OB_DEAL_TRANCHE.REGION),
     # measured 8,260/46,931 QA deals), so the declaration was deleted ON
@@ -1783,7 +1818,6 @@ _PRODUCT_PINS = [
     ("capital_markets_deal.yaml", "reoffer_low_price", "ECM"),
     ("capital_markets_deal.yaml", "reoffer_high_price", "ECM"),
     ("capital_markets_deal.yaml", "fx_rate", "ECM"),
-    ("capital_markets_deal.yaml", "issuer_country", "ECM"),
     ("capital_markets_deal.yaml", "issuer_domicile", "ECM"),
     ("capital_markets_deal.yaml", "offering_format", "ECM"),
     ("capital_markets_deal.yaml", "deal_fee_mm", "ECM"),
@@ -1813,7 +1847,6 @@ _PRODUCT_PINS = [
     ("capital_markets_trade.yaml", "firm_account_number", "ECM"),
     ("capital_markets_trade.yaml", "commission_rate", "ECM"),
     ("capital_markets_trade.yaml", "execution_ts", "ECM"),
-    ("capital_markets_tranche.yaml", "exchange", "ECM"),
     ("capital_markets_tranche.yaml", "syndicate_role", "ECM"),
     ("capital_markets_tranche.yaml", "broker_code", "ECM"),
     ("capital_markets_tranche.yaml", "product_class", "DCM"),
@@ -2805,18 +2838,23 @@ check(has(SKILL, "An ORDER listing always projects `order_demand_qty`, `order_al
 # pay-per-fetch (catalog) files may only SHRINK. Lower a cap in the same commit
 # as each compression step (targets: SKILL 45,000; tranche 32,000; order/deal
 # 28,000; agents 8,000). A cap that has to go UP is a design discussion, not an edit.
+# 2026-10-04 BATCH C (user: 'start prepping the views to include more columns'):
+# deal / tranche / order caps RAISED by exactly the bytes of the 24 new banker-
+# filter fields (deal_class, dcm_deal_class, size_unit, country_of_risk, DCM
+# call / tap / perpetual / governing-law flags, ECM primary / secondary shares,
+# last close, initial size, offer amount) — a conscious token spend, not drift.
 _SIZE_CAPS = {
     SKILL: 63_402,
     AGENTS: 20_611,
-    ONT / "capital_markets_deal.yaml": 54_431,
+    ONT / "capital_markets_deal.yaml": 58_231,
     ONT / "capital_markets_designation.yaml": 7_861,
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 64_398,
+    ONT / "capital_markets_order.yaml": 65_819,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
-    ONT / "capital_markets_tranche.yaml": 81_055,
+    ONT / "capital_markets_tranche.yaml": 90_171,
 }
 for _p, _cap in _SIZE_CAPS.items():
     _n = len(_p.read_bytes())

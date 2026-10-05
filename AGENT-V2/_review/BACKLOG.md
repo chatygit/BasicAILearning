@@ -226,7 +226,35 @@ Batch B:
       PIPES_IND / DEAL_STATE_CD; IPREO_PRODUCT SYMBOL (ticker), COUPON_RATE /
       MAT_DT / CONVERSION_FACTOR (convertible terms). Reference:
       views/_reference/base-table-columns.md (Ipreo section).
-- [ ] DEAL_CLASS on the deal/tranche/order ECM branches (OPUS_ECM_TRANSACTION.
+- [ ] BATCH C — BANKER FILTERS, BUILT IN REPO 2026-10-04 (user: "focused run
+      on SPACs and other filters bankers can ask; start prepping the views").
+      24 ADDITIVE columns, every branch stubbed, no existing expression
+      touched. Deal (4): DEAL_CLASS (OPUS PRODUCT_EQUITY_CLASS_VALUE),
+      DCM_DEAL_CLASS (DEAL_PRODUCT_TYPE_LIST), SIZE_UNIT (CASE on equity
+      type, 'currency' on DCM), COUNTRY_OF_RISK (SMC) + ISSUER_COUNTRY filled
+      on DCM (SMC_ISSUER_COUNTRY). Tranche (19): DEAL_CLASS, SIZE_UNIT,
+      ISSUER_COUNTRY (both), COUNTRY_OF_RISK, PRIMARY_SHARES, SECONDARY_SHARES,
+      LAST_CLOSE_BEFORE_OFFER, LAST_CLOSE_BEFORE_LAUNCH, INITIAL_DEAL_SIZE,
+      TRANCHE_OFFER_AMOUNT (ECM, TO_NUMBER DEFAULT NULL guarded), IS_CALLABLE,
+      CALL_DATE, NON_CALL_PERIOD, IS_PUTTABLE, MAKE_WHOLE_CALLABLE, IS_TAP,
+      IS_PERPETUAL, IS_CONVERTIBLE, GOVERNING_LAW (DCM) + EXCHANGE filled on
+      DCM (EXCHANGE_LISTING_VENUE). Order (1): DEAL_CLASS (ECM ferry — SPAC /
+      block investors in ONE request). Ipreo branches: NULL stubs until P0
+      says what the mirrors carry. Catalogs: dimensions + filters + three
+      worked examples (deal: block/bought listing, SPAC IPO count; tranche:
+      callable HY; order: SPAC IPO investors) — caps raised by exactly the
+      added bytes (deal +3,808, tranche +9,112, order +1,423); contract test
+      green; golden SQL for the three examples. Deploy-check: 1x (24 columns),
+      29/29b (deal class populations), 30/30b (tranche populations). Gate
+      [batchC] pins. SEQUENCE: db-asks P0 (name validation, expect 21 rows)
+      → deploy the three views → A0 + 1x + B-ECM / B-DCM / C → server train
+      (catalogs) → promote SKILL (§3c-bis rows name deal_class — only after
+      the views and catalogs are live). Then the focused run (QA 46-62).
+      Deliberately NOT in this batch (next): USD-normalised book / allocation
+      sizes (ORDER_BOOK_SIZE_USD is text today), coupon as a number, SFC_ROLE
+      (P5 first), launch / books-close timestamps, road-show dates, Ipreo
+      ADR/GDR refinement from SEC_TYPE_CD.
+- [x] DEAL_CLASS — BUILT in batch C (2026-10-04). Original item: on the deal/tranche/order ECM branches (OPUS_ECM_TRANSACTION.
       PRODUCT_EQUITY_CLASS_VALUE — censused UAT 2026-09-18): the EXECUTION
       FORMAT / VEHICLE axis, not a unit axis. Values: Fully Marketed, Marketed,
       Accelerated Bookbuild, Bought Deal, Overnight, Blocktrade, Dutch Auction,
@@ -236,13 +264,13 @@ Batch B:
       Additive (OPUS_ECM allowed); DCM NULL; expose as dimension + like filter
       (merge the two PIPE spellings). Until exposed the catalogs say "not
       available yet" for these, never "not stored".
-- [ ] SIZE_UNIT on the deal/tranche ECM branches (PO mapping 2026-09-21):
+- [x] SIZE_UNIT — BUILT in batch C (2026-10-04; the order view's DEMAND_UNIT fallback NOT done). Original: on the deal/tranche ECM branches (PO mapping 2026-09-21):
       CASE equity_type — Common Stock / Equity Units / Warrants / ADR / GDR /
       Equity / IPO / NULL → 'shares'; Convertible Bonds / Convertible Preferred /
       Exchangable Notes → 'bonds' (deal size = par); DCM = 'currency'. Also a
       DEMAND_UNIT fallback on the order view where the stored unit is NULL.
       Additive; rides the Ipreo batch if the census allows, else the next.
-- [ ] DCM DEAL_PRODUCT_TYPE_LIST (OB_DEAL_TRANCHE) on the deal view as
+- [x] BUILT in batch C as DCM_DEAL_CLASS (2026-10-04). DCM DEAL_PRODUCT_TYPE_LIST (OB_DEAL_TRANCHE) on the deal view as
       dcm_deal_class — far better populated than DEAL_PRODUCT (26k Investment
       Grade, 7k High Grade, 3k High Yield, EM, ABS, LevFin …) and a deal-level
       class beside tranche product_class; comma list. Additive.
@@ -254,7 +282,7 @@ Batch B:
       (PRICE_DEMAND), size_change (AMT_CHANGE, filled on 917,788 rows),
       order_ts (CREATED_TS, ~100 %) → price sensitivity AND book momentum
       ("how the book built after guidance") for DCM. ECM NULL stubs.
-      (2) ADDITIVE on the deal/tranche views, ECM: last_close_before_offer /
+      (2) BUILT in batch C (tranche: last_close_before_offer / _launch, initial_deal_size). Original: ADDITIVE on the deal/tranche views, ECM: last_close_before_offer /
       _launch (27 % / 34 %), initial_deal_amount (80 %) → discount-to-close,
       upsizing.
       (3) NEW grain vw_tranche_pricing (OB_TRANCHE_PRICING: IPT → Guidance →

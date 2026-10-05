@@ -266,6 +266,10 @@ dimensions:
   use_of_proceeds: {column: use_of_proceeds, description: "Purpose of raised funds. Stored literals include 'M & A' (with spaces); refinancing is split across 'Refinance', 'Debt Repayment' and DCM's 'Repay Outstanding Borrowings'. The DCM vocabulary is only three literals — see the filter."}
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. The SECURITY (Common Stock, Convertible Preferred, Convertible Bonds, Warrants…). 'common stock' asks belong HERE, not on tranche product_type. 'Equity' (deals since Oct-2025) is a placeholder: the security is offering_type's prefix — 'Common Stk - …' = common stock, 'Convertible - …' = convertible bonds. NULL on DCM."}
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. The DEAL TYPE: 'IPO' / 'FO' on older deals; since Oct-2025 'Common Stk - IPO / Follow on / Block Trade / ADR / SPAC IPO', 'Convertible - Debt', 'Capital Markets Advisory'. Blank on most 10-digit-id deals; NULL on DCM."}
+  deal_class: {column: deal_class, products: ["ECM"], description: "ECM. EXECUTION FORMAT / VEHICLE of the deal: Fully Marketed, Marketed, Accelerated Bookbuild, Bought Deal, Overnight, Blocktrade, Dutch Auction, Registered Direct, PIPE (two spellings), Rights, SPAC, REIT, MLP, BDC, Closed End Fund, Registered, Unregistered, Retail. 'Block trades / bought deals / ABBs / SPACs / PIPEs / rights issues' land HERE (like-match). Blank on 10-digit-id deals; NULL on DCM."}
+  dcm_deal_class: {column: dcm_deal_class, products: ["DCM"], description: "DCM. Deal-level bond class list, comma-separated (Investment Grade, High Grade, High Yield, Emerging Markets, ABS, LevFin High Yield, Agencies, Preferred, Taxable Muni, RMBS, SSA, Sovereigns, Loans, CMBS…) — like-match; the tranche object's product_class is the per-tranche twin. NULL on ECM."}
+  size_unit: {column: size_unit, description: "Unit of deal_size as a STORED FACT: 'shares' (common stock, units, warrants, depositary receipts), 'bonds' (convertible bonds / preferred, exchangeable notes — deal_size is then PAR), 'currency' (every DCM deal). Project it beside deal_size on any mixed list."}
+  country_of_risk: {column: country_of_risk, products: ["DCM"], description: "DCM. Issuer's country of risk (SMC record). NULL on ECM — use issuer_country / issuer_domicile there."}
   deal_status: {column: deal_status, description: "Deal lifecycle status. CASE VARIANTS ARE REAL — 'priced'/'Priced' and 'announced'/'Announced' are distinct stored values on DCM (Q17), so match case-insensitively and merge the variants before reporting a breakdown or the buckets will not sum. On DCM this is MAX() across the deal's tranche statuses and can disagree with the tranche object."}
   execution_status: {column: execution_status, products: ["ECM"], description: "DEAD COLUMN — carries no information and has no filter. The view fills it from a subquery already restricted to one status type, so every ECM row reads the same literal and every DCM row is NULL. Any 'execution status' ask is a deal_status ask. Kept only because an exposed column is never removed. Do not project it."}
   deal_region: {column: deal_region, description: "Deal-level region (NAM/EMEA/APAC, rare JAPAN/LATAM). On BOTH products since the 2026-08-18 view batch (DCM was a NULL placeholder before). Sparse — blanks mean 'not captured', never 'no region'."}
@@ -284,7 +288,7 @@ dimensions:
   reoffer_low_price: {column: reoffer_low_price, products: ["ECM"], description: "ECM (V3). LOW end of the reoffer PRICE RANGE. With reoffer_high_price answers 'what was the price range' — the range refusal is DEAD. No STAGE history exists (Initial vs Revised is still not tracked — say so)."}
   reoffer_high_price: {column: reoffer_high_price, products: ["ECM"], description: "ECM (V3). HIGH end of the reoffer price range."}
   fx_rate: {column: fx_rate, products: ["ECM"], description: "ECM (V3). Deal FX rate (population unmeasured)."}
-  issuer_country: {column: issuer_country, products: ["ECM"], description: "ECM (V3). Issuer's country. NULL on DCM."}
+  issuer_country: {column: issuer_country, description: "Issuer's country (names): ECM from the transaction, DCM from the SMC issuer record since batch C. Population unmeasured; blank = not captured."}
   issuer_domicile: {column: issuer_domicile, products: ["ECM"], description: "ECM (V3). Issuer's DOMICILE country — 'incorporated in / domiciled in' asks land HERE; the old domicile refusal is DEAD for ECM (DCM: still not tracked)."}
   offering_format: {column: offering_format, products: ["ECM"], description: "ECM (V3). Offering format (open vocabulary; population unmeasured)."}
   deal_fee_mm: {column: deal_fee_mm, products: ["ECM"], description: "ECM (V3). Deal-level FEE in millions, paired with deal_fee_currency — the deal-fees refusal is DEAD for ECM. DCM deal-level fee = SUM the tranche object's total_fee instead."}
@@ -657,7 +661,6 @@ filters:
       filters here (V3; refusal DEAD for ECM). DCM: not tracked — say so.
   issuer_country:
     column: issuer_country
-    products: ["ECM"]
     operators: [eq, ne, in, not_in, like, is_null, is_not_null]
     suggestable: true
     case_insensitive: true
@@ -677,6 +680,38 @@ filters:
     description: >-
       ECM deal MONEY size in millions (with deal_size_currency) — use for
       money-size comparisons; deal_size stays the share count.
+
+  deal_class:
+    column: deal_class
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM execution format: like '%BLOCK%' (Blocktrade), '%BOUGHT%', '%ACCELERATED%'
+      (ABB), '%SPAC%', '%PIPE%' (two spellings), '%RIGHTS%', '%MARKETED%',
+      '%OVERNIGHT%', '%REIT%'. Blank on 10-digit-id deals and NULL on DCM, so a
+      'no block trades found' answer says the Ipreo history carries no class.
+  dcm_deal_class:
+    column: dcm_deal_class
+    products: ["DCM"]
+    operators: [like, is_null, is_not_null]
+    case_insensitive: true
+    description: >-
+      DCM deal-level class list: like '%Investment Grade%', '%High Yield%',
+      '%Emerging Markets%', '%ABS%', '%Sovereign%' (expand IG / HY / EM first).
+  size_unit:
+    column: size_unit
+    operators: [eq, ne, in]
+    case_insensitive: true
+    values: ["shares", "bonds", "currency"]
+    description: "Unit of deal_size — scope 'shares' or 'bonds' before totalling ECM deal sizes."
+  country_of_risk:
+    column: country_of_risk
+    products: ["DCM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    case_insensitive: true
+    description: "DCM issuer country of risk (SMC vocabulary, country NAMES — like-match)."
 
 usage_notes:
   - Always set a product filter ('ECM' for equity, 'DCM' for debt). Count metrics
@@ -825,3 +860,26 @@ examples:
       # 'priced' and 'Priced' come back as SEPARATE buckets, as do 'announced'
       # and 'Announced'. Merge each pair into one row in the answer and say you
       # merged them, or the buckets will not sum to the deal count you quote.
+  - question: Block trades and bought deals priced in the last 12 months (ECM)
+    request:
+      source: capital_markets_deal
+      metric: row_count
+      dimensions: [deal_name, deal_id, deal_class, equity_type, deal_size, size_unit, last_priced]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: deal_class, op: in, value: ["Blocktrade", "Bought Deal"]}
+        - {field: last_priced, op: gte, value: "2025-10-04"}
+        - {field: last_priced, op: lt, value: "2026-10-05"}
+      order: [{field: last_priced, direction: desc}, {field: deal_id, direction: asc}]
+      limit: 50
+  - question: How many SPAC IPOs priced in 2025 (ECM)
+    request:
+      source: capital_markets_deal
+      metric: deal_count
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: deal_class, op: like, value: "%SPAC%"}
+        - {field: last_priced, op: gte, value: "2025-01-01"}
+        - {field: last_priced, op: lt, value: "2026-01-01"}
+      # deal_class is blank on every 10-digit-id (Ipreo) deal: say the count
+      # covers the OPUS source only.

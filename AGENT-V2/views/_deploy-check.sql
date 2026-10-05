@@ -58,6 +58,8 @@ AND    column_name IN ('ORDER_AMOUNT','ORDER_DEMAND_QTY','ORDER_ALLOCATION',
                        'SELLING_CONCESSION_FEE','PRAECIPIUM_FEES','RETAIL_UW_FEE',
                        'GROSS_SPREAD_PER_FEE','DESIGNATION_FEE',
                        'OVER_ALLOTMENT_AUTHORIZED_SHARES','OVER_ALLOTMENT_EXERCISED_SHARES',
+                       'PRIMARY_SHARES','SECONDARY_SHARES','LAST_CLOSE_BEFORE_OFFER',
+                       'LAST_CLOSE_BEFORE_LAUNCH','INITIAL_DEAL_SIZE','TRANCHE_OFFER_AMOUNT',
                        'TRADE_SIZE','TRADE_ALLOCATION','PRICE_BASIS_VALUE',
                        'TRADE_PRICE','COMMISSION_RATE','HEDGE_AMOUNT',
                        'HEDGE_ISN_AMOUNT','HEDGE_PCT_FACE','SECURITY_COUPON',
@@ -118,6 +120,21 @@ FROM (
   AND   ((column_name = 'ISSUER_LEI'
           AND table_name IN ('VW_DEAL_SUMMARY','VW_TRANCHE_SUMMARY'))
       OR (column_name = 'SALES_PERSON' AND table_name = 'VW_ORDER_DETAIL'))
+  UNION ALL
+  -- BATCH C (2026-10-04): 24 banker-filter columns (deal 4, tranche 19, order 1).
+  SELECT '1x. batch C columns landed (deal 4 / tranche 19 / order 1)', '24',
+         TO_CHAR(COUNT(*))
+  FROM   all_tab_columns
+  WHERE  owner = 'DGSTREAM'
+  AND   ((table_name = 'VW_DEAL_SUMMARY' AND column_name IN
+            ('DEAL_CLASS','DCM_DEAL_CLASS','SIZE_UNIT','COUNTRY_OF_RISK'))
+      OR (table_name = 'VW_TRANCHE_SUMMARY' AND column_name IN
+            ('DEAL_CLASS','SIZE_UNIT','ISSUER_COUNTRY','COUNTRY_OF_RISK','PRIMARY_SHARES',
+             'SECONDARY_SHARES','LAST_CLOSE_BEFORE_OFFER','LAST_CLOSE_BEFORE_LAUNCH',
+             'INITIAL_DEAL_SIZE','TRANCHE_OFFER_AMOUNT','IS_CALLABLE','CALL_DATE',
+             'NON_CALL_PERIOD','IS_PUTTABLE','MAKE_WHOLE_CALLABLE','IS_TAP','IS_PERPETUAL',
+             'IS_CONVERTIBLE','GOVERNING_LAW'))
+      OR (table_name = 'VW_ORDER_DETAIL' AND column_name = 'DEAL_CLASS'))
   UNION ALL
   -- V3 FINAL WAVE: the four new views exist.
   SELECT '1u. four new views exist (hedge order/trade, designation, trade synd)', '4',
@@ -192,7 +209,9 @@ WITH agg AS (
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                      AND ORDER_COUNT > 0 THEN 1 END) AS ecm_ipreo_ordered,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                    THEN LAST_PRICED END) AS ecm_ipreo_priced
+                    THEN LAST_PRICED END) AS ecm_ipreo_priced,
+         COUNT(DEAL_CLASS) AS ecm_class,
+         COUNT(CASE WHEN SIZE_UNIT = 'bonds' THEN 1 END) AS ecm_bond_unit
   FROM DGSTREAM.VW_DEAL_SUMMARY
   WHERE PRODUCT = 'ECM'
 )
@@ -201,6 +220,9 @@ SELECT '1e. ECM deals with issuer name (INFO, expect ~6,892 UAT)' AS check_,
        TO_CHAR(ecm_issuer) || ' of ' || TO_CHAR(rows_) AS actual_,
        'INFO' AS verdict_
 FROM agg
+UNION ALL
+SELECT '29. ECM deals with a DEAL_CLASS (INFO — batch C; OPUS source only, Ipreo blank)', '(info)',
+       TO_CHAR(ecm_class) || ' of ' || TO_CHAR(rows_) || ' (bonds unit: ' || TO_CHAR(ecm_bond_unit) || ')', 'INFO' FROM agg
 UNION ALL
 SELECT '1o. ECM deals with issuer LEI (INFO, expect ~83% — rel 3)', '(info)',
        TO_CHAR(ecm_lei) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
@@ -256,7 +278,9 @@ WITH agg AS (
          COUNT(CASE WHEN ORDER_COUNT > 0 THEN 1 END) AS dcm_ordered_deals,
          COUNT(CASE WHEN SUBSCRIPTION_RATIO IS NOT NULL THEN 1 END) AS subs_ratio_deals,
          COUNT(CASE WHEN UPPER(DEAL_STATUS) IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')
-                    THEN 1 END) AS dcm_excluded_status
+                    THEN 1 END) AS dcm_excluded_status,
+         COUNT(DCM_DEAL_CLASS) AS dcm_class,
+         COUNT(ISSUER_COUNTRY) AS dcm_country
   FROM DGSTREAM.VW_DEAL_SUMMARY
   WHERE PRODUCT = 'DCM'
 )
@@ -265,6 +289,9 @@ SELECT '1f. DCM deals with region (INFO, expect ~8,260 UAT)' AS check_,
        TO_CHAR(dcm_region) || ' of ' || TO_CHAR(rows_) AS actual_,
        'INFO' AS verdict_
 FROM agg
+UNION ALL
+SELECT '29b. DCM deals with DCM_DEAL_CLASS / ISSUER_COUNTRY (INFO — batch C; J6 ~40k classed)', '(info)',
+       TO_CHAR(dcm_class) || ' class / ' || TO_CHAR(dcm_country) || ' country of ' || TO_CHAR(rows_), 'INFO' FROM agg
 UNION ALL
 SELECT '1p. DCM deals with TRANSACTION_ID (INFO, ~945 PROD, fwd-populated)',
        '(info)', TO_CHAR(dcm_txn) || ' of ' || TO_CHAR(rows_), 'INFO'
@@ -331,7 +358,16 @@ WITH agg AS (
                     THEN PRICE END) AS ecm_ipreo_price,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN 1 END) AS dcm_rows,
          COUNT(CASE WHEN PRODUCT = 'DCM' AND UPPER(TRANCHE_STATUS) IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')
-                    THEN 1 END) AS dcm_excluded_tr
+                    THEN 1 END) AS dcm_excluded_tr,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN LAST_CLOSE_BEFORE_OFFER END) AS ecm_last_close,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN PRIMARY_SHARES END) AS ecm_primary,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN TRANCHE_OFFER_AMOUNT END) AS ecm_offer_amt,
+         COUNT(CASE WHEN PRODUCT = 'ECM' THEN INITIAL_DEAL_SIZE END) AS ecm_initial,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN IS_CALLABLE END) AS dcm_callable,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN IS_TAP END) AS dcm_tap,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN GOVERNING_LAW END) AS dcm_law,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN EXCHANGE END) AS dcm_exchange,
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN ISSUER_COUNTRY END) AS dcm_country
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
@@ -339,6 +375,12 @@ SELECT '1h. ECM tranches with a region (INFO, expect ~5% UAT)' AS check_,
        TO_CHAR(ecm_region) || ' of ' || TO_CHAR(ecm_rows) AS actual_,
        'INFO' AS verdict_
 FROM agg
+UNION ALL
+SELECT '30. ECM tranches: last close / primary shares / offer amount / initial size (INFO — batch C; UAT 27% / ? / ? / 80%)', '(info)',
+       TO_CHAR(ecm_last_close) || ' / ' || TO_CHAR(ecm_primary) || ' / ' || TO_CHAR(ecm_offer_amt) || ' / ' || TO_CHAR(ecm_initial) || ' of ' || TO_CHAR(ecm_rows), 'INFO' FROM agg
+UNION ALL
+SELECT '30b. DCM tranches: callable / tap / governing law / exchange / country (INFO — batch C, populations unmeasured before)', '(info)',
+       TO_CHAR(dcm_callable) || ' / ' || TO_CHAR(dcm_tap) || ' / ' || TO_CHAR(dcm_law) || ' / ' || TO_CHAR(dcm_exchange) || ' / ' || TO_CHAR(dcm_country) || ' of ' || TO_CHAR(dcm_rows), 'INFO' FROM agg
 UNION ALL
 SELECT '1k. DCM tranches with settlement_ts (INFO, expect ~50,198 UAT)',
        '(info)', TO_CHAR(dcm_settle), 'INFO'

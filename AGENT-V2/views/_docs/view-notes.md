@@ -875,3 +875,24 @@ IPO asks cannot be filtered by type; the deal card says so; DealLogic at
 load time is the only future source (ICEBERG-PLAN). Ipreo Common Stock LAST date 2099-02-15 =
 a source placeholder date (trailing windows end at tomorrow, so it never
 shows unless asked for).
+
+## ADDENDUM 15 — 2026-10-04 Batch C: banker filters (24 additive columns)
+Built on the user's ask for a focused SPAC run and more banker filters. All
+three views gain columns at the END of every branch (NULL stubs typed to
+match), no existing expression changed. Deal: DEAL_CLASS (OPUS
+PRODUCT_EQUITY_CLASS_VALUE — Fully Marketed / Accelerated Bookbuild / Bought
+Deal / Blocktrade / PIPE / Rights / SPAC / REIT …, threaded through the ET
+dedupe), DCM_DEAL_CLASS (DEAL_PRODUCT_TYPE_LIST via the D block), SIZE_UNIT
+(CASE on equity type incl. the 'Equity' + 'Convertible - …' new shape;
+'currency' on DCM), COUNTRY_OF_RISK (SMC_ISSUER_COUNTRY_OF_RISK) and
+ISSUER_COUNTRY now filled on DCM from SMC_ISSUER_COUNTRY. Tranche: the same
+four plus ECM PRIMARY_SHARES / SECONDARY_SHARES / LAST_CLOSE_BEFORE_OFFER /
+LAST_CLOSE_BEFORE_LAUNCH / INITIAL_DEAL_SIZE / TRANCHE_OFFER_AMOUNT (from
+TTR.* — TO_NUMBER DEFAULT NULL ON CONVERSION ERROR because OPUS stores some
+amounts as text) and DCM IS_CALLABLE (CALL_IND) / CALL_DATE / NON_CALL_PERIOD
+/ IS_PUTTABLE (PUT_IND) / MAKE_WHOLE_CALLABLE / IS_TAP / IS_PERPETUAL
+(PERPETUAL_MATURITY) / IS_CONVERTIBLE / GOVERNING_LAW, with EXCHANGE filled on
+DCM from EXCHANGE_LISTING_VENUE. Order: DEAL_CLASS ferried (ECM). Ipreo
+branches carry NULL stubs for everything but SIZE_UNIT until db-asks P0 says
+which of these columns the mirrors have. Deploy-check 1x, 29/29b, 30/30b;
+db-asks P0 validates the 21 source names BEFORE the deploy.

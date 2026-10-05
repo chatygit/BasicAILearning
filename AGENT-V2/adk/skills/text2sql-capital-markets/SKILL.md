@@ -257,6 +257,8 @@ some field?** Only genuine proper nouns belong in a name filter.
 | IPO · FO · follow-on | `offering_type` | deal |
 | long-only · hedge fund · outright · asset manager | `investor_category_key` (`LONG_ONLY`…); ECM long-only = `investor_category in ['Long Only','Investment Adviser']` (key NULL on part of the book) | order |
 | solo · sole-managed | `deal_sharing_type` | tranche |
+| SPAC · block · bought deal · ABB · PIPE · rights | `deal_class` (ECM) | deal · tranche · order |
+| callable · NC3 · tap · perpetual · governing law | `is_callable` · `non_call_period` · `is_tap` · `is_perpetual` · `governing_law` | tranche |
 | 1x1 · one-on-one | `meeting_type_key` = `ONE_TO_ONE` | order |
 
 **Prefer the `_key` twin wherever one exists** — `investor_category_key`,
@@ -265,26 +267,22 @@ some field?** Only genuine proper nouns belong in a name filter.
 
 ### 3c-ter. ECM-only and DCM-only fields — LIST freely, FILTER scoped
 
-These columns are **hard NULL on the other product** (the catalog is the
-authority: discover does NOT show a `products` key — read the leading ECM /
-DCM / ECM-ONLY / DCM-ONLY token in a field's description).
+These columns are **hard NULL on the other product** (the catalog says which:
+discover does NOT show a `products` key, read the leading ECM / DCM token).
 - **Listed as a dimension: just project it.** It is ONE view: one request over
   the entitled scope, and the other product's rows show `-` in that column
-  (`offering_type` beside `product_class` is fine; `column_note` names the
-  blank-by-design columns) — never split by product for it, never ask which
-  product, never refuse. If a server still rejects a LISTED column, run once
-  per product (`product eq` each) and merge into ONE table; never drop it.
+  (`column_note` names the blank-by-design columns): never split by product for it,
+  never ask which product, never refuse. A server that still rejects a LISTED
+  column: run once per product (`product eq` each) and merge into ONE table.
 - **As a filter (or metric): it DECIDES the product.** The server narrows a
   both-products scope to it (`product_note`); an explicit contradicting scope,
   or an ECM-only filter beside a DCM-only one, is rejected
   `product_not_applicable` — fix the scope, never retry blind.
 
-- **ECM-only**: `equity_type` · `offering_type` · `product_type` · `exchange` ·
-  `broker_code` · `syndicate_role` · `investor_category_key` · `meeting_type`
-  (+`_key`) · `order_type` · `ioi_type` · `order_ownership` · `issuer_lei`
-- **DCM-only**: `product_class` · `seniority` · `reg_category` · `esg_bond` ·
-  `coupon_type` · `coupon_freq` · `tenors` · `securities_maturity` ·
-  `issuer_ratings` · `delivery_type` · `tranche_status`
+- **ECM-only**: `equity_type` · `offering_type` · `deal_class` · `product_type` ·
+  `syndicate_role` · `investor_category_key` · `order_type` · `order_ownership`
+- **DCM-only**: `product_class` · `seniority` · `esg_bond` · `coupon_type` ·
+  `tenors` · `issuer_ratings` · `tranche_status` · `is_callable` · `is_tap`
 
 ### 3d. Never ask permission for a mechanic — and never NARRATE one
 

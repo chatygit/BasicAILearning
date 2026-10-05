@@ -333,6 +333,7 @@ dimensions:
   product_class: {column: product_class, products: ["DCM"], description: "DCM bond class ferried onto orders — same closed list as the tranche object (Investment Grade, High Yield, SSA…; expand IG/HY/EM first). 'Top investors across ALL Investment Grade deals' is ONE request here — never a sampled deal-id ferry. NULL on ECM."}
   billed_by: {column: billed_by, description: "The bank that billed/settled THIS order (B&D), on BOTH products — names on most rows, broker CODES on the newer ECM source. Order-level truth: it VARIES within a tranche, so it can legitimately disagree with the tranche object's BND_BANK designation list — for 'billed by' asks, THIS column wins. NULL = no billing bank recorded (~10% ECM, ~26% DCM)."}
   offering_type: {column: offering_type, products: ["ECM"], description: "ECM. The deal type at order grain — deal-object values ('IPO'/'FO'; 'Common Stk - IPO' style since Oct-2025; blank on most Ipreo deals). 'Investors in IPOs' = like '%IPO%' HERE. NULL on DCM."}
+  deal_class: {column: deal_class, products: ["ECM"], description: "ECM. Deal EXECUTION FORMAT ferried to order grain (Blocktrade, Bought Deal, Accelerated Bookbuild, SPAC, PIPE, Rights, Fully Marketed…) — 'investors in block trades / SPAC IPOs' is ONE request HERE (like-match). Blank on 10-digit-id deals; NULL on DCM."}
   equity_type: {column: equity_type, products: ["ECM"], description: "ECM. Instrument CLASS at order grain = THE UNIT of every demand/allocation figure: Common Stock / Equity Units / Warrants → shares; Convertible Bonds / Convertible Preferred / Exchangeable Notes → bonds. Projected on every ECM demand ask (server-added if omitted); label from it. NULL on DCM."}
   order_ownership: {column: order_ownership, products: ["ECM"], description: "ECM. HOME = our (owned) book, AWAY = orders seen away. BOTH are in every total since release 2 (before it, every figure was HOME-only — ECM population grew ~45% at the flip). 'Our orders'/'Citi's book' = HOME. NULL = flag not stored. NULL on DCM (no such flag)."}
   sales_person: {column: sales_person, description: "Both products (ECM = the investor salesperson name; DCM since release 3). Covering salesperson, first + last name (~30% populated). 'Orders covered by <person>' filters here; NULL = not recorded."}
@@ -770,6 +771,17 @@ filters:
       must reconcile to the total. NULL on every DCM row (no such flag):
       a DCM ownership ask gets "not tracked for DCM".
 
+  deal_class:
+    column: deal_class
+    products: ["ECM"]
+    operators: [eq, ne, in, not_in, like, is_null, is_not_null]
+    suggestable: true
+    case_insensitive: true
+    description: >-
+      ECM execution format, same literals as the deal object: like '%BLOCK%',
+      '%BOUGHT%', '%ACCELERATED%', '%SPAC%', '%PIPE%', '%RIGHTS%'. Blank on
+      10-digit-id deals; NULL on DCM.
+
 computed_filters:
   bill_and_deliver:
     column: billed_by
@@ -972,3 +984,17 @@ examples:
         - {field: pricing_date, op: is_null}
       order: [{field: order_count, direction: desc}, {field: deal_id, direction: asc}]
       limit: 20
+  - question: Top 15 investors by allocation in SPAC IPOs priced in 2025 (ECM)
+    request:
+      source: capital_markets_order
+      metric: total_allocation
+      dimensions: [investor_name, investor_id, equity_type]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: deal_class, op: like, value: "%SPAC%"}
+        - {field: pricing_date, op: gte, value: "2025-01-01"}
+        - {field: pricing_date, op: lt, value: "2026-01-01"}
+      order: [{field: total_allocation, direction: desc}, {field: investor_id, direction: asc}]
+      limit: 15
+      # SPAC IPOs are Equity Units at the IPO (common + warrants after
+      # separation): the unit comes from equity_type, as always.
