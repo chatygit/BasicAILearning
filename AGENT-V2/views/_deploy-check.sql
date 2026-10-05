@@ -153,15 +153,15 @@ SELECT 'B08. ECM deals with DEAL_CLASS / bonds unit (INFO — batch C; OPUS ~25.
        TO_CHAR(ecm_class) || ' classed / ' || TO_CHAR(ecm_bond_unit) || ' bonds of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
--- B-DCM. DEAL VIEW, DCM branch — one scan.
+-- B-DCM. DEAL VIEW, DCM branch — one scan that touches NO order-book column,
+-- so Oracle drops the 1.25M-row order aggregate (lever C): seconds, not
+-- minutes. B11 below is the only row that needs the order book.
 WITH agg AS (
   SELECT /*+ MATERIALIZE NO_PARALLEL */
          COUNT(*) AS rows_,
          COUNT(DISTINCT DEAL_ID) AS keys_,
          COUNT(CASE WHEN REGEXP_LIKE(CURRENCIES,
                      '(^|\| )([A-Za-z]+)( \|.*\| | \| )\2( \||$)') THEN 1 END) AS dcm_dupcur,
-         COUNT(CASE WHEN TOTAL_DEMAND > 0 THEN 1 END) AS dcm_demand_deals,
-         COUNT(CASE WHEN ORDER_COUNT > 0 THEN 1 END) AS dcm_ordered_deals,
          COUNT(CASE WHEN UPPER(DEAL_STATUS) IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')
                     THEN 1 END) AS dcm_excluded_status,
          COUNT(DCM_DEAL_CLASS) AS dcm_class,
@@ -177,10 +177,6 @@ SELECT 'B10. DCM currency list deduped', 'Y',
        CASE WHEN dcm_dupcur = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_dupcur = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT 'B11. DCM deals carry demand and orders (hoisted OC join intact)', 'Y',
-       CASE WHEN dcm_demand_deals > 0 AND dcm_ordered_deals > 0 THEN 'Y' ELSE 'N' END,
-       CASE WHEN dcm_demand_deals > 0 AND dcm_ordered_deals > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
 SELECT 'B12. no DCM deal carries an excluded status (status exclusion 2026-09-28)', 'Y',
        CASE WHEN dcm_excluded_status = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_excluded_status = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
@@ -191,6 +187,18 @@ UNION ALL
 SELECT 'B14. DCM deals with DCM_DEAL_CLASS / ISSUER_COUNTRY (INFO — batch C)', '(info)',
        TO_CHAR(dcm_class) || ' class / ' || TO_CHAR(dcm_country) || ' country of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
+
+-- B-DCM-2. THE ORDER-BOOK ROW — aggregates every DCM order (the K3 class:
+-- minutes on UAT; on QA it runs into the instance PGA limit, INC open). Run
+-- it on UAT after a change to the deal view's OC block or the order
+-- exclusions; skip it on QA.
+SELECT 'B11. DCM deals carry demand and orders (hoisted OC join intact)' AS check_, 'Y' AS expected_,
+       CASE WHEN COUNT(CASE WHEN TOTAL_DEMAND > 0 THEN 1 END) > 0
+             AND COUNT(CASE WHEN ORDER_COUNT > 0 THEN 1 END) > 0 THEN 'Y' ELSE 'N' END AS actual_,
+       CASE WHEN COUNT(CASE WHEN TOTAL_DEMAND > 0 THEN 1 END) > 0
+             AND COUNT(CASE WHEN ORDER_COUNT > 0 THEN 1 END) > 0 THEN 'PASS' ELSE 'FAIL' END AS verdict_
+FROM DGSTREAM.VW_DEAL_SUMMARY
+WHERE PRODUCT = 'DCM';
 
 -- C. TRANCHE VIEW — one scan, all branches.
 WITH agg AS (

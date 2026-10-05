@@ -263,6 +263,12 @@ Batch B:
       OFFERING_FORMAT = '144A only' or NULL; ECM tranche populations 72% /
       72% / 27% / 34% / 80% / 78%. Tranche Ipreo branch now fills
       ISSUER_COUNTRY from the mirror transaction (P0 found the column).
+      DEPLOYED TO QA 2026-10-05 10:52 — A0 / A (12/12) / B-ECM (8/8) / C (9/9)
+      PASS; deal class on 18,542 of 39,696 ECM deals; the ECM pricing columns
+      and DCM flags carry data. QA stores a value on EVERY row of the Y-flags
+      (callable / tap) where UAT stores NULL — cards now say eq 'Y', never
+      is_not_null (db-asks Q names the QA negative). B-DCM hung on QA: the
+      order-book row B11 is now a separate optional statement.
       Deliberately NOT in this batch (next): USD-normalised book / allocation
       sizes (ORDER_BOOK_SIZE_USD is text today), coupon as a number, launch /
       books-close timestamps, road-show dates, Ipreo ADR/GDR refinement from

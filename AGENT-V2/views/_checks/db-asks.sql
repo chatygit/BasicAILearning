@@ -22,3 +22,15 @@
 -- views/_deploy-check.sql (rewritten 2026-10-05): A0, A (A01-A03 = the three
 -- views' column counts 43 / 89 / 65), B-ECM (B08), B-DCM (B14), C (C08 / C09).
 -- Sections D-ECM / D-DCM are unchanged by this batch.
+
+-- ===========================================================================
+-- Q. QA, ONE STATEMENT (deploy-check C09, 2026-10-05: IS_CALLABLE and IS_TAP
+-- are non-NULL on every QA DCM tranche, unlike UAT). What do the six flags
+-- store in QA? One scan of the DCM tranche branch (~15 s), ~50 rows.
+-- ===========================================================================
+SELECT IS_CALLABLE, IS_TAP, IS_CONVERTIBLE, IS_PUTTABLE, MAKE_WHOLE_CALLABLE, IS_PERPETUAL,
+       COUNT(*) AS TRANCHES
+FROM   DGSTREAM.VW_TRANCHE_SUMMARY
+WHERE  PRODUCT = 'DCM'
+GROUP  BY IS_CALLABLE, IS_TAP, IS_CONVERTIBLE, IS_PUTTABLE, MAKE_WHOLE_CALLABLE, IS_PERPETUAL
+ORDER  BY TRANCHES DESC;
