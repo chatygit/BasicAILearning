@@ -202,6 +202,17 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       TOTAL_ALLOCATION and DISCLOSED as 'allocations on matched groups
       whose orders are not in the book'; order listings for those deals
       stay incomplete and must say so). db-asks T names the deals / years.
+      CENSUS T (UAT 2026-10-06): the SBB orphans are the UAT volume loads
+      (Pembina 23,930 groups, Air France 6,010, Apple / 'Microsoft Corp
+      Test' Nov-2024, Punjab National Bank 2,000) — environment artefact,
+      no ask needed. Real residue: ~3k ISN / DRB / GSP / GB groups on 2024-
+      2026 deals that have other orders (ISN 2026: 1,654 + 423 + 141 groups,
+      26.6bn + 5.0bn + 2.3bn; ISN 2024: 221 / 13.4bn) + ~320 ISN 2025
+      groups on deals with no orders. Hypothesis: cross-bank groups whose
+      primary is another bank's order and ours is in REF_SOURCE_SECONDARY_
+      ORDER_LIST — db-asks U1/U2. If confirmed: a second match on the split
+      secondary list (and the per-source GB_ALLOC / ISN_ALLOC columns decide
+      whose allocation it is). DEPLOY the order + deal views now regardless.
 NOTE 2026-10-05: views/_deploy-check.sql was rewritten (738 → ~330 lines) with
 rows labelled by section (A01-A12, B01-B14, C01-C09, D01-D12, E1-E5, K1-K5); the
 historical row numbers quoted in older items below (7/8/9, 15, 21/21b, 22-30)

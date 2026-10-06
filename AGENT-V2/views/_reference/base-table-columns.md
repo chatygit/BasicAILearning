@@ -120,6 +120,12 @@ if the source schema changes.
 #   kind; the matched remainder is ~5.7k. Either the SBB book never loads into
 #   OB_ORDER (feed gap) or SBB orders only exist as match groups (design) —
 #   db-asks T characterises the orphaned books; ASKS-external §5 (7).
+#   RESOLVED by census T: the SBB orphans are the UAT volume loads (Pembina
+#   23,930 groups, Air France 6,010, Apple / Microsoft Test Nov-2024). The
+#   real residue (~3k ISN / DRB / GSP / GB groups on deals that have other
+#   orders) looks like cross-bank matching — our order in REF_SOURCE_
+#   SECONDARY_ORDER_LIST, the primary another bank's; GB_ALLOC / ISN_ALLOC
+#   are per-source allocation columns (db-asks U).
 
 | # | Column | Type | Len | Null |
 |---|---|---|---|---|

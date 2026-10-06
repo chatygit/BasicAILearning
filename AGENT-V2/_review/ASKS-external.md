@@ -241,14 +241,15 @@ nothing and nothing derives it. (6) DealLogic catalog (Starburst): read
 rights, so the Ipreo history's IPO-vs-follow-on can be filled at load time
 from DealLogic's deal type (issuer + pricing-date match) — the only source
 there is.
-(7) DataGlobe / orderbook team, DCM allocations (2026-10-06): OB_ORDER_MATCH_
-GROUP carries 54,848 primary orders with a FINAL_ALLOC, but 42,967 of the
-'SBB'-sourced ones (plus ISN 3,024, DRB 240, GSP 214, GB 40) have NO row in
-OB_ORDER for their PRIMARY_ORDER_ID — same id shape, the order simply is not
-there. Is the SBB book meant to land in OB_ORDER (a feed gap to fix), or do
-SBB orders exist only as match groups by design? Until answered, DCM
-allocations on those deals are invisible at order grain and under-counted
-at deal grain. Deals and years: db-asks T.
+(7) WITHDRAWN before sending (census T, UAT 2026-10-06): the 42,967 orphaned
+SBB allocations are the UAT volume-load deals (Pembina Pipeline 23,930
+groups / 285.9bn with no pricing date, Air France-KLM 6,010, Punjab National
+Bank 2,000, the Nov-2024 Apple / 'Microsoft Corp Test' loads) — not a feed
+gap. What remains is ~3k ISN / DRB / GSP / GB allocated groups on real deals
+that DO have other orders — probably cross-bank groups whose primary order
+is another bank's (db-asks U tests the secondary list). Ask only if U says
+our order is in neither list: "for an IssueNet-matched group, which order id
+is ours?"
 
 ## 6. Vinit — status exclusion (status: ANSWERED 2026-09-28, built in the repo; three follow-ups)
 

@@ -24,42 +24,43 @@
 -- Sections D-ECM / D-DCM are unchanged by this batch.
 
 -- ===========================================================================
--- T. THE MISSING BOOKS (same environment as S). S1 found ~46.5k allocated
--- match groups whose PRIMARY_ORDER_ID has NO row in OB_ORDER (42,967 of
--- them 'SBB'); the id shape matches, so the orders are simply not loaded.
--- Two statements characterise them for the DataGlobe / orderbook team.
+-- U. CROSS-BANK MATCH GROUPS (UAT). T showed the orphaned SBB allocations are
+-- the volume-load deals (Pembina 23,930 groups, Air France-KLM 6,010, the
+-- Apple / Microsoft loads of Nov-2024) — not a feed gap. What remains is
+-- ~3k ISN / DRB / GSP / GB allocated groups on real deals that DO have other
+-- orders: the group's PRIMARY_ORDER_ID is probably another bank's order and
+-- OUR order sits in REF_SOURCE_SECONDARY_ORDER_LIST. Two statements.
 -- ===========================================================================
 
--- T1. Which deals and years the orphaned allocations belong to, and whether
---     the deal has ANY order in OB_ORDER (a partial book) or none (a book that
---     never arrived).
-WITH G AS (
-    SELECT MG.ROOT_ID, MG.PARENT_ID, MG.PRIMARY_ORDER_ID, MG.ITEM_SOURCE, MG.FINAL_ALLOC
-    FROM   DGSTREAM.OB_ORDER_MATCH_GROUP MG
-    WHERE  MG.FINAL_ALLOC > 0 AND MG.PRIMARY_ORDER_ID IS NOT NULL
-    AND    NOT EXISTS (SELECT 1 FROM DGSTREAM.OB_ORDER O WHERE O.ORDER_ID = MG.PRIMARY_ORDER_ID)
-)
-SELECT G.ITEM_SOURCE,
-       TO_CHAR(MAX(DT.PRICING_TS), 'YYYY') AS YEAR_,
-       CASE WHEN EXISTS (SELECT 1 FROM DGSTREAM.OB_ORDER O WHERE O.ROOT_ID = G.ROOT_ID)
-            THEN 'deal has other orders' ELSE 'deal has NO orders' END AS BOOK_,
-       COUNT(DISTINCT G.ROOT_ID) AS DEALS,
-       COUNT(*) AS GROUPS,
-       SUM(G.FINAL_ALLOC) AS ALLOCATION
-FROM   G
-LEFT JOIN DGSTREAM.OB_DEAL_TRANCHE DT ON DT.DEAL_ID = G.ROOT_ID AND DT.TRANCHE_ID = G.PARENT_ID
-GROUP  BY G.ITEM_SOURCE, G.ROOT_ID
-ORDER  BY GROUPS DESC
-FETCH FIRST 40 ROWS ONLY;
-
--- T2. Ten orphaned SBB groups with their deal names — concrete examples for
---     the feed team (and to spot-check in the source UI).
-SELECT MG.ROOT_ID, MAX(DT.DEAL_NAME) AS DEAL_NAME, TO_CHAR(MAX(DT.PRICING_TS), 'YYYY-MM-DD') AS PRICED,
-       COUNT(*) AS ORPHANED_GROUPS, SUM(MG.FINAL_ALLOC) AS ALLOCATION
+-- U1. What the secondary list looks like (format, delimiter) on ten such
+--     groups, with the per-source allocation columns beside FINAL_ALLOC.
+SELECT MG.ITEM_SOURCE, MG.PRIMARY_ORDER_ID, MG.REF_SOURCE_SECONDARY_ORDER_LIST,
+       MG.FINAL_ALLOC, MG.GB_ALLOC, MG.ISN_ALLOC
 FROM   DGSTREAM.OB_ORDER_MATCH_GROUP MG
-LEFT JOIN DGSTREAM.OB_DEAL_TRANCHE DT ON DT.DEAL_ID = MG.ROOT_ID AND DT.TRANCHE_ID = MG.PARENT_ID
-WHERE  MG.ITEM_SOURCE = 'SBB' AND MG.FINAL_ALLOC > 0 AND MG.PRIMARY_ORDER_ID IS NOT NULL
+WHERE  MG.FINAL_ALLOC > 0 AND MG.PRIMARY_ORDER_ID IS NOT NULL AND MG.ITEM_SOURCE <> 'SBB'
 AND    NOT EXISTS (SELECT 1 FROM DGSTREAM.OB_ORDER O WHERE O.ORDER_ID = MG.PRIMARY_ORDER_ID)
-GROUP  BY MG.ROOT_ID
-ORDER  BY ORPHANED_GROUPS DESC
+AND    MG.REF_SOURCE_SECONDARY_ORDER_LIST IS NOT NULL
 FETCH FIRST 10 ROWS ONLY;
+
+-- U2. Split those groups' secondary lists and look the ids up in OB_ORDER:
+--     how many orphaned groups contain one of OUR orders. (Generic delimiter
+--     class — commas, pipes, semicolons, spaces, brackets, quotes.)
+WITH G AS (
+    SELECT MG.ORDER_GROUP_ID, MG.REF_SOURCE_SECONDARY_ORDER_LIST AS L
+    FROM   DGSTREAM.OB_ORDER_MATCH_GROUP MG
+    WHERE  MG.FINAL_ALLOC > 0 AND MG.PRIMARY_ORDER_ID IS NOT NULL AND MG.ITEM_SOURCE <> 'SBB'
+    AND    NOT EXISTS (SELECT 1 FROM DGSTREAM.OB_ORDER O WHERE O.ORDER_ID = MG.PRIMARY_ORDER_ID)
+    AND    MG.REF_SOURCE_SECONDARY_ORDER_LIST IS NOT NULL
+), X AS (
+    SELECT ORDER_GROUP_ID,
+           TRIM(REGEXP_SUBSTR(L, '[^,|; \[\]"]+', 1, LEVEL)) AS SEC_ID
+    FROM   G
+    CONNECT BY LEVEL <= REGEXP_COUNT(L, '[^,|; \[\]"]+')
+           AND PRIOR ORDER_GROUP_ID = ORDER_GROUP_ID
+           AND PRIOR SYS_GUID() IS NOT NULL
+)
+SELECT COUNT(DISTINCT X.ORDER_GROUP_ID) AS ORPHANED_GROUPS_WITH_A_LIST,
+       COUNT(DISTINCT CASE WHEN O.ORDER_ID IS NOT NULL THEN X.ORDER_GROUP_ID END) AS GROUPS_NAMING_OUR_ORDER,
+       COUNT(DISTINCT O.ORDER_ID) AS OUR_ORDERS_FOUND
+FROM   X
+LEFT JOIN DGSTREAM.OB_ORDER O ON O.ORDER_ID = X.SEC_ID;
