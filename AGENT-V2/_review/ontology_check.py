@@ -1726,12 +1726,17 @@ check(has(ORDER, "NULL = no allocation recorded"),
       "[units] order card: order_allocation lost the NULL-vs-0 reading")
 # DCM ALLOCATION LIVES ON THE MATCH GROUP (user 2026-10-06): OB_ORDER.FINAL_ALLOC
 # is not populated for DCM; OB_ORDER_MATCH_GROUP.FINAL_ALLOC, matched through
-# PRIMARY_ORDER_ID, is the allocation. Both views read NVL(group, order), with
-# the window keyed (ROOT_ID, PARENT_ID, PRIMARY_ORDER_ID) so a deal id pushes in.
+# PRIMARY_ORDER_ID, is the allocation. Both views read NVL(primary group,
+# secondary-list group, order) — census V (2026-10-06): the secondary list
+# holds EXTERNAL_ORDER_IDs and reaches 1,983 more in-scope orders; the
+# exploded list is GROUP BY'd on (ROOT_ID, PARENT_ID, SEC_ID) so an order can
+# never multiply. Windows keyed on deal / tranche so a deal id pushes in.
 for _vf in ("vw_order_detail.sql", "vw_deal_summary.sql"):
     _t = text(ROOT / "views" / _vf)
     check("DGSTREAM.OB_ORDER_MATCH_GROUP MG" in _t
-          and "NVL(MG.FINAL_ALLOC, O.FINAL_ALLOC)" in _t
+          and "NVL(MG.FINAL_ALLOC, NVL(MS.FINAL_ALLOC, O.FINAL_ALLOC))" in _t
+          and "MS.SEC_ID = O.EXTERNAL_ORDER_ID" in _t
+          and "GROUP BY X.ROOT_ID, X.PARENT_ID, X.SEC_ID" in _t
           and "PARTITION BY MG.ROOT_ID, MG.PARENT_ID, MG.PRIMARY_ORDER_ID" in _t
           and "MG.PRIMARY_ORDER_ID = O.ORDER_ID" in _t,
           f"[alloc] {_vf}: the DCM allocation no longer comes from OB_ORDER_MATCH_GROUP "

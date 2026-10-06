@@ -130,6 +130,10 @@ if the source schema changes.
 #   the OB_ORDER.EXTERNAL_ORDER_ID shape ('16581936,16581488'); ISN_ALLOC ==
 #   FINAL_ALLOC on sampled rows, GB_ALLOC NULL; no ORDER_ID matches (U2).
 #   db-asks V tests the EXTERNAL_ORDER_ID match.
+#   CENSUS V: EXTERNAL_ORDER_ID is a sound key (98% populated, ~unique per
+#   deal/tranche); the orphaned non-SBB groups are other banks' orders (36
+#   of 3,184 name ours); the external-id match still reaches 1,983 of our
+#   in-scope orders with no allocation — the views' third NVL source.
 
 | # | Column | Type | Len | Null |
 |---|---|---|---|---|

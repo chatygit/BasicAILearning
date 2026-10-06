@@ -920,3 +920,12 @@ vocabulary). Deploy order + deal views; deploy-check D13 shows the allocated
 count (OB_ORDER alone gave ~196k raw). Census R2/R3 confirm coverage and
 precedence; R4 says whether draft / soft / ISN allocation, retention,
 rationale and B&D also live on the group (they would get the same fallback).
+2026-10-06, census R-V: the primary match is right (same id shape; the
+latest-version dedupe loses 24 of 54,848); the 43k orphaned SBB groups are
+the UAT volume loads; the ~3.2k orphaned ISN / DRB / GSP / GB groups are
+other banks' orders (36 name ours). The group's REF_SOURCE_SECONDARY_ORDER_
+LIST holds comma-separated EXTERNAL_ORDER_IDs, which reach 1,983 more
+in-scope orders — so both views now read NVL(MG primary group, MS
+secondary-list group, O.FINAL_ALLOC): MS explodes the deduped allocated
+groups' lists (CONNECT BY) and GROUP BYs (ROOT_ID, PARENT_ID, SEC_ID) so an
+order can never multiply; the DCM order dedupe carries EXTERNAL_ORDER_ID.

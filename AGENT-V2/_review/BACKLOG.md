@@ -221,6 +221,17 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       reached by external id that are not the primary and have no allocation
       of their own). If it pays: a small exploded block (group → external id)
       keyed (ROOT_ID, PARENT_ID, EXTERNAL_ORDER_ID) as a third NVL source.
+      CENSUS V (UAT 2026-10-06): EXTERNAL_ORDER_ID is a sound key (844,940 of
+      864,019 non-RQ orders, 843,077 distinct within deal/tranche); it names
+      our order in only 36 of the 3,184 orphaned groups — the rest are other
+      banks' orders, not a gap — but across all allocated groups it reaches
+      2,129 in-scope orders, 1,986 not the primary, 1,983 with no allocation
+      of their own. BUILT: third NVL source MS (exploded secondary lists,
+      deduped per group on DG_VERSION, GROUP BY (ROOT_ID, PARENT_ID, SEC_ID),
+      joined on deal / tranche / EXTERNAL_ORDER_ID) in the order view's DCM
+      branch and the deal view's OC block; the DCM order dedupe now carries
+      EXTERNAL_ORDER_ID. Precedence: primary group > secondary group > the
+      order's own. CLEARED TO DEPLOY (order + deal views).
 NOTE 2026-10-05: views/_deploy-check.sql was rewritten (738 → ~330 lines) with
 rows labelled by section (A01-A12, B01-B14, C01-C09, D01-D12, E1-E5, K1-K5); the
 historical row numbers quoted in older items below (7/8/9, 15, 21/21b, 22-30)
