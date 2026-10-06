@@ -191,6 +191,17 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       latest group version drops the allocation or the id space differs —
       db-asks S1-S3 decide; the view ships either way (NVL keeps the order's
       own 263k allocations) but the dedupe ordering / join key may change.
+      CENSUS S (2026-10-06): key right (same id shape), dedupe right (24 of
+      54,848 lost to the latest version) — the gap is ORDERS MISSING FROM
+      OB_ORDER: 42,967 allocated SBB groups + ~3.5k ISN / DRB / GSP / GB have
+      no order row at all. SHIP the order-level NVL as built. OPEN DECISION
+      (user / DataGlobe): is the SBB book supposed to land in OB_ORDER (feed
+      gap → raise) or do SBB orders exist only as match groups (design →
+      the deal view needs a group-level fallback: SUM of orphaned group
+      allocations by ROOT_ID, respecting the tranche exclusions, added to
+      TOTAL_ALLOCATION and DISCLOSED as 'allocations on matched groups
+      whose orders are not in the book'; order listings for those deals
+      stay incomplete and must say so). db-asks T names the deals / years.
 NOTE 2026-10-05: views/_deploy-check.sql was rewritten (738 → ~330 lines) with
 rows labelled by section (A01-A12, B01-B14, C01-C09, D01-D12, E1-E5, K1-K5); the
 historical row numbers quoted in older items below (7/8/9, 15, 21/21b, 22-30)

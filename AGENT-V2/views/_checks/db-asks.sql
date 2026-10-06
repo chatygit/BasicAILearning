@@ -24,63 +24,42 @@
 -- Sections D-ECM / D-DCM are unchanged by this batch.
 
 -- ===========================================================================
--- S. WHY DO SO FEW IN-SCOPE ORDERS FIND THEIR MATCH GROUP? (R2, 2026-10-06:
--- 850,910 in-scope DCM orders, 28,087 with a group row on PRIMARY_ORDER_ID,
--- 5,740 of those with a group allocation — while R1 counts ~56k group rows
--- carrying FINAL_ALLOC, 42,914 of them 'new | SBB'.) Three statements; the
--- answer decides whether the join key or the dedupe needs changing.
+-- T. THE MISSING BOOKS (same environment as S). S1 found ~46.5k allocated
+-- match groups whose PRIMARY_ORDER_ID has NO row in OB_ORDER (42,967 of
+-- them 'SBB'); the id shape matches, so the orders are simply not loaded.
+-- Two statements characterise them for the DataGlobe / orderbook team.
 -- ===========================================================================
 
--- S1. For every group carrying an allocation: does its PRIMARY_ORDER_ID exist
---     in OB_ORDER at all, and with what ITEM_SOURCE / STATUS? A big 'no match'
---     bucket = a different id space; a big RQ / deleted bucket = excluded on
---     purpose.
-SELECT G.ITEM_SOURCE AS GROUP_SRC,
-       NVL(O.ITEM_SOURCE, '(no OB_ORDER row)') AS ORDER_SRC,
-       O.STATUS AS ORDER_STATUS,
-       COUNT(*) AS GROUPS
-FROM (
-    SELECT PRIMARY_ORDER_ID, MAX(ITEM_SOURCE) AS ITEM_SOURCE
-    FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
-    WHERE  PRIMARY_ORDER_ID IS NOT NULL AND FINAL_ALLOC > 0
-    GROUP  BY PRIMARY_ORDER_ID
-) G
-LEFT JOIN (
-    SELECT ORDER_ID, MAX(ITEM_SOURCE) AS ITEM_SOURCE, MAX(STATUS) AS STATUS
-    FROM   DGSTREAM.OB_ORDER
-    GROUP  BY ORDER_ID
-) O ON O.ORDER_ID = G.PRIMARY_ORDER_ID
-GROUP  BY G.ITEM_SOURCE, NVL(O.ITEM_SOURCE, '(no OB_ORDER row)'), O.STATUS
-ORDER  BY GROUPS DESC;
-
--- S2. Does "latest version per primary order" drop allocations? Primary orders
---     that have an allocation on SOME version but not on their latest one.
-WITH V AS (
-    SELECT PRIMARY_ORDER_ID, FINAL_ALLOC,
-           ROW_NUMBER() OVER (PARTITION BY PRIMARY_ORDER_ID ORDER BY DG_VERSION DESC, ROWID) AS RN_
-    FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
-    WHERE  PRIMARY_ORDER_ID IS NOT NULL
+-- T1. Which deals and years the orphaned allocations belong to, and whether
+--     the deal has ANY order in OB_ORDER (a partial book) or none (a book that
+--     never arrived).
+WITH G AS (
+    SELECT MG.ROOT_ID, MG.PARENT_ID, MG.PRIMARY_ORDER_ID, MG.ITEM_SOURCE, MG.FINAL_ALLOC
+    FROM   DGSTREAM.OB_ORDER_MATCH_GROUP MG
+    WHERE  MG.FINAL_ALLOC > 0 AND MG.PRIMARY_ORDER_ID IS NOT NULL
+    AND    NOT EXISTS (SELECT 1 FROM DGSTREAM.OB_ORDER O WHERE O.ORDER_ID = MG.PRIMARY_ORDER_ID)
 )
-SELECT COUNT(*) AS PRIMARIES_WITH_ANY_ALLOC,
-       COUNT(CASE WHEN LATEST_ALLOC IS NULL THEN 1 END) AS LOST_BY_LATEST_VERSION
-FROM (
-    SELECT PRIMARY_ORDER_ID,
-           MAX(FINAL_ALLOC) AS ANY_ALLOC,
-           MAX(CASE WHEN RN_ = 1 THEN FINAL_ALLOC END) AS LATEST_ALLOC
-    FROM   V
-    GROUP  BY PRIMARY_ORDER_ID
-)
-WHERE ANY_ALLOC IS NOT NULL;
+SELECT G.ITEM_SOURCE,
+       TO_CHAR(MAX(DT.PRICING_TS), 'YYYY') AS YEAR_,
+       CASE WHEN EXISTS (SELECT 1 FROM DGSTREAM.OB_ORDER O WHERE O.ROOT_ID = G.ROOT_ID)
+            THEN 'deal has other orders' ELSE 'deal has NO orders' END AS BOOK_,
+       COUNT(DISTINCT G.ROOT_ID) AS DEALS,
+       COUNT(*) AS GROUPS,
+       SUM(G.FINAL_ALLOC) AS ALLOCATION
+FROM   G
+LEFT JOIN DGSTREAM.OB_DEAL_TRANCHE DT ON DT.DEAL_ID = G.ROOT_ID AND DT.TRANCHE_ID = G.PARENT_ID
+GROUP  BY G.ITEM_SOURCE, G.ROOT_ID
+ORDER  BY GROUPS DESC
+FETCH FIRST 40 ROWS ONLY;
 
--- S3. Id shapes side by side (10 + 10 rows) — if the primary ids look like
---     another column of OB_ORDER (EXTERNAL_ORDER_ID, MISC_DRB_INVESTOR_ORDER_ID),
---     the join key is wrong, not the data.
-SELECT 'group.PRIMARY_ORDER_ID' AS SRC, PRIMARY_ORDER_ID AS ID_
-FROM   (SELECT PRIMARY_ORDER_ID FROM DGSTREAM.OB_ORDER_MATCH_GROUP
-        WHERE FINAL_ALLOC > 0 AND ITEM_SOURCE = 'SBB' AND PRIMARY_ORDER_ID IS NOT NULL
-        FETCH FIRST 10 ROWS ONLY)
-UNION ALL
-SELECT 'order.ORDER_ID | EXTERNAL | DRB', ORDER_ID || ' | ' || EXTERNAL_ORDER_ID || ' | ' || MISC_DRB_INVESTOR_ORDER_ID
-FROM   (SELECT ORDER_ID, EXTERNAL_ORDER_ID, MISC_DRB_INVESTOR_ORDER_ID FROM DGSTREAM.OB_ORDER
-        WHERE (ITEM_SOURCE IS NULL OR UPPER(ITEM_SOURCE) <> 'RQ') AND FINAL_ALLOC IS NULL
-        FETCH FIRST 10 ROWS ONLY);
+-- T2. Ten orphaned SBB groups with their deal names — concrete examples for
+--     the feed team (and to spot-check in the source UI).
+SELECT MG.ROOT_ID, MAX(DT.DEAL_NAME) AS DEAL_NAME, TO_CHAR(MAX(DT.PRICING_TS), 'YYYY-MM-DD') AS PRICED,
+       COUNT(*) AS ORPHANED_GROUPS, SUM(MG.FINAL_ALLOC) AS ALLOCATION
+FROM   DGSTREAM.OB_ORDER_MATCH_GROUP MG
+LEFT JOIN DGSTREAM.OB_DEAL_TRANCHE DT ON DT.DEAL_ID = MG.ROOT_ID AND DT.TRANCHE_ID = MG.PARENT_ID
+WHERE  MG.ITEM_SOURCE = 'SBB' AND MG.FINAL_ALLOC > 0 AND MG.PRIMARY_ORDER_ID IS NOT NULL
+AND    NOT EXISTS (SELECT 1 FROM DGSTREAM.OB_ORDER O WHERE O.ORDER_ID = MG.PRIMARY_ORDER_ID)
+GROUP  BY MG.ROOT_ID
+ORDER  BY ORPHANED_GROUPS DESC
+FETCH FIRST 10 ROWS ONLY;

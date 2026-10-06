@@ -112,6 +112,14 @@ if the source schema changes.
 #   (db-asks S). R3: where both exist, 167 equal / 27 differ. R4: OB_ORDER
 #   already carries the rest of the allocation block (ISN 738k, soft 135k,
 #   draft 82k, FX 378k) — no sibling fallback needed.
+# CENSUS S (2026-10-06): the key is right — PRIMARY_ORDER_ID has the OB_ORDER
+#   ORDER_ID shape ('I-240722-064033925175'); the dedupe is right — only 24 of
+#   54,848 allocated primaries lose the allocation on their latest version.
+#   The gap is MISSING ORDERS: 42,967 'SBB' allocated groups (+ ISN 3,024, DRB
+#   240, GSP 214, GB 40) point at primary ids with NO OB_ORDER row of any
+#   kind; the matched remainder is ~5.7k. Either the SBB book never loads into
+#   OB_ORDER (feed gap) or SBB orders only exist as match groups (design) —
+#   db-asks T characterises the orphaned books; ASKS-external §5 (7).
 
 | # | Column | Type | Len | Null |
 |---|---|---|---|---|
