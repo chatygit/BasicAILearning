@@ -183,6 +183,14 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whether the order's own FINAL_ALLOC ever disagrees with the group (R3).
       Corrects the L3 reading in the 2026-09-29 note: DCM NULLs were 'stored
       elsewhere', not 'not allocated'.
+      CENSUS R (2026-10-06): the two sources agree where both exist (R3), the
+      rest of the allocation block is on OB_ORDER already (R4) — but coverage
+      is thin: 28,087 of 850,910 in-scope orders find a group, 5,740 a group
+      allocation, against ~56k allocated group rows (42,914 'new | SBB').
+      Either most primary ids point at excluded (RQ / deleted) orders or the
+      latest group version drops the allocation or the id space differs —
+      db-asks S1-S3 decide; the view ships either way (NVL keeps the order's
+      own 263k allocations) but the dedupe ordering / join key may change.
 NOTE 2026-10-05: views/_deploy-check.sql was rewritten (738 → ~330 lines) with
 rows labelled by section (A01-A12, B01-B14, C01-C09, D01-D12, E1-E5, K1-K5); the
 historical row numbers quoted in older items below (7/8/9, 15, 21/21b, 22-30)

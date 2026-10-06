@@ -318,14 +318,14 @@ dimensions:
   identifier_type: {column: identifier_type, description: "Pipe-delimited identifier types (CUSIP/ISIN/FIGI/RIC/VALOREN/'SMCP ID'/'DIRECTBOOKS ID'), zip-aligned with identifier_value. UPPER-normalized."}
   identifier_value: {column: identifier_value, description: "Pipe-delimited identifier values, zip-aligned with identifier_type. Display ZIPPED with the type list into one cell per tranche. A security identifier is never a deal_id and never an entity."}
   # --- DCM-only ---
-  is_callable: {column: is_callable, products: ["DCM"], description: "DCM. Call flag: 'Y' marks a callable tranche (~14% on UAT); the other rows are NULL on UAT but carry a value on every row in other environments — 'callable bonds' = eq 'Y', NEVER is_not_null. With call_date, non_call_period and make_whole_callable. NULL on ECM."}
+  is_callable: {column: is_callable, products: ["DCM"], description: "DCM. Call flag: 'Y' = callable (~14% on UAT); the negative is 'N' (QA / PROD shape) or NULL (UAT) — 'callable bonds' = eq 'Y', NEVER is_not_null. With call_date, non_call_period and make_whole_callable. NULL on ECM."}
   call_date: {column: call_date, products: ["DCM"], description: "DCM. First call date (timestamp). NULL = none recorded."}
   non_call_period: {column: non_call_period, products: ["DCM"], description: "DCM. Non-call period as '<value>-<unit>' ('3-Y', '18-M') — NC3 = like '3-Y%'. Recorded on under 1% of tranches (UAT 2026-10-05): a zero-row answer means not captured, say so."}
   is_puttable: {column: is_puttable, products: ["DCM"], description: "DCM. Put flag: 'true' / 'false' / NULL (plus a few stray text values) — puttable = eq 'true'."}
   make_whole_callable: {column: make_whole_callable, products: ["DCM"], description: "DCM. Make-whole call: 'true' / 'false' / NULL — make-whole = eq 'true'."}
-  is_tap: {column: is_tap, products: ["DCM"], description: "DCM. Tap / re-opening flag: 'Y' marks a tap (~13% on UAT); other rows NULL or a negative value by environment — taps = eq 'Y', never is_not_null."}
+  is_tap: {column: is_tap, products: ["DCM"], description: "DCM. Tap / re-opening flag: 'Y' = tap (~13% on UAT); the negative is 'N' or NULL by environment — taps = eq 'Y', never is_not_null."}
   is_perpetual: {column: is_perpetual, products: ["DCM"], description: "DCM. Perpetual flag: 'true' (rare, ~210 raw rows) / 'false' / NULL — perps = eq 'true' (securities_maturity is text)."}
-  is_convertible: {column: is_convertible, products: ["DCM"], description: "DCM. Convertible flag: 'Y' marks it (~13% on UAT); other rows NULL or a negative value by environment — eq 'Y', never is_not_null (ECM convertibles are equity_type)."}
+  is_convertible: {column: is_convertible, products: ["DCM"], description: "DCM. Convertible flag: 'Y' = convertible (~13% on UAT); the negative is 'N' or NULL by environment — eq 'Y', never is_not_null (ECM convertibles are equity_type)."}
   governing_law: {column: governing_law, products: ["DCM"], description: "DCM. Governing law, ~13% populated: 'State of New York' (most), 'Dutch', 'England and Wales', 'State of Delaware', 'German', 'Australian', 'French', 'Italian'… — like '%NEW YORK%', '%ENGLAND%' (never '%ENGLISH%'). NULL on ECM."}
   product_class: {column: product_class, products: ["DCM"], description: "DCM. Bond class — a closed 15-value list (Investment Grade, High Yield, SSA, ABS…). Expand IG/HY/EM before filtering."}
   allowed_order_spread: {column: allowed_order_spread, products: ["DCM"], description: "DCM tranche flag Y/N — may investors place SPREAD-based orders on this tranche. NULL = not recorded (~72% of UAT tranches, older feed rows), never 'not allowed'."}
@@ -1004,7 +1004,7 @@ filters:
     products: ["DCM"]
     operators: [eq, ne, like, is_null, is_not_null]
     case_insensitive: true
-    description: "DCM call flag — eq 'Y'; never is_not_null (some environments store a value on every row)."
+    description: "DCM call flag — eq 'Y'; the negative is 'N' or NULL, so never is_not_null."
   call_date:
     column: call_date
     products: ["DCM"]

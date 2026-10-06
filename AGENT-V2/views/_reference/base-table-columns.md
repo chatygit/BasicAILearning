@@ -103,6 +103,15 @@ if the source schema changes.
 # RATIONALE, BND, ESG_TAG, INVESTOR_CLASSIFICATION all live here too.
 # REF_SOURCE_SECONDARY_ORDER_LIST = the other orders in the group. Views
 # read NVL(group.FINAL_ALLOC, order.FINAL_ALLOC) since batch C.1.
+# CENSUS R (2026-10-06, ~104k rows): STATUS new / updated / deleted / booked /
+#   cancelled / pending × ITEM_SOURCE SBB / GB / ISN / DRB / GSP / ISN_DRB.
+#   Allocations concentrate in 'new | SBB' (43,813 rows, 42,914 positive);
+#   'deleted' rows carry NO PRIMARY_ORDER_ID (they never join). R2: of 850,910
+#   in-scope orders only 28,087 find a group row and 5,740 a group allocation,
+#   while OB_ORDER itself carries 263,313 — coverage under investigation
+#   (db-asks S). R3: where both exist, 167 equal / 27 differ. R4: OB_ORDER
+#   already carries the rest of the allocation block (ISN 738k, soft 135k,
+#   draft 82k, FX 378k) — no sibling fallback needed.
 
 | # | Column | Type | Len | Null |
 |---|---|---|---|---|
@@ -235,6 +244,8 @@ if the source schema changes.
 #   'NewYorkStockExchange' 83, 'INDIA' 70, 'Luxembourg' 19, 'London' 16).
 #   SMC_ISSUER_COUNTRY ~27%, ISO-2 CODES: US 12,479, GB 1,062, CA 643, NL
 #   559, FR 412, AU 402, LU 332, JP 304, DE 250, KR 204, HK 198, IT 183, CN
+#   177. QA (db-asks Q, 2026-10-05): CALL_IND and IS_TAP store 'N' as the
+#   negative (UAT stores NULL); the true/false flags behave the same there.
 #   177. SFC_ROLE is the Hong Kong SFC capital-markets-intermediary capacity
 #   ('Out of Scope / N/A' 7,242, 'Overall Coordinator / Capital Markets
 #   Intermediary' 53 …), NOT Citi's syndicate role; CO_MANAGED_DEAL is 'N' or

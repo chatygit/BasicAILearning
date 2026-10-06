@@ -24,90 +24,63 @@
 -- Sections D-ECM / D-DCM are unchanged by this batch.
 
 -- ===========================================================================
--- Q. QA, ONE STATEMENT (deploy-check C09, 2026-10-05: IS_CALLABLE and IS_TAP
--- are non-NULL on every QA DCM tranche, unlike UAT). What do the six flags
--- store in QA? One scan of the DCM tranche branch (~15 s), ~50 rows.
--- ===========================================================================
-SELECT IS_CALLABLE, IS_TAP, IS_CONVERTIBLE, IS_PUTTABLE, MAKE_WHOLE_CALLABLE, IS_PERPETUAL,
-       COUNT(*) AS TRANCHES
-FROM   DGSTREAM.VW_TRANCHE_SUMMARY
-WHERE  PRODUCT = 'DCM'
-GROUP  BY IS_CALLABLE, IS_TAP, IS_CONVERTIBLE, IS_PUTTABLE, MAKE_WHOLE_CALLABLE, IS_PERPETUAL
-ORDER  BY TRANCHES DESC;
-
--- ===========================================================================
--- R. DCM ALLOCATION SOURCE (UAT, before deploying the order + deal views).
--- User 2026-10-06: OB_ORDER.FINAL_ALLOC is not populated for DCM — the
--- allocation sits on OB_ORDER_MATCH_GROUP.FINAL_ALLOC, matched through
--- PRIMARY_ORDER_ID. The views now read NVL(group, order). Four statements
--- confirm coverage, keys and precedence. SELECTs only.
+-- S. WHY DO SO FEW IN-SCOPE ORDERS FIND THEIR MATCH GROUP? (R2, 2026-10-06:
+-- 850,910 in-scope DCM orders, 28,087 with a group row on PRIMARY_ORDER_ID,
+-- 5,740 of those with a group allocation — while R1 counts ~56k group rows
+-- carrying FINAL_ALLOC, 42,914 of them 'new | SBB'.) Three statements; the
+-- answer decides whether the join key or the dedupe needs changing.
 -- ===========================================================================
 
--- R1. The match-group table itself: rows, distinct primary orders, how many
---     carry FINAL_ALLOC, and the STATUS / ITEM_SOURCE vocabularies.
-SELECT STATUS, ITEM_SOURCE,
-       COUNT(*) AS ROWS_,
-       COUNT(DISTINCT PRIMARY_ORDER_ID) AS PRIMARY_ORDERS,
-       COUNT(FINAL_ALLOC) AS WITH_FINAL_ALLOC,
-       COUNT(CASE WHEN FINAL_ALLOC > 0 THEN 1 END) AS POSITIVE_ALLOC,
-       COUNT(CASE WHEN PRIMARY_ORDER_ID IS NULL THEN 1 END) AS NO_PRIMARY
-FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
-GROUP  BY STATUS, ITEM_SOURCE
-ORDER  BY ROWS_ DESC;
-
--- R2. Coverage of in-scope DCM orders (non-RQ, status in scope, latest row
---     per order) by a group row on PRIMARY_ORDER_ID, and whether the group's
---     ROOT_ID / PARENT_ID agree with the order's (the view joins on all three).
-WITH O AS (
-  SELECT ORDER_ID, ROOT_ID, PARENT_ID, FINAL_ALLOC
-  FROM (
-    SELECT ORDER_ID, ROOT_ID, PARENT_ID, FINAL_ALLOC,
-           ROW_NUMBER() OVER (PARTITION BY ROOT_ID, PARENT_ID, ORDER_ID ORDER BY ROWID) AS RN_
+-- S1. For every group carrying an allocation: does its PRIMARY_ORDER_ID exist
+--     in OB_ORDER at all, and with what ITEM_SOURCE / STATUS? A big 'no match'
+--     bucket = a different id space; a big RQ / deleted bucket = excluded on
+--     purpose.
+SELECT G.ITEM_SOURCE AS GROUP_SRC,
+       NVL(O.ITEM_SOURCE, '(no OB_ORDER row)') AS ORDER_SRC,
+       O.STATUS AS ORDER_STATUS,
+       COUNT(*) AS GROUPS
+FROM (
+    SELECT PRIMARY_ORDER_ID, MAX(ITEM_SOURCE) AS ITEM_SOURCE
+    FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
+    WHERE  PRIMARY_ORDER_ID IS NOT NULL AND FINAL_ALLOC > 0
+    GROUP  BY PRIMARY_ORDER_ID
+) G
+LEFT JOIN (
+    SELECT ORDER_ID, MAX(ITEM_SOURCE) AS ITEM_SOURCE, MAX(STATUS) AS STATUS
     FROM   DGSTREAM.OB_ORDER
-    WHERE  ORDER_ID IS NOT NULL
-    AND    (ITEM_SOURCE IS NULL OR UPPER(ITEM_SOURCE) <> 'RQ')
-    AND    (STATUS IS NULL OR UPPER(STATUS) NOT IN ('DELETED', 'CANCELLED'))
-  ) WHERE RN_ = 1
-), G AS (
-  SELECT PRIMARY_ORDER_ID, ROOT_ID, PARENT_ID, FINAL_ALLOC
-  FROM (
-    SELECT PRIMARY_ORDER_ID, ROOT_ID, PARENT_ID, FINAL_ALLOC,
+    GROUP  BY ORDER_ID
+) O ON O.ORDER_ID = G.PRIMARY_ORDER_ID
+GROUP  BY G.ITEM_SOURCE, NVL(O.ITEM_SOURCE, '(no OB_ORDER row)'), O.STATUS
+ORDER  BY GROUPS DESC;
+
+-- S2. Does "latest version per primary order" drop allocations? Primary orders
+--     that have an allocation on SOME version but not on their latest one.
+WITH V AS (
+    SELECT PRIMARY_ORDER_ID, FINAL_ALLOC,
            ROW_NUMBER() OVER (PARTITION BY PRIMARY_ORDER_ID ORDER BY DG_VERSION DESC, ROWID) AS RN_
     FROM   DGSTREAM.OB_ORDER_MATCH_GROUP
     WHERE  PRIMARY_ORDER_ID IS NOT NULL
-  ) WHERE RN_ = 1
 )
-SELECT COUNT(*) AS ORDERS_IN_SCOPE,
-       COUNT(G.PRIMARY_ORDER_ID) AS WITH_GROUP,
-       COUNT(CASE WHEN G.FINAL_ALLOC IS NOT NULL THEN 1 END) AS GROUP_ALLOC,
-       COUNT(CASE WHEN G.FINAL_ALLOC > 0 THEN 1 END) AS GROUP_ALLOC_POSITIVE,
-       COUNT(CASE WHEN O.FINAL_ALLOC IS NOT NULL THEN 1 END) AS ORDER_ALLOC,
-       COUNT(CASE WHEN G.PRIMARY_ORDER_ID IS NOT NULL
-                   AND (G.ROOT_ID <> O.ROOT_ID OR G.PARENT_ID <> O.PARENT_ID) THEN 1 END) AS KEY_MISMATCH
-FROM   O
-LEFT JOIN G ON G.PRIMARY_ORDER_ID = O.ORDER_ID;
+SELECT COUNT(*) AS PRIMARIES_WITH_ANY_ALLOC,
+       COUNT(CASE WHEN LATEST_ALLOC IS NULL THEN 1 END) AS LOST_BY_LATEST_VERSION
+FROM (
+    SELECT PRIMARY_ORDER_ID,
+           MAX(FINAL_ALLOC) AS ANY_ALLOC,
+           MAX(CASE WHEN RN_ = 1 THEN FINAL_ALLOC END) AS LATEST_ALLOC
+    FROM   V
+    GROUP  BY PRIMARY_ORDER_ID
+)
+WHERE ANY_ALLOC IS NOT NULL;
 
--- R3. Precedence: where BOTH the order and its group carry FINAL_ALLOC, do
---     they agree? (The view takes the group's.)
-SELECT CASE WHEN O.FINAL_ALLOC = G.FINAL_ALLOC THEN 'EQUAL'
-            WHEN O.FINAL_ALLOC = 0 THEN 'ORDER ZERO, GROUP SET'
-            ELSE 'DIFFER' END AS CMP,
-       COUNT(*) AS ORDERS_
-FROM   DGSTREAM.OB_ORDER O
-JOIN   DGSTREAM.OB_ORDER_MATCH_GROUP G ON G.PRIMARY_ORDER_ID = O.ORDER_ID
-WHERE  O.FINAL_ALLOC IS NOT NULL AND G.FINAL_ALLOC IS NOT NULL
-GROUP  BY CASE WHEN O.FINAL_ALLOC = G.FINAL_ALLOC THEN 'EQUAL'
-               WHEN O.FINAL_ALLOC = 0 THEN 'ORDER ZERO, GROUP SET'
-               ELSE 'DIFFER' END;
-
--- R4 (OPTIONAL). The rest of the allocation block — is it also on the group
---     only? Populations on OB_ORDER vs the match group.
-SELECT 'OB_ORDER' AS SRC, COUNT(*) AS ROWS_, COUNT(DRAFT_ALLOC) AS DRAFT_, COUNT(SOFT_ALLOC) AS SOFT_,
-       COUNT(ISN_ALLOC) AS ISN_, COUNT(RETENTION) AS RETENTION_, COUNT(RATIONALE) AS RATIONALE_,
-       COUNT(FX_CURRENCY) AS FX_, COUNT(ESG_TAG) AS ESG_, COUNT(BND) AS BND_
-FROM   DGSTREAM.OB_ORDER
-WHERE  (ITEM_SOURCE IS NULL OR UPPER(ITEM_SOURCE) <> 'RQ')
+-- S3. Id shapes side by side (10 + 10 rows) — if the primary ids look like
+--     another column of OB_ORDER (EXTERNAL_ORDER_ID, MISC_DRB_INVESTOR_ORDER_ID),
+--     the join key is wrong, not the data.
+SELECT 'group.PRIMARY_ORDER_ID' AS SRC, PRIMARY_ORDER_ID AS ID_
+FROM   (SELECT PRIMARY_ORDER_ID FROM DGSTREAM.OB_ORDER_MATCH_GROUP
+        WHERE FINAL_ALLOC > 0 AND ITEM_SOURCE = 'SBB' AND PRIMARY_ORDER_ID IS NOT NULL
+        FETCH FIRST 10 ROWS ONLY)
 UNION ALL
-SELECT 'OB_ORDER_MATCH_GROUP', COUNT(*), COUNT(DRAFT_ALLOC), COUNT(SOFT_ALLOC), COUNT(ISN_ALLOC),
-       COUNT(RETENTION), COUNT(RATIONALE), COUNT(FX_CURRENCY), COUNT(ESG_TAG), COUNT(BND)
-FROM   DGSTREAM.OB_ORDER_MATCH_GROUP;
+SELECT 'order.ORDER_ID | EXTERNAL | DRB', ORDER_ID || ' | ' || EXTERNAL_ORDER_ID || ' | ' || MISC_DRB_INVESTOR_ORDER_ID
+FROM   (SELECT ORDER_ID, EXTERNAL_ORDER_ID, MISC_DRB_INVESTOR_ORDER_ID FROM DGSTREAM.OB_ORDER
+        WHERE (ITEM_SOURCE IS NULL OR UPPER(ITEM_SOURCE) <> 'RQ') AND FINAL_ALLOC IS NULL
+        FETCH FIRST 10 ROWS ONLY);
