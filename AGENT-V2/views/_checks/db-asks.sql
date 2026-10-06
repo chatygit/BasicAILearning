@@ -24,43 +24,70 @@
 -- Sections D-ECM / D-DCM are unchanged by this batch.
 
 -- ===========================================================================
--- U. CROSS-BANK MATCH GROUPS (UAT). T showed the orphaned SBB allocations are
--- the volume-load deals (Pembina 23,930 groups, Air France-KLM 6,010, the
--- Apple / Microsoft loads of Nov-2024) — not a feed gap. What remains is
--- ~3k ISN / DRB / GSP / GB allocated groups on real deals that DO have other
--- orders: the group's PRIMARY_ORDER_ID is probably another bank's order and
--- OUR order sits in REF_SOURCE_SECONDARY_ORDER_LIST. Two statements.
+-- V. SECONDARY LIST = EXTERNAL ORDER IDS (UAT). U1: the list is comma-
+-- separated 8-digit ids ('16581936,16581488') — the shape of OB_ORDER.
+-- EXTERNAL_ORDER_ID, not ORDER_ID — and ISN_ALLOC equals FINAL_ALLOC. U2:
+-- zero matches by ORDER_ID, as that predicts. Three statements decide
+-- whether a second match on EXTERNAL_ORDER_ID recovers the ~3.2k groups.
 -- ===========================================================================
 
--- U1. What the secondary list looks like (format, delimiter) on ten such
---     groups, with the per-source allocation columns beside FINAL_ALLOC.
-SELECT MG.ITEM_SOURCE, MG.PRIMARY_ORDER_ID, MG.REF_SOURCE_SECONDARY_ORDER_LIST,
-       MG.FINAL_ALLOC, MG.GB_ALLOC, MG.ISN_ALLOC
-FROM   DGSTREAM.OB_ORDER_MATCH_GROUP MG
-WHERE  MG.FINAL_ALLOC > 0 AND MG.PRIMARY_ORDER_ID IS NOT NULL AND MG.ITEM_SOURCE <> 'SBB'
-AND    NOT EXISTS (SELECT 1 FROM DGSTREAM.OB_ORDER O WHERE O.ORDER_ID = MG.PRIMARY_ORDER_ID)
-AND    MG.REF_SOURCE_SECONDARY_ORDER_LIST IS NOT NULL
-FETCH FIRST 10 ROWS ONLY;
-
--- U2. Split those groups' secondary lists and look the ids up in OB_ORDER:
---     how many orphaned groups contain one of OUR orders. (Generic delimiter
---     class — commas, pipes, semicolons, spaces, brackets, quotes.)
+-- V1. U2 again, joined on EXTERNAL_ORDER_ID.
 WITH G AS (
-    SELECT MG.ORDER_GROUP_ID, MG.REF_SOURCE_SECONDARY_ORDER_LIST AS L
+    SELECT MG.ORDER_GROUP_ID, MG.ROOT_ID, MG.PARENT_ID, MG.FINAL_ALLOC,
+           MG.REF_SOURCE_SECONDARY_ORDER_LIST AS L
     FROM   DGSTREAM.OB_ORDER_MATCH_GROUP MG
     WHERE  MG.FINAL_ALLOC > 0 AND MG.PRIMARY_ORDER_ID IS NOT NULL AND MG.ITEM_SOURCE <> 'SBB'
     AND    NOT EXISTS (SELECT 1 FROM DGSTREAM.OB_ORDER O WHERE O.ORDER_ID = MG.PRIMARY_ORDER_ID)
     AND    MG.REF_SOURCE_SECONDARY_ORDER_LIST IS NOT NULL
 ), X AS (
-    SELECT ORDER_GROUP_ID,
-           TRIM(REGEXP_SUBSTR(L, '[^,|; \[\]"]+', 1, LEVEL)) AS SEC_ID
+    SELECT ORDER_GROUP_ID, ROOT_ID, PARENT_ID, FINAL_ALLOC,
+           TRIM(REGEXP_SUBSTR(L, '[^,|; ]+', 1, LEVEL)) AS SEC_ID
     FROM   G
-    CONNECT BY LEVEL <= REGEXP_COUNT(L, '[^,|; \[\]"]+')
+    CONNECT BY LEVEL <= REGEXP_COUNT(L, '[^,|; ]+')
            AND PRIOR ORDER_GROUP_ID = ORDER_GROUP_ID
            AND PRIOR SYS_GUID() IS NOT NULL
 )
-SELECT COUNT(DISTINCT X.ORDER_GROUP_ID) AS ORPHANED_GROUPS_WITH_A_LIST,
+SELECT COUNT(DISTINCT X.ORDER_GROUP_ID) AS ORPHANED_GROUPS,
        COUNT(DISTINCT CASE WHEN O.ORDER_ID IS NOT NULL THEN X.ORDER_GROUP_ID END) AS GROUPS_NAMING_OUR_ORDER,
-       COUNT(DISTINCT O.ORDER_ID) AS OUR_ORDERS_FOUND
+       COUNT(DISTINCT O.ORDER_ID) AS OUR_ORDERS_FOUND,
+       COUNT(DISTINCT CASE WHEN O.ORDER_ID IS NOT NULL AND O.ROOT_ID = X.ROOT_ID THEN O.ORDER_ID END) AS SAME_DEAL,
+       COUNT(DISTINCT CASE WHEN O.ORDER_ID IS NOT NULL AND O.FINAL_ALLOC IS NOT NULL THEN O.ORDER_ID END) AS ALREADY_ALLOCATED_ON_ORDER,
+       COUNT(DISTINCT CASE WHEN O.ORDER_ID IS NOT NULL
+                            AND (O.ITEM_SOURCE IS NULL OR UPPER(O.ITEM_SOURCE) <> 'RQ')
+                            AND (O.STATUS IS NULL OR UPPER(O.STATUS) NOT IN ('DELETED', 'CANCELLED'))
+                           THEN O.ORDER_ID END) AS IN_SCOPE
 FROM   X
-LEFT JOIN DGSTREAM.OB_ORDER O ON O.ORDER_ID = X.SEC_ID;
+LEFT JOIN DGSTREAM.OB_ORDER O ON O.EXTERNAL_ORDER_ID = X.SEC_ID;
+
+-- V2. Is EXTERNAL_ORDER_ID a usable key? Population and uniqueness within a
+--     deal / tranche on the non-RQ book.
+SELECT COUNT(*) AS ORDERS_,
+       COUNT(EXTERNAL_ORDER_ID) AS WITH_EXTERNAL_ID,
+       COUNT(DISTINCT ROOT_ID || '~' || PARENT_ID || '~' || EXTERNAL_ORDER_ID) AS DISTINCT_KEYS,
+       COUNT(DISTINCT ORDER_ID) AS DISTINCT_ORDERS
+FROM   DGSTREAM.OB_ORDER
+WHERE  (ITEM_SOURCE IS NULL OR UPPER(ITEM_SOURCE) <> 'RQ');
+
+-- V3. Across ALL allocated groups (not just the orphaned ones): how many
+--     in-scope orders would the external-id match reach that the primary-id
+--     match does not — the size of the second fallback.
+WITH G AS (
+    SELECT MG.ORDER_GROUP_ID, MG.ROOT_ID, MG.PARENT_ID, MG.PRIMARY_ORDER_ID, MG.FINAL_ALLOC,
+           MG.REF_SOURCE_SECONDARY_ORDER_LIST AS L
+    FROM   DGSTREAM.OB_ORDER_MATCH_GROUP MG
+    WHERE  MG.FINAL_ALLOC > 0 AND MG.REF_SOURCE_SECONDARY_ORDER_LIST IS NOT NULL
+), X AS (
+    SELECT ORDER_GROUP_ID, ROOT_ID, PARENT_ID, PRIMARY_ORDER_ID,
+           TRIM(REGEXP_SUBSTR(L, '[^,|; ]+', 1, LEVEL)) AS SEC_ID
+    FROM   G
+    CONNECT BY LEVEL <= REGEXP_COUNT(L, '[^,|; ]+')
+           AND PRIOR ORDER_GROUP_ID = ORDER_GROUP_ID
+           AND PRIOR SYS_GUID() IS NOT NULL
+)
+SELECT COUNT(DISTINCT O.ORDER_ID) AS ORDERS_REACHED_BY_EXTERNAL_ID,
+       COUNT(DISTINCT CASE WHEN O.ORDER_ID <> X.PRIMARY_ORDER_ID THEN O.ORDER_ID END) AS NOT_THE_PRIMARY,
+       COUNT(DISTINCT CASE WHEN O.ORDER_ID <> X.PRIMARY_ORDER_ID AND O.FINAL_ALLOC IS NULL THEN O.ORDER_ID END) AS NEW_ALLOCATIONS
+FROM   X
+JOIN   DGSTREAM.OB_ORDER O ON O.EXTERNAL_ORDER_ID = X.SEC_ID AND O.ROOT_ID = X.ROOT_ID
+WHERE  (O.ITEM_SOURCE IS NULL OR UPPER(O.ITEM_SOURCE) <> 'RQ')
+AND    (O.STATUS IS NULL OR UPPER(O.STATUS) NOT IN ('DELETED', 'CANCELLED'));

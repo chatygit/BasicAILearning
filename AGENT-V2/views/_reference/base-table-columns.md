@@ -126,6 +126,10 @@ if the source schema changes.
 #   orders) looks like cross-bank matching — our order in REF_SOURCE_
 #   SECONDARY_ORDER_LIST, the primary another bank's; GB_ALLOC / ISN_ALLOC
 #   are per-source allocation columns (db-asks U).
+#   CENSUS U: REF_SOURCE_SECONDARY_ORDER_LIST = comma-separated 8-digit ids in
+#   the OB_ORDER.EXTERNAL_ORDER_ID shape ('16581936,16581488'); ISN_ALLOC ==
+#   FINAL_ALLOC on sampled rows, GB_ALLOC NULL; no ORDER_ID matches (U2).
+#   db-asks V tests the EXTERNAL_ORDER_ID match.
 
 | # | Column | Type | Len | Null |
 |---|---|---|---|---|

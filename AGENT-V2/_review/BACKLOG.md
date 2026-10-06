@@ -213,6 +213,14 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       ORDER_LIST — db-asks U1/U2. If confirmed: a second match on the split
       secondary list (and the per-source GB_ALLOC / ISN_ALLOC columns decide
       whose allocation it is). DEPLOY the order + deal views now regardless.
+      CENSUS U (UAT 2026-10-06): the secondary list is comma-separated 8-digit
+      ids ('16581936,16581488') = the EXTERNAL_ORDER_ID shape, not ORDER_ID;
+      ISN_ALLOC equals FINAL_ALLOC on every sampled row, GB_ALLOC NULL; U2
+      found 0 of 3,184 orphaned groups by ORDER_ID, as that predicts. db-asks
+      V1-V3 test the external-id match and size the second fallback (orders
+      reached by external id that are not the primary and have no allocation
+      of their own). If it pays: a small exploded block (group → external id)
+      keyed (ROOT_ID, PARENT_ID, EXTERNAL_ORDER_ID) as a third NVL source.
 NOTE 2026-10-05: views/_deploy-check.sql was rewritten (738 → ~330 lines) with
 rows labelled by section (A01-A12, B01-B14, C01-C09, D01-D12, E1-E5, K1-K5); the
 historical row numbers quoted in older items below (7/8/9, 15, 21/21b, 22-30)
