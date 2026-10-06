@@ -320,9 +320,8 @@ SELECT 'D09. DCM order statuses in scope only (accepted/booked/updated/new)', 'Y
        CASE WHEN dcm_out_of_scope = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_out_of_scope = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT 'D10. no NULL-status DCM orders (the RQ load is gone)', 'Y',
-       CASE WHEN dcm_null_status = 0 THEN 'Y' ELSE 'N' END,
-       CASE WHEN dcm_null_status = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+SELECT 'D10. NULL-status DCM orders (INFO — kept by the NULL-safe filter; UAT 0 because every one was RQ)', '(info)',
+       TO_CHAR(dcm_null_status) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
 UNION ALL
 SELECT 'D11. DCM orders (INFO — UAT ~1.25M after the exclusion)', '(info)',
        TO_CHAR(rows_), 'INFO' FROM agg

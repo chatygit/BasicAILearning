@@ -432,10 +432,13 @@ LEFT JOIN (
                     FROM DGSTREAM.OB_ORDER_MATCH_GROUP MG
                     WHERE MG.FINAL_ALLOC IS NOT NULL
                       AND MG.REF_SOURCE_SECONDARY_ORDER_LIST IS NOT NULL
+                      AND MG.ROOT_ID IS NOT NULL AND MG.PARENT_ID IS NOT NULL
                 ) Q
                 WHERE Q.RN_ = 1
             ) G
             CONNECT BY LEVEL <= REGEXP_COUNT(G.L, '[^,|; ]+')
+                   AND PRIOR G.ROOT_ID = G.ROOT_ID
+                   AND PRIOR G.PARENT_ID = G.PARENT_ID
                    AND PRIOR G.ORDER_GROUP_ID = G.ORDER_GROUP_ID
                    AND PRIOR SYS_GUID() IS NOT NULL
         ) X

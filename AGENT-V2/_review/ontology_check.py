@@ -1731,12 +1731,15 @@ check(has(ORDER, "NULL = no allocation recorded"),
 # holds EXTERNAL_ORDER_IDs and reaches 1,983 more in-scope orders; the
 # exploded list is GROUP BY'd on (ROOT_ID, PARENT_ID, SEC_ID) so an order can
 # never multiply. Windows keyed on deal / tranche so a deal id pushes in.
+# The CONNECT BY connects on ALL THREE keys (PR bot 2026-10-06: on ORDER_GROUP_ID
+# alone a repeated group id would splice tokens across deals / tranches).
 for _vf in ("vw_order_detail.sql", "vw_deal_summary.sql"):
     _t = text(ROOT / "views" / _vf)
     check("DGSTREAM.OB_ORDER_MATCH_GROUP MG" in _t
           and "NVL(MG.FINAL_ALLOC, NVL(MS.FINAL_ALLOC, O.FINAL_ALLOC))" in _t
           and "MS.SEC_ID = O.EXTERNAL_ORDER_ID" in _t
           and "GROUP BY X.ROOT_ID, X.PARENT_ID, X.SEC_ID" in _t
+          and "AND PRIOR G.ROOT_ID = G.ROOT_ID" in _t and "AND PRIOR G.PARENT_ID = G.PARENT_ID" in _t
           and "PARTITION BY MG.ROOT_ID, MG.PARENT_ID, MG.PRIMARY_ORDER_ID" in _t
           and "MG.PRIMARY_ORDER_ID = O.ORDER_ID" in _t,
           f"[alloc] {_vf}: the DCM allocation no longer comes from OB_ORDER_MATCH_GROUP "

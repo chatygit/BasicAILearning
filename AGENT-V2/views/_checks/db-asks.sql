@@ -23,8 +23,8 @@
 -- views' column counts 43 / 89 / 65), B-ECM (B08), B-DCM (B14), C (C08 / C09).
 -- Sections D-ECM / D-DCM are unchanged by this batch.
 
--- BATCH C.1 IS CLEARED TO DEPLOY (census R-V, UAT, 2026-10-06): DCM allocation
--- = NVL(primary match group, secondary-list match group by EXTERNAL_ORDER_ID,
--- the order's own). Deploy vw_order_detail + vw_deal_summary (tranche
--- unchanged), then views/_deploy-check.sql: A0, A01 / A03, D-DCM (D13 = the
--- allocated count; expect ~196k + 5.7k + 2.0k on UAT) and B-DCM-2 (B11).
+-- BATCH C.1 DEPLOYED AND VERIFIED (2026-10-06 11:51: A0, A 12/12, D-DCM —
+-- D13 204,513 allocated DCM orders of 807,095). ONE MORE DEPLOY of the same
+-- two views (PR bot, same day): the secondary-list CONNECT BY now connects on
+-- deal + tranche + group, not the group id alone. After it: A0, D-DCM (D13
+-- must still read 204,513 here) and, on UAT only, B-DCM-2 (row B11) once.
