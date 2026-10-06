@@ -169,6 +169,20 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whose column is also in dimensions (0 rows by construction).
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+- [ ] BATCH C.1 — DCM ALLOCATION FROM THE MATCH GROUP (user 2026-10-06, in
+      repo, undeployed): OB_ORDER.FINAL_ALLOC is not populated for DCM; the
+      allocation is OB_ORDER_MATCH_GROUP.FINAL_ALLOC via PRIMARY_ORDER_ID.
+      Order view DCM branch + deal view OC block read NVL(group, order) from a
+      deduped group block keyed (ROOT_ID, PARENT_ID, PRIMARY_ORDER_ID). Every
+      DCM allocation answer today reads the sparse order column (~196k of
+      1.3M) — top-investor-by-allocation and fill-rate asks on DCM are wrong
+      until this deploys. Sequence: db-asks R1-R3 (R4 optional) → deploy
+      vw_order_detail + vw_deal_summary → A0 + D-DCM (D13 = allocated count)
+      + B11 on UAT. Open: group STATUS filter (R1), whether draft / soft / ISN
+      allocation, retention, rationale, B&D need the same fallback (R4), and
+      whether the order's own FINAL_ALLOC ever disagrees with the group (R3).
+      Corrects the L3 reading in the 2026-09-29 note: DCM NULLs were 'stored
+      elsewhere', not 'not allocated'.
 NOTE 2026-10-05: views/_deploy-check.sql was rewritten (738 → ~330 lines) with
 rows labelled by section (A01-A12, B01-B14, C01-C09, D01-D12, E1-E5, K1-K5); the
 historical row numbers quoted in older items below (7/8/9, 15, 21/21b, 22-30)

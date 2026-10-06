@@ -1724,6 +1724,19 @@ check("NVL(O.PRIVATE_ALLOC, 0)" not in _ORDER_VIEW and "NVL(O.FINAL_ALLOC, 0)" n
       "'no allocation recorded' reads as '0 shares' (PO 2026-09-29 item 2)")
 check(has(ORDER, "NULL = no allocation recorded"),
       "[units] order card: order_allocation lost the NULL-vs-0 reading")
+# DCM ALLOCATION LIVES ON THE MATCH GROUP (user 2026-10-06): OB_ORDER.FINAL_ALLOC
+# is not populated for DCM; OB_ORDER_MATCH_GROUP.FINAL_ALLOC, matched through
+# PRIMARY_ORDER_ID, is the allocation. Both views read NVL(group, order), with
+# the window keyed (ROOT_ID, PARENT_ID, PRIMARY_ORDER_ID) so a deal id pushes in.
+for _vf in ("vw_order_detail.sql", "vw_deal_summary.sql"):
+    _t = text(ROOT / "views" / _vf)
+    check("DGSTREAM.OB_ORDER_MATCH_GROUP MG" in _t
+          and "NVL(MG.FINAL_ALLOC, O.FINAL_ALLOC)" in _t
+          and "PARTITION BY MG.ROOT_ID, MG.PARENT_ID, MG.PRIMARY_ORDER_ID" in _t
+          and "MG.PRIMARY_ORDER_ID = O.ORDER_ID" in _t,
+          f"[alloc] {_vf}: the DCM allocation no longer comes from OB_ORDER_MATCH_GROUP "
+          f"via PRIMARY_ORDER_ID (or the window lost its deal/tranche keys)")
+check(has(ORDER, "match group"), "[alloc] order card does not say where a DCM allocation comes from")
 check(has(SKILL, "TABLE CELLS ARE BARE NUMBERS") and has(AGENTS, "cells are bare numbers"),
       "[units] SKILL/agents lost the bare-cell rule — units go behind every "
       "value in the rows again (PO 2026-09-29 item 3)")
@@ -2865,7 +2878,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 65_962,
+    ONT / "capital_markets_order.yaml": 66_176,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 90_956,

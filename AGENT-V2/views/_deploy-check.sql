@@ -299,7 +299,8 @@ WITH agg AS (
          COUNT(PRODUCT_CLASS) AS dcm_class,
          SUM(CASE WHEN UPPER(ORDER_STATUS) NOT IN ('ACCEPTED', 'BOOKED', 'UPDATED', 'NEW') THEN 1 ELSE 0 END) AS dcm_out_of_scope,
          COUNT(CASE WHEN ORDER_STATUS IS NULL THEN 1 END) AS dcm_null_status,
-         COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS dcm_alloc_null
+         COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS dcm_alloc_null,
+         COUNT(CASE WHEN ORDER_ALLOCATION > 0 THEN 1 END) AS dcm_allocated
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'DCM'
 )
@@ -328,6 +329,9 @@ SELECT 'D11. DCM orders (INFO — UAT ~1.25M after the exclusion)', '(info)',
 UNION ALL
 SELECT 'D12. DCM orders with no allocation recorded (INFO — NULL kept since 2026-09-29)', '(info)',
        TO_CHAR(dcm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
+UNION ALL
+SELECT 'D13. DCM orders with an allocation > 0 (INFO — match-group source since 2026-10-06; OB_ORDER alone gave ~196k raw)', '(info)',
+       TO_CHAR(dcm_allocated) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
 -- E. THE OTHER FIVE VIEWS — grain only, one scan each.

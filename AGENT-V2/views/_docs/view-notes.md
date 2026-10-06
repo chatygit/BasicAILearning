@@ -905,3 +905,18 @@ found). Known shapes recorded in the cards: DCM flags are 'Y'/NULL or
 'true'/'false'/NULL, DCM issuer country is an ISO-2 code while ECM stores
 names, EXCHANGE on DCM is free text, OFFERING_FORMAT is '144A only' or
 NULL. SFC_ROLE is a Hong Kong SFC capacity, not Citi's role.
+
+## ADDENDUM 16 — 2026-10-06 DCM allocation comes from the match group
+User: OB_ORDER.FINAL_ALLOC is not populated for DCM — the allocation sits on
+OB_ORDER_MATCH_GROUP.FINAL_ALLOC, matched through PRIMARY_ORDER_ID (matched
+orders share one allocation, carried by the group's primary order). This is
+why census L3 saw FINAL_ALLOC NULL on 1.1M of 1.3M non-RQ DCM orders: not
+"not allocated" but "stored elsewhere". Order view (DCM branch) and deal view
+(OC block) now LEFT JOIN a deduped group block — latest DG_VERSION per
+(ROOT_ID, PARENT_ID, PRIMARY_ORDER_ID), joined on all three so a deal id
+pushes into the window (lever B) — and read NVL(MG.FINAL_ALLOC,
+O.FINAL_ALLOC). No status filter on the group yet (census R1 names the
+vocabulary). Deploy order + deal views; deploy-check D13 shows the allocated
+count (OB_ORDER alone gave ~196k raw). Census R2/R3 confirm coverage and
+precedence; R4 says whether draft / soft / ISN allocation, retention,
+rationale and B&D also live on the group (they would get the same fallback).

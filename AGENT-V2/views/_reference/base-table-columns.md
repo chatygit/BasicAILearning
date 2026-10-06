@@ -97,6 +97,12 @@ if the source schema changes.
 | 82 | DG_EVENT_ID | VARCHAR2 | 240 | Y |
 
 ### OB_ORDER_MATCH_GROUP (61 columns)
+# THE DCM ALLOCATION TABLE (user 2026-10-06): OB_ORDER.FINAL_ALLOC is not
+# populated for DCM; matched orders share one allocation carried by the
+# group's PRIMARY_ORDER_ID — FINAL_ALLOC, DRAFT/SOFT/ISN_ALLOC, RETENTION,
+# RATIONALE, BND, ESG_TAG, INVESTOR_CLASSIFICATION all live here too.
+# REF_SOURCE_SECONDARY_ORDER_LIST = the other orders in the group. Views
+# read NVL(group.FINAL_ALLOC, order.FINAL_ALLOC) since batch C.1.
 
 | # | Column | Type | Len | Null |
 |---|---|---|---|---|
