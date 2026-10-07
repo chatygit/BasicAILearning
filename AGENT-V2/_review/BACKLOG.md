@@ -33,6 +33,13 @@ refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
   K7 regression = no handover.
 
 ## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
+- [ ] ROUTING (user 2026-10-07): bank / broker participation asks were routed
+      to the Wallet agent by the root. agents.yaml description rewritten to
+      claim syndicate / broker participation, roles, B&D, Citi solo, per-deal
+      fee TERMS, deal class and bond features, and to narrow the wallet
+      exclusion to wallet-share / revenue analytics ("which banks were on a
+      deal is NOT a wallet question"). Promote agents.yaml by hand (PROD
+      freeze allows it); verify with QA 63. Gate [routing] pins.
 - [ ] UAT run 5 after the NEXT SERVER PUSH (the matrix examples + disambiguation
       hint ride it): 36 (TC1, ⚡ args again), 34 (REGULAR orders — must carry
       indication/allocation/unit/Security), 24, 35, 33 (a convertible deal).
@@ -169,6 +176,16 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whose column is also in dimensions (0 rows by construction).
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+- [ ] ECM ORDER GRAIN (D01 FAIL on UAT 2026-10-07; census W): a deal with
+      two ECM transaction records (UAT: the PerfAuto deal 85AA3193, 32
+      orders) appears once per transaction in the order view — the OPUS
+      branch joins T on deal id (T is one row per deal × transaction since the
+      ORA-04036 fix) and TT on T's transaction + tranche id, so the second
+      transaction yields a row with NULL tranche fields. Fix (after db-asks
+      AA): key TT on the tranche id alone (AA1 must show the id unique) and
+      keep ONE transaction per deal in T (prefer the one that owns tranches,
+      then the latest) — orders keep their tranche fields whichever
+      transaction owns them. Deal view / tranche view unaffected.
 - [ ] IPREO PRODUCT_TYPE FROM securityType (defect item 6, 2026-10-07):
       the tranche view's Ipreo branch sets PRODUCT_TYPE = TPD.EQUITY_TYPE (the
       deal's equity type); the OPUS branch uses SECURITY_TYPE_NAME. Deploy-
@@ -179,6 +196,10 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       TPD.EQUITY_TYPE)) or IPREO_PRODUCT.SEC_TYPE_CD via RT.DEFAULT_PRD_ID
       (vocabulary COMMON / BND / PFD / CU / ADR/ADS / EU / ORD SHR / GDR/GDS…,
       census N2). Tranche view only; A02 count unchanged.
+      CENSUS X (2026-10-07): the mirror has NO security-type column; SEC_TYPE_CD
+      via DEFAULT_PRD_ID covers every Ipreo tranche → BUILT: PRODUCT_TYPE =
+      NVL(IP.SEC_TYPE_CD, TPD.EQUITY_TYPE) on the Ipreo branch; tranche card
+      lists the codes. Deploy the tranche view; C11 then PASSES.
 - [ ] IPREO ISSUER_NAME (defect item 3, 2026-10-07: "issuer_name is a copy
       of deal_name"): true by construction on the Ipreo deal / tranche /
       order branches (deal name with the tranche parenthetical stripped —
@@ -189,6 +210,9 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       (Y1), the ticker → party-master route (Y2), else DealLogic at load
       time (Iceberg). Until one lands the deal card keeps saying the Ipreo
       issuer is the deal name.
+      CENSUS Y (2026-10-07): the mirror has sector / country / ticker only and
+      the ticker is empty on all 19,654 deals; OPUS_BASE routes excluded by
+      the user → NO source. CLOSED as 'by design, disclosed'; B16 stays INFO.
 - [ ] IPREO BILLED_BY AS A NAME (defect 2026-10-07: "for BND orders the full
       broker name is displayed, for Ipreo orders only the broker code"): the
       order view's Ipreo branch projects RO.BILLED_BY_BRK_CD (a code); the
@@ -198,6 +222,11 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       syndicate table (BROKER_CODE → SYNDICATE_MEMBER_NAME, if one-to-one),
       or a name column on the Ipreo source (Z3); render NVL(name, code) —
       or 'Name (CODE)' to match the tranche view's 'Citigroup (CITIUSA)'.
+      CENSUS Z (2026-10-07): no name on IPREO_ORDER; the OPUS dictionary is
+      not one-to-one and holds junk on UAT (CITIUSA → 'RANDOM_UNIQUE'). User:
+      codes are fine. BUILT: Citi codes render 'Citigroup (CODE)' on the
+      order view's Ipreo branch (same positive list as the tranche view);
+      D14 is INFO. CLOSED.
 - [ ] BATCH C.1 — DCM ALLOCATION FROM THE MATCH GROUP (user 2026-10-06, in
       repo, undeployed): OB_ORDER.FINAL_ALLOC is not populated for DCM; the
       allocation is OB_ORDER_MATCH_GROUP.FINAL_ALLOC via PRIMARY_ORDER_ID.

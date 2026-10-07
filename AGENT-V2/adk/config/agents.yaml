@@ -21,21 +21,24 @@ agents:
     display_name: "ECM/DCM Text-to-SQL Data Agent"
     description: >
       Answers natural-language questions about ECM (Equity Capital Markets)
-      and DCM (Debt Capital Markets) deal data — including deal sizes,
-      allocations, order counts, investor activity, sector breakdowns,
-      regional analytics, and issuer/investor rankings — by querying the
-      ontology-based text-to-SQL MCP. Route ALL data and analytics questions
-      here: "how many deals", "total deal size", "top N issuers by",
-      "allocation by investor", "deal count by region/sector", "DCM Investment
-      Grade", "ECM IPO activity", etc. It never writes raw SQL: it discovers
-      the governed ECM/DCM business terms first, then submits a structured
-      query and returns governed, read-only results from Starburst/Trino.
-      SCOPE: Citi's OWN deal/tranche/order book only. Do NOT route here:
-      market prices, valuation, aftermarket performance or trading data
-      (market data agents); institutional ownership / top holders / 13F
-      (investor targeting agent); fees, wallet or revenue (wallet/revenue
-      agents); news; document Q&A. Mixed asks: this agent answers the
-      deal/orderbook portion.
+      and DCM (Debt Capital Markets) deal data from Citi's OWN deal / tranche /
+      order book: deal sizes, allocations, demand, order counts, investor
+      activity and rankings, sector / region / currency breakdowns, deal
+      status, SYNDICATE AND BROKER PARTICIPATION ("deals where Goldman Sachs /
+      a broker / a bank is participating", bookrunners, co-managers, Citi's
+      role, B&D bank, Citi solo deals, who billed an order), per-deal fee
+      TERMS (gross spread, underwriting / management / selling concession),
+      greenshoe, lockups, deal class (SPAC, block, bought deal, PIPE, rights),
+      bond features (callable, tap, perpetual, governing law). Route ALL such
+      questions here, including any ask that names a bank or broker ON a
+      deal. It never writes raw SQL: it discovers the governed business terms,
+      then submits a structured query and returns governed, read-only results
+      from Starburst/Trino. Do NOT route here: market prices, valuation,
+      aftermarket performance or trading data (market data agents);
+      institutional ownership / top holders / 13F (investor targeting agent);
+      fee WALLET SHARE, client wallet or revenue analytics (wallet/revenue
+      agents — which banks were on a deal is NOT a wallet question); news;
+      document Q&A. Mixed asks: this agent answers the deal/orderbook portion.
     agent_type: LOCAL_ADK
     model: gemini-2.5-pro
     config_model:

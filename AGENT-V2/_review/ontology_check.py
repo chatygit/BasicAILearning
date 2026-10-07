@@ -1745,6 +1745,17 @@ for _vf in ("vw_order_detail.sql", "vw_deal_summary.sql"):
           f"[alloc] {_vf}: the DCM allocation no longer comes from OB_ORDER_MATCH_GROUP "
           f"via PRIMARY_ORDER_ID (or the window lost its deal/tranche keys)")
 check(has(ORDER, "match group"), "[alloc] order card does not say where a DCM allocation comes from")
+# DEFECT LIST 2026-10-07 (Ipreo branches): product_type must be the product's
+# securityType (IPREO_PRODUCT.SEC_TYPE_CD via the default product), never the
+# deal's equity type; Citi broker CODES on Ipreo orders render 'Citigroup (CODE)'
+# exactly as the tranche view's syndicate list does (no name exists at source).
+check("MAX(SEC_TYPE_CD) AS SEC_TYPE_CD" in text(ROOT / "views" / "vw_tranche_summary.sql")
+      and "NVL(PP.SEC_TYPE_CD, TPD.EQUITY_TYPE) AS PRODUCT_TYPE" in text(ROOT / "views" / "vw_tranche_summary.sql"),
+      "[ipreo] vw_tranche_summary.sql: Ipreo PRODUCT_TYPE is the deal's equity type again (defect item 6)")
+check("THEN 'Citigroup (' || RO.BILLED_BY_BRK_CD || ')' ELSE RO.BILLED_BY_BRK_CD END AS BILLED_BY" in text(ROOT / "views" / "vw_order_detail.sql"),
+      "[ipreo] vw_order_detail.sql: Ipreo BILLED_BY lost the Citigroup (CODE) rendering")
+check(has(TRANCHE, "Ipreo security CODE") and has(ORDER, "Citigroup (CITIUSA)"),
+      "[ipreo] the tranche / order cards no longer describe the Ipreo product-type codes / broker-code rendering")
 check(has(SKILL, "TABLE CELLS ARE BARE NUMBERS") and has(AGENTS, "cells are bare numbers"),
       "[units] SKILL/agents lost the bare-cell rule — units go behind every "
       "value in the rows again (PO 2026-09-29 item 3)")
@@ -2796,6 +2807,15 @@ check(has(SKILL, "DECIDES the product") and has(DEAL, "decides the product") and
       "[trap] the product-scoped-field-decides-the-product exception is gone — tenors + product in [ECM,DCM] is rejected")
 check(has(SKILL, "IN ONE deal or transaction"),
       "[trap] SKILL lost the §3 routing row for top-N investors in ONE deal/transaction (TC1)")
+# ROUTING (user 2026-10-07): "List top 10 deals where 'Goldman Sachs & Co. LLC'
+# broker is participating in 2026 for product 'ECM'" went to the Wallet agent —
+# our description claimed nothing about syndicate / broker participation and
+# told the root "fees, wallet or revenue" go elsewhere.
+check(has(AGENTS, "SYNDICATE AND BROKER PARTICIPATION") and has(AGENTS, "names a bank or broker ON a")
+      and has(AGENTS, "which banks were on a deal is NOT a wallet question"),
+      "[routing] agents.yaml description no longer claims bank / broker participation — the root sends it to the Wallet agent again")
+check(not has(AGENTS, "fees, wallet or revenue (wallet/revenue"),
+      "[routing] agents.yaml description disowns 'fees' wholesale again — per-deal fee terms are ours")
 check(has(AGENTS, "NEVER carry a unit parenthetical"),
       "[present] agents.yaml lost the header unit-parenthetical ban (ignored 6/6 from the SKILL alone)")
 _SUGG = text(ROOT / "app" / "bqs" / "suggestions.py")
@@ -2878,18 +2898,20 @@ check(has(SKILL, "An ORDER listing always projects `order_demand_qty`, `order_al
 # filter fields (deal_class, dcm_deal_class, size_unit, country_of_risk, DCM
 # call / tap / perpetual / governing-law flags, ECM primary / secondary shares,
 # last close, initial size, offer amount) — a conscious token spend, not drift.
+# 2026-10-07 ROUTING: agents.yaml cap raised by the bytes of the description rewrite
+# (the root routes on it; 'broker' asks were going to the Wallet agent).
 _SIZE_CAPS = {
     SKILL: 63_402,
-    AGENTS: 20_611,
+    AGENTS: 20_912,
     ONT / "capital_markets_deal.yaml": 58_544,
     ONT / "capital_markets_designation.yaml": 7_861,
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 66_176,
+    ONT / "capital_markets_order.yaml": 66_340,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
-    ONT / "capital_markets_tranche.yaml": 90_836,
+    ONT / "capital_markets_tranche.yaml": 90_964,
 }
 for _p, _cap in _SIZE_CAPS.items():
     _n = len(_p.read_bytes())

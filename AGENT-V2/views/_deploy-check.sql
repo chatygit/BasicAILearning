@@ -342,13 +342,9 @@ UNION ALL
 SELECT 'D05. ECM orders with no allocation recorded (INFO — NULL kept since 2026-09-29)', '(info)',
        TO_CHAR(ecm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
 UNION ALL
--- Defect item (2026-10-07): BILLED_BY shows a broker NAME on OPUS orders but
--- only a broker CODE on Ipreo orders. A code is short, upper-case, no spaces.
-SELECT 'D14. Ipreo ECM BILLED_BY is a broker name, not just a code', 'Y',
-       CASE WHEN ipreo_billed > 0 AND ipreo_billed_code = ipreo_billed THEN 'N' ELSE 'Y' END,
-       CASE WHEN ipreo_billed > 0 AND ipreo_billed_code = ipreo_billed THEN 'FAIL' ELSE 'PASS' END FROM agg
-UNION ALL
-SELECT 'D14b. BILLED_BY code-like / populated — OPUS then Ipreo (INFO)', '(info)',
+-- BILLED_BY is a broker NAME on OPUS orders and a broker CODE on Ipreo orders
+-- (no name exists at the Ipreo source — accepted). A code is short, upper-case.
+SELECT 'D14. BILLED_BY code-like / populated — OPUS then Ipreo (INFO — Ipreo has no broker name at source, codes accepted 2026-10-07; Citi codes render as Citigroup (CODE))', '(info)',
        TO_CHAR(opus_billed_code) || ' of ' || TO_CHAR(opus_billed) || ' OPUS; ' || TO_CHAR(ipreo_billed_code) || ' of ' || TO_CHAR(ipreo_billed) || ' Ipreo', 'INFO' FROM agg
 ORDER BY 1;
 

@@ -929,3 +929,18 @@ in-scope orders — so both views now read NVL(MG primary group, MS
 secondary-list group, O.FINAL_ALLOC): MS explodes the deduped allocated
 groups' lists (CONNECT BY) and GROUP BYs (ROOT_ID, PARENT_ID, SEC_ID) so an
 order can never multiply; the DCM order dedupe carries EXTERNAL_ORDER_ID.
+
+## ADDENDUM 17 — 2026-10-07 defect list: Ipreo product type and broker codes
+Three tester items, all on the Ipreo branches. (6) PRODUCT_TYPE had been the
+mirror's EQUITY_TYPE (the deal's equity type); the mirror has no security
+type, but IPREO_PRODUCT.SEC_TYPE_CD through the tranche's DEFAULT_PRD_ID
+covers every Ipreo tranche (COMMON 16,787, BND 828, PFD 492, CU 423, ADR/ADS
+355, EU 267, CSrN 259, ORD SHR 214 …) — now NVL(PP.SEC_TYPE_CD,
+TPD.EQUITY_TYPE); deploy-check C10 / C11 detect a product type that merely
+copies the equity type. (3) issuer_name = deal name on Ipreo stays: the
+mirror carries sector / country / ticker only, the ticker is empty on all
+19,654 deals, and OPUS_BASE routes are off limits — disclosed in the deal
+card; B15 / B16 measure the copy rate. (broker) BILLED_BY on Ipreo orders is
+the broker code (no name at source); Citi codes now render 'Citigroup
+(CODE)' like the tranche syndicate list; D14 is INFO. Deploy the tranche +
+order views; the deal view is unchanged by this addendum.
