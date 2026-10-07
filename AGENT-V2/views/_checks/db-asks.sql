@@ -23,8 +23,10 @@
 -- views' column counts 43 / 89 / 65), B-ECM (B08), B-DCM (B14), C (C08 / C09).
 -- Sections D-ECM / D-DCM are unchanged by this batch.
 
--- BATCH C.1 DEPLOYED AND VERIFIED (2026-10-06 11:51: A0, A 12/12, D-DCM —
--- D13 204,513 allocated DCM orders of 807,095). ONE MORE DEPLOY of the same
--- two views (PR bot, same day): the secondary-list CONNECT BY now connects on
--- deal + tranche + group, not the group id alone. After it: A0, D-DCM (D13
--- must still read 204,513 here) and, on UAT only, B-DCM-2 (row B11) once.
+-- VIEWS IN UAT (2026-10-07: batch C + C.1 + the CONNECT BY fix, all three
+-- views). UAT is where the INFO expectations were measured and where the
+-- agent runs, so run the WHOLE deploy check once, in file order: A0, A,
+-- B-ECM, B-DCM, B-DCM-2 (B11 — the one slow statement), C, D-ECM, D-DCM, E.
+-- Read: every PASS/FAIL row PASS; A01-A03 = 43 / 89 / 65; B08 / B14 / C08 /
+-- C09 (batch C populations); D13 (allocated DCM orders — own + match group).
+-- Nothing else is open on the views.

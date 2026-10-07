@@ -239,6 +239,8 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       on ORDER_GROUP_ID alone — now on ROOT_ID + PARENT_ID + ORDER_GROUP_ID,
       and groups without a deal / tranche key are dropped before the explode.
       Redeploy order + deal views; D13 must stay 204,513 on the same env.
+      ALL THREE VIEWS IN UAT 2026-10-07 (batch C + C.1 + CONNECT BY fix) —
+      full deploy check pending.
 NOTE 2026-10-05: views/_deploy-check.sql was rewritten (738 → ~330 lines) with
 rows labelled by section (A01-A12, B01-B14, C01-C09, D01-D12, E1-E5, K1-K5); the
 historical row numbers quoted in older items below (7/8/9, 15, 21/21b, 22-30)
