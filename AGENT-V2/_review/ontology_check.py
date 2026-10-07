@@ -1749,11 +1749,20 @@ check(has(ORDER, "match group"), "[alloc] order card does not say where a DCM al
 # securityType (IPREO_PRODUCT.SEC_TYPE_CD via the default product), never the
 # deal's equity type; Citi broker CODES on Ipreo orders render 'Citigroup (CODE)'
 # exactly as the tranche view's syndicate list does (no name exists at source).
-check("MAX(SEC_TYPE_CD) AS SEC_TYPE_CD" in text(ROOT / "views" / "vw_tranche_summary.sql")
+check("SELECT P.PRD_ID, P.OFFER_PX, P.SEC_TYPE_CD" in text(ROOT / "views" / "vw_tranche_summary.sql")
       and "NVL(PP.SEC_TYPE_CD, TPD.EQUITY_TYPE) AS PRODUCT_TYPE" in text(ROOT / "views" / "vw_tranche_summary.sql"),
       "[ipreo] vw_tranche_summary.sql: Ipreo PRODUCT_TYPE is the deal's equity type again (defect item 6)")
 check("THEN 'Citigroup (' || RO.BILLED_BY_BRK_CD || ')' ELSE RO.BILLED_BY_BRK_CD END AS BILLED_BY" in text(ROOT / "views" / "vw_order_detail.sql"),
       "[ipreo] vw_order_detail.sql: Ipreo BILLED_BY lost the Citigroup (CODE) rendering")
+# PR bot 2026-10-07: never splice columns from different DataGlobe versions —
+# whole-row dedupe per product (ROW_NUMBER), not independent MAX()es; and the
+# Citi code regex must take multi-digit suffixes (CITIUS10).
+check("PARTITION BY P.PRD_ID ORDER BY P.DG_VERSION DESC" in text(ROOT / "views" / "vw_tranche_summary.sql")
+      and "PARTITION BY F.PRD_ID ORDER BY" in text(ROOT / "views" / "vw_tranche_summary.sql"),
+      "[ipreo] vw_tranche_summary.sql: the product / fee blocks are back to independent MAX()es across versions")
+for _vf in ("vw_tranche_summary.sql", "vw_order_detail.sql"):
+    check("US[0-9]+|UKE" in text(ROOT / "views" / _vf) and "US[0-9]|UKE" not in text(ROOT / "views" / _vf),
+          f"[ipreo] {_vf}: the Citi code regex matches single-digit US suffixes only again")
 check(has(TRANCHE, "Ipreo security CODE") and has(ORDER, "Citigroup (CITIUSA)"),
       "[ipreo] the tranche / order cards no longer describe the Ipreo product-type codes / broker-code rendering")
 check(has(SKILL, "TABLE CELLS ARE BARE NUMBERS") and has(AGENTS, "cells are bare numbers"),

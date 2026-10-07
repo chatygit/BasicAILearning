@@ -200,6 +200,11 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       via DEFAULT_PRD_ID covers every Ipreo tranche → BUILT: PRODUCT_TYPE =
       NVL(IP.SEC_TYPE_CD, TPD.EQUITY_TYPE) on the Ipreo branch; tranche card
       lists the codes. Deploy the tranche view; C11 then PASSES.
+      PR BOT 2026-10-07 (accepted): the IPREO_PRODUCT and IPREO_PRODUCTFEE
+      blocks took independent MAX()es across DataGlobe versions — now whole-
+      row dedupes (product by DG_VERSION DESC; fee by ROWID until db-asks AB
+      confirms DG_VERSION there); Citi code regex US[0-9] → US[0-9]+ in both
+      views.
 - [ ] IPREO ISSUER_NAME (defect item 3, 2026-10-07: "issuer_name is a copy
       of deal_name"): true by construction on the Ipreo deal / tranche /
       order branches (deal name with the tranche parenthetical stripped —
