@@ -252,7 +252,8 @@ if the source schema changes.
 # EXCHANGE_LISTING_VENUE, TAKEDOWN_BANK, BD_BANK.
 # NOTE: MATURITY_DATE is VARCHAR2 (59) — confirms the text-maturity fact at
 # source, not just in the view.
-# VALUES (db-asks P1/P2/P5, UAT 2026-10-05, raw rows ~75,200 incl. versions):
+# VALUES (db-asks P1/P2/P5, 2026-10-05 — QA, not UAT: the UAT deploy check of
+#   2026-10-07 shows CALL_IND / IS_TAP non-NULL on every row; raw rows ~75,200):
 #   CALL_IND 'Y' 10,827 / NULL 64,373 (no 'N'); IS_TAP 'Y' 10,025 / NULL;
 #   IS_CONVERTIBLE 'Y' 9,828 / NULL; MAKE_WHOLE_CALLABLE 'true' 10,373 /
 #   'false' 34,191 / NULL 30,636; PERPETUAL_MATURITY 'true' 210 / 'false'

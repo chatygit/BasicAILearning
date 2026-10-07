@@ -169,6 +169,35 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whose column is also in dimensions (0 rows by construction).
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+- [ ] IPREO PRODUCT_TYPE FROM securityType (defect item 6, 2026-10-07):
+      the tranche view's Ipreo branch sets PRODUCT_TYPE = TPD.EQUITY_TYPE (the
+      deal's equity type); the OPUS branch uses SECURITY_TYPE_NAME. Deploy-
+      check C10 / C11 (+ C10b / C11b INFO) now test, per ECM source, that
+      PRODUCT_TYPE is not a copy of EQUITY_TYPE — C11 FAILS on today's view
+      by construction. Fix once db-asks X says which source exists: the
+      mirror's own security-type column (NVL(TPD.SECURITY_TYPE_NAME,
+      TPD.EQUITY_TYPE)) or IPREO_PRODUCT.SEC_TYPE_CD via RT.DEFAULT_PRD_ID
+      (vocabulary COMMON / BND / PFD / CU / ADR/ADS / EU / ORD SHR / GDR/GDS…,
+      census N2). Tranche view only; A02 count unchanged.
+- [ ] IPREO ISSUER_NAME (defect item 3, 2026-10-07: "issuer_name is a copy
+      of deal_name"): true by construction on the Ipreo deal / tranche /
+      order branches (deal name with the tranche parenthetical stripped —
+      the mirror gave us no issuer name, no GFCID). Deploy-check B15 (OPUS:
+      FAIL when the copy rate exceeds half — the cited OPUS deal 75078322 is
+      a sprint deal whose SOURCE issuer equals its name), B15b / B16 INFO.
+      Candidate sources, db-asks Y: an ISSUER_NAME_FROM_SOURCE on the mirror
+      (Y1), the ticker → party-master route (Y2), else DealLogic at load
+      time (Iceberg). Until one lands the deal card keeps saying the Ipreo
+      issuer is the deal name.
+- [ ] IPREO BILLED_BY AS A NAME (defect 2026-10-07: "for BND orders the full
+      broker name is displayed, for Ipreo orders only the broker code"): the
+      order view's Ipreo branch projects RO.BILLED_BY_BRK_CD (a code); the
+      OPUS branch's BILLEDBY_BROKER_CODE holds names on most rows. Deploy-
+      check D14 (FAIL while every populated Ipreo BILLED_BY is code-like) /
+      D14b. Fix after db-asks Z: a code → name dictionary from the OPUS
+      syndicate table (BROKER_CODE → SYNDICATE_MEMBER_NAME, if one-to-one),
+      or a name column on the Ipreo source (Z3); render NVL(name, code) —
+      or 'Name (CODE)' to match the tranche view's 'Citigroup (CITIUSA)'.
 - [ ] BATCH C.1 — DCM ALLOCATION FROM THE MATCH GROUP (user 2026-10-06, in
       repo, undeployed): OB_ORDER.FINAL_ALLOC is not populated for DCM; the
       allocation is OB_ORDER_MATCH_GROUP.FINAL_ALLOC via PRIMARY_ORDER_ID.
@@ -240,7 +269,12 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       and groups without a deal / tranche key are dropped before the explode.
       Redeploy order + deal views; D13 must stay 204,513 on the same env.
       ALL THREE VIEWS IN UAT 2026-10-07 (batch C + C.1 + CONNECT BY fix) —
-      full deploy check pending.
+      full check run: every row PASS except D01 (ECM order grain: rows >
+      distinct ORDER_ID on the ECM branches; passed on QA, so a UAT data
+      shape — same order id in both ECM sources, or under two tranches).
+      db-asks W1/W2 diagnose; no view change until then. UAT batch C
+      populations: deal class 19,170 / 41,093 ECM and 44,976 / 46,481 DCM;
+      DCM allocated orders 368,876 of 1,243,491 (D13).
 NOTE 2026-10-05: views/_deploy-check.sql was rewritten (738 → ~330 lines) with
 rows labelled by section (A01-A12, B01-B14, C01-C09, D01-D12, E1-E5, K1-K5); the
 historical row numbers quoted in older items below (7/8/9, 15, 21/21b, 22-30)

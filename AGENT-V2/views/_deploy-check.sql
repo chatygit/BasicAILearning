@@ -119,7 +119,13 @@ WITH agg AS (
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') AND ORDER_COUNT > 0 THEN 1 END) AS ecm_ipreo_ordered,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN LAST_PRICED END) AS ecm_ipreo_priced,
          COUNT(DEAL_CLASS) AS ecm_class,
-         COUNT(CASE WHEN SIZE_UNIT = 'bonds' THEN 1 END) AS ecm_bond_unit
+         COUNT(CASE WHEN SIZE_UNIT = 'bonds' THEN 1 END) AS ecm_bond_unit,
+         COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN ISSUER_NAME END) AS opus_issuer,
+         COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                     AND UPPER(TRIM(ISSUER_NAME)) = UPPER(TRIM(DEAL_NAME)) THEN 1 END) AS opus_issuer_eq_deal,
+         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN ISSUER_NAME END) AS ipreo_issuer,
+         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                     AND UPPER(TRIM(ISSUER_NAME)) = UPPER(TRIM(DEAL_NAME)) THEN 1 END) AS ipreo_issuer_eq_deal
   FROM DGSTREAM.VW_DEAL_SUMMARY
   WHERE PRODUCT = 'ECM'
 )
@@ -151,6 +157,21 @@ SELECT 'B07. Ipreo ECM deals with orders (INFO — 0 = OD key mismatch)', '(info
 UNION ALL
 SELECT 'B08. ECM deals with DEAL_CLASS / bonds unit (INFO — batch C; OPUS ~25.8k classed)', '(info)',
        TO_CHAR(ecm_class) || ' classed / ' || TO_CHAR(ecm_bond_unit) || ' bonds of ' || TO_CHAR(rows_), 'INFO' FROM agg
+UNION ALL
+-- Defect item 3 (2026-10-07): issuer_name must not be a copy of deal_name.
+-- OPUS: party master → orderbook issuer by GFCID → source issuer; a copy on
+-- more than half the deals = the source is filling issuer with the deal
+-- name. Ipreo: equal BY CONSTRUCTION today (deal name, tranche parenthetical
+-- stripped — the mirror has no issuer) until an Ipreo issuer source lands.
+SELECT 'B15. OPUS ECM issuer_name is not a copy of deal_name on most deals (item 3)', 'Y',
+       CASE WHEN opus_issuer > 0 AND opus_issuer_eq_deal * 2 > opus_issuer THEN 'N' ELSE 'Y' END,
+       CASE WHEN opus_issuer > 0 AND opus_issuer_eq_deal * 2 > opus_issuer THEN 'FAIL' ELSE 'PASS' END FROM agg
+UNION ALL
+SELECT 'B15b. OPUS ECM issuer_name equal to deal_name / populated (INFO)', '(info)',
+       TO_CHAR(opus_issuer_eq_deal) || ' of ' || TO_CHAR(opus_issuer), 'INFO' FROM agg
+UNION ALL
+SELECT 'B16. Ipreo ECM issuer_name equal to deal_name / populated (INFO — equal by construction until an issuer source lands)', '(info)',
+       TO_CHAR(ipreo_issuer_eq_deal) || ' of ' || TO_CHAR(ipreo_issuer), 'INFO' FROM agg
 ORDER BY 1;
 
 -- B-DCM. DEAL VIEW, DCM branch — one scan that touches NO order-book column,
@@ -222,7 +243,15 @@ WITH agg AS (
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN IS_TAP END) AS dcm_tap,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN GOVERNING_LAW END) AS dcm_law,
          COUNT(CASE WHEN PRODUCT = 'DCM' THEN EXCHANGE END) AS dcm_exchange,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN ISSUER_COUNTRY END) AS dcm_country
+         COUNT(CASE WHEN PRODUCT = 'DCM' THEN ISSUER_COUNTRY END) AS dcm_country,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRODUCT_TYPE END) AS opus_ptype,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                     AND UPPER(TRIM(PRODUCT_TYPE)) = UPPER(TRIM(EQUITY_TYPE)) THEN 1 END) AS opus_ptype_eq,
+         COUNT(DISTINCT CASE WHEN PRODUCT = 'ECM' AND NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRODUCT_TYPE END) AS opus_ptype_values,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRODUCT_TYPE END) AS ipreo_ptype,
+         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                     AND UPPER(TRIM(PRODUCT_TYPE)) = UPPER(TRIM(EQUITY_TYPE)) THEN 1 END) AS ipreo_ptype_eq,
+         COUNT(DISTINCT CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRODUCT_TYPE END) AS ipreo_ptype_values
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT 'C01. tranche grain (rows = PRODUCT+DEAL+TRANCHE)' AS check_, 'Y' AS expected_,
@@ -254,6 +283,24 @@ UNION ALL
 SELECT 'C08. ECM tranches: last close / primary shares / offer amount / initial size (INFO — batch C; raw UAT 27% / 72% / 78% / 80%)', '(info)',
        TO_CHAR(ecm_last_close) || ' / ' || TO_CHAR(ecm_primary) || ' / ' || TO_CHAR(ecm_offer_amt) || ' / ' || TO_CHAR(ecm_initial) || ' of ' || TO_CHAR(ecm_rows), 'INFO' FROM agg
 UNION ALL
+-- Defect item 6 (2026-10-07): product_type must come from the product's
+-- securityType, not the deal's equity type. If it is derived from equity
+-- type it EQUALS equity_type on every populated row; a real security type
+-- diverges on most rows and has a richer vocabulary.
+SELECT 'C10. OPUS ECM product_type is not a copy of equity_type (item 6)', 'Y',
+       CASE WHEN opus_ptype > 0 AND opus_ptype_eq = opus_ptype THEN 'N' ELSE 'Y' END,
+       CASE WHEN opus_ptype > 0 AND opus_ptype_eq = opus_ptype THEN 'FAIL' ELSE 'PASS' END FROM agg
+UNION ALL
+SELECT 'C10b. OPUS ECM product_type: equal to equity_type / populated / distinct values (INFO)', '(info)',
+       TO_CHAR(opus_ptype_eq) || ' equal of ' || TO_CHAR(opus_ptype) || ' populated, ' || TO_CHAR(opus_ptype_values) || ' distinct', 'INFO' FROM agg
+UNION ALL
+SELECT 'C11. Ipreo ECM product_type is not a copy of equity_type (item 6)', 'Y',
+       CASE WHEN ipreo_ptype > 0 AND ipreo_ptype_eq = ipreo_ptype THEN 'N' ELSE 'Y' END,
+       CASE WHEN ipreo_ptype > 0 AND ipreo_ptype_eq = ipreo_ptype THEN 'FAIL' ELSE 'PASS' END FROM agg
+UNION ALL
+SELECT 'C11b. Ipreo ECM product_type: equal to equity_type / populated / distinct values (INFO)', '(info)',
+       TO_CHAR(ipreo_ptype_eq) || ' equal of ' || TO_CHAR(ipreo_ptype) || ' populated, ' || TO_CHAR(ipreo_ptype_values) || ' distinct', 'INFO' FROM agg
+UNION ALL
 SELECT 'C09. DCM tranches: callable / tap / governing law / exchange / country (INFO — batch C; raw UAT ~14% / 13% / 13% / 13% / 27%)', '(info)',
        TO_CHAR(dcm_callable) || ' / ' || TO_CHAR(dcm_tap) || ' / ' || TO_CHAR(dcm_law) || ' / ' || TO_CHAR(dcm_exchange) || ' / ' || TO_CHAR(dcm_country) || ' of ' || TO_CHAR(dcm_rows), 'INFO' FROM agg
 ORDER BY 1;
@@ -267,7 +314,13 @@ WITH agg AS (
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN 1 END) AS ecm_ipreo_rows,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                      AND ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS') THEN 1 END) AS ecm_ipreo_excluded,
-         COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS ecm_alloc_null
+         COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS ecm_alloc_null,
+         COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN BILLED_BY END) AS opus_billed,
+         COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                     AND REGEXP_LIKE(BILLED_BY, '^[A-Z0-9]{2,10}$') THEN 1 END) AS opus_billed_code,
+         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN BILLED_BY END) AS ipreo_billed,
+         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
+                     AND REGEXP_LIKE(BILLED_BY, '^[A-Z0-9]{2,10}$') THEN 1 END) AS ipreo_billed_code
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'ECM'
 )
@@ -288,6 +341,15 @@ SELECT 'D04. ECM orders with a share-equivalent indication (INFO — IOI rebuild
 UNION ALL
 SELECT 'D05. ECM orders with no allocation recorded (INFO — NULL kept since 2026-09-29)', '(info)',
        TO_CHAR(ecm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
+UNION ALL
+-- Defect item (2026-10-07): BILLED_BY shows a broker NAME on OPUS orders but
+-- only a broker CODE on Ipreo orders. A code is short, upper-case, no spaces.
+SELECT 'D14. Ipreo ECM BILLED_BY is a broker name, not just a code', 'Y',
+       CASE WHEN ipreo_billed > 0 AND ipreo_billed_code = ipreo_billed THEN 'N' ELSE 'Y' END,
+       CASE WHEN ipreo_billed > 0 AND ipreo_billed_code = ipreo_billed THEN 'FAIL' ELSE 'PASS' END FROM agg
+UNION ALL
+SELECT 'D14b. BILLED_BY code-like / populated — OPUS then Ipreo (INFO)', '(info)',
+       TO_CHAR(opus_billed_code) || ' of ' || TO_CHAR(opus_billed) || ' OPUS; ' || TO_CHAR(ipreo_billed_code) || ' of ' || TO_CHAR(ipreo_billed) || ' Ipreo', 'INFO' FROM agg
 ORDER BY 1;
 
 -- D-DCM. ORDER VIEW, DCM branch — one scan (the large one).
