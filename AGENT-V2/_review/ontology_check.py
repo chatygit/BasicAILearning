@@ -1786,7 +1786,7 @@ for _vf in ("vw_deal_summary.sql", "vw_order_detail.sql", "vw_tranche_summary.sq
 # whole-row dedupe per product (ROW_NUMBER), not independent MAX()es; and the
 # Citi code regex must take multi-digit suffixes (CITIUS10).
 check("PARTITION BY P.PRD_ID ORDER BY P.DG_VERSION DESC" in text(ROOT / "views" / "vw_tranche_summary.sql")
-      and "PARTITION BY F.PRD_ID ORDER BY" in text(ROOT / "views" / "vw_tranche_summary.sql"),
+      and "PARTITION BY F.PRD_ID ORDER BY F.DG_VERSION DESC NULLS LAST" in text(ROOT / "views" / "vw_tranche_summary.sql"),
       "[ipreo] vw_tranche_summary.sql: the product / fee blocks are back to independent MAX()es across versions")
 for _vf in ("vw_tranche_summary.sql", "vw_order_detail.sql"):
     check("US[0-9]+|UKE" in text(ROOT / "views" / _vf) and "US[0-9]|UKE" not in text(ROOT / "views" / _vf),

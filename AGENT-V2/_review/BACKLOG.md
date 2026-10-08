@@ -176,6 +176,11 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whose column is also in dimensions (0 rows by construction).
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+- [x] CITI-SOLO RULE AUDIT (db-asks AD, UAT 2026-10-08): '^CITI(GROUP|BANK)?([ _]|$)'
+      counts every real Citi label (Citigroup 47k DCM, Citigroup Global Markets
+      Inc. 38k ECM / 21k DCM, Citi Group GMG, Citibank N.A. …) and rejects
+      Citizens (370 + 116 + 29 + 11) and CITIC — correct. One miss, UAT-only:
+      'CitiTestSyndicate' (268 ECM rows). No change.
 - [ ] OPUS_BASE_TRANSACTION LATEST VERSION (user 2026-10-08, Deliveroo 75059049
       has versions 0 / 1 / 2 / 4): all three views took MAX() per column
       across every version — the deal view could splice one version's region
@@ -240,6 +245,8 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       row dedupes (product by DG_VERSION DESC; fee by ROWID until db-asks AB
       confirms DG_VERSION there); Citi code regex US[0-9] → US[0-9]+ in both
       views.
+      PR BOT 2026-10-08 (accepted): the fee dedupe now orders by DG_VERSION
+      DESC NULLS LAST, ROWID DESC — gated on db-asks AB returning DG_VERSION.
 - [ ] IPREO ISSUER_NAME (defect item 3, 2026-10-07: "issuer_name is a copy
       of deal_name"): true by construction on the Ipreo deal / tranche /
       order branches (deal name with the tranche parenthetical stripped —
