@@ -176,6 +176,18 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whose column is also in dimensions (0 rows by construction).
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+- [ ] ECM LIMITS (user 2026-10-08): "limit type and limit value for an ECM order"
+      must use LIMIT_COUPON and LIMIT_PREMIUM too — only IOI type Limit / Scaled
+      orders carry limits; common stock = LIMIT_VALUE (price), convertibles =
+      coupon + premium. Order view +5 columns (LIMIT_TYPE, LIMIT_VALUE,
+      LIMIT_COUPON, LIMIT_PREMIUM, LIMIT_CURRENCY) on the OPUS branch from one
+      whole OB_ECM_ORDER_IOI row per order; Ipreo / DCM NULL stubs until
+      db-asks AC1. Card: five fields + limit_type filter; order_amount points
+      to them. Deploy-check A03 = 70, D15. RULE (user 2026-10-08): a SCALED
+      order has several IOI rows; the limit is the row with the LARGEST
+      IOI_QTY (matches order_demand_qty) — dedupe ordered by IOI_QTY DESC.
+      ORDER_AMOUNT (MAX limit value) is untouched and differs on scaled
+      orders; the card steers limit asks to limit_*. Open: AC1, AC3.
 - [ ] ECM ORDER GRAIN (D01 FAIL on UAT 2026-10-07; census W): a deal with
       two ECM transaction records (UAT: the PerfAuto deal 85AA3193, 32
       orders) appears once per transaction in the order view — the OPUS

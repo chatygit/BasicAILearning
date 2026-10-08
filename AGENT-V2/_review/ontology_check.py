@@ -1754,6 +1754,14 @@ check("SELECT P.PRD_ID, P.OFFER_PX, P.SEC_TYPE_CD" in text(ROOT / "views" / "vw_
       "[ipreo] vw_tranche_summary.sql: Ipreo PRODUCT_TYPE is the deal's equity type again (defect item 6)")
 check("THEN 'Citigroup (' || RO.BILLED_BY_BRK_CD || ')' ELSE RO.BILLED_BY_BRK_CD END AS BILLED_BY" in text(ROOT / "views" / "vw_order_detail.sql"),
       "[ipreo] vw_order_detail.sql: Ipreo BILLED_BY lost the Citigroup (CODE) rendering")
+# ECM LIMITS (user 2026-10-08): a limit ask shows type + value + coupon + premium;
+# common stock carries a limit price, convertibles carry coupon / premium; a
+# SCALED order's limit is the row with the LARGEST IOI_QTY (user 2026-10-08). One
+# WHOLE IOI row per order (never independent MAX()es — the 2026-10-07 lesson).
+check(text(ROOT / "views" / "vw_order_detail.sql").count(" AS LIMIT_COUPON") == 3
+      and "ORDER BY I.IOI_QTY DESC NULLS LAST, I.ROWID" in text(ROOT / "views" / "vw_order_detail.sql")
+      and has(ORDER, "  limit_coupon:") and has(ORDER, "  limit_premium:"),
+      "[limit] the ECM limit type / value / coupon / premium columns or their whole-row dedupe are gone")
 # PR bot 2026-10-07: never splice columns from different DataGlobe versions —
 # whole-row dedupe per product (ROW_NUMBER), not independent MAX()es; and the
 # Citi code regex must take multi-digit suffixes (CITIUS10).
@@ -2917,7 +2925,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 66_340,
+    ONT / "capital_markets_order.yaml": 67_888,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 90_964,

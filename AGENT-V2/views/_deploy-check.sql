@@ -34,7 +34,7 @@ FROM (
          TO_CHAR(COUNT(*)) AS actual_
   FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
   UNION ALL
-  SELECT 'A03. VW_ORDER_DETAIL has every repo column' AS check_, '65' AS expected_,
+  SELECT 'A03. VW_ORDER_DETAIL has every repo column' AS check_, '70' AS expected_,
          TO_CHAR(COUNT(*)) AS actual_
   FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
   UNION ALL
@@ -315,6 +315,8 @@ WITH agg AS (
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                      AND ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS') THEN 1 END) AS ecm_ipreo_excluded,
          COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS ecm_alloc_null,
+         COUNT(LIMIT_TYPE) AS ecm_limit_type,
+         COUNT(CASE WHEN LIMIT_COUPON IS NOT NULL OR LIMIT_PREMIUM IS NOT NULL THEN 1 END) AS ecm_limit_cvt,
          COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN BILLED_BY END) AS opus_billed,
          COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                      AND REGEXP_LIKE(BILLED_BY, '^[A-Z0-9]{2,10}$') THEN 1 END) AS opus_billed_code,
@@ -344,6 +346,9 @@ SELECT 'D05. ECM orders with no allocation recorded (INFO — NULL kept since 20
 UNION ALL
 -- BILLED_BY is a broker NAME on OPUS orders and a broker CODE on Ipreo orders
 -- (no name exists at the Ipreo source — accepted). A code is short, upper-case.
+SELECT 'D15. ECM orders with a limit type / with convertible limit terms (INFO — OPUS only)', '(info)',
+       TO_CHAR(ecm_limit_type) || ' typed / ' || TO_CHAR(ecm_limit_cvt) || ' coupon-or-premium of ' || TO_CHAR(rows_), 'INFO' FROM agg
+UNION ALL
 SELECT 'D14. BILLED_BY code-like / populated — OPUS then Ipreo (INFO — Ipreo has no broker name at source, codes accepted 2026-10-07; Citi codes render as Citigroup (CODE))', '(info)',
        TO_CHAR(opus_billed_code) || ' of ' || TO_CHAR(opus_billed) || ' OPUS; ' || TO_CHAR(ipreo_billed_code) || ' of ' || TO_CHAR(ipreo_billed) || ' Ipreo', 'INFO' FROM agg
 ORDER BY 1;
