@@ -1768,7 +1768,8 @@ check(text(ROOT / "views" / "vw_order_detail.sql").count(" AS LIMIT_COUPON") == 
 # across transactions: 50,425 ids = 50,425 pairs).
 _OV = text(ROOT / "views" / "vw_order_detail.sql")
 check("PARTITION BY Y.DEAL_TRANSACTION_ID" in _OV and "HAS_TRANCHE_ DESC" in _OV
-      and "    ON TO_CHAR(TT.ECM_TRANSACTION_TRANCHE_ID) = O.TRANCHE_ID\n" in _OV,
+      and "    ON TO_CHAR(TT.ECM_TRANSACTION_TRANCHE_ID) = O.TRANCHE_ID\n" in _OV
+      and "PARTITION BY TTR.ECM_TRANSACTION_TRANCHE_ID\n" in _OV,
       "[grain] vw_order_detail.sql: the OPUS ECM branch joins the transaction per (deal, txn) again — D01 duplicates return")
 check(_OV.count("ORDER BY I.IOI_QTY DESC NULLS LAST, I.ROWID") == 2,
       "[limit] both ECM branches must take the limit from the largest-IOI_QTY row")

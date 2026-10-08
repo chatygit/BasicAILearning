@@ -226,6 +226,8 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       CENSUS AA (2026-10-08): tranche id unique (50,425 ids = 50,425 pairs);
       8 multi-transaction deals, 37 orders. BUILT: T = one status-passing
       transaction per deal, tranche-owning first; TT joined on tranche id.
+      PR BOT 2026-10-08 (accepted): the TT dedupe is keyed on the tranche id
+      alone too (it was (txn, tranche) while the join is tranche-only).
 - [ ] IPREO PRODUCT_TYPE FROM securityType (defect item 6, 2026-10-07):
       the tranche view's Ipreo branch sets PRODUCT_TYPE = TPD.EQUITY_TYPE (the
       deal's equity type); the OPUS branch uses SECURITY_TYPE_NAME. Deploy-
