@@ -33,6 +33,11 @@ refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
   K7 regression = no handover.
 
 ## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
+- [ ] EQUITY DEALS EXCLUDE CONVERTIBLES (user 2026-10-08): SKILL word-table row
+      (promotable now) + the three cards' equity_type filter + a deal worked
+      example (train). Filter: product ECM + equity_type not_in [Convertible
+      Bonds, Convertible Preferred, Exchangable Notes, Exchangeable Notes];
+      blank equity_type drops out and is disclosed. Verify QA 64.
 - [ ] ROUTING (user 2026-10-07): bank / broker participation asks were routed
       to the Wallet agent by the root. agents.yaml description rewritten to
       claim syndicate / broker participation, roles, B&D, Citi solo, per-deal

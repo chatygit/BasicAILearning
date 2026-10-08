@@ -483,6 +483,11 @@ filters:
     suggestable: true
     case_insensitive: true
     description: >-
+      "EQUITY DEALS" / "in equity" = ECM WITHOUT convertibles (user ruling
+      2026-10-08): product eq ECM + equity_type not_in ['Convertible Bonds', 'Convertible Preferred', 'Exchangable Notes', 'Exchangeable Notes'].
+      A blank equity_type drops out (NOT never matches NULL): say so; an
+      'Equity' placeholder with a 'Convertible - …' offering type is a
+      convertible too — exclude it in the answer.
       ECM. The DEAL TYPE — where class words land ('common stock', 'convertible',
       'preferred', 'warrants'). Known set: Common Stock, Convertible Preferred,
       Convertible Bonds, Equity Units, Warrants, 'Exchangable Notes' (sic —
@@ -885,3 +890,16 @@ examples:
         - {field: last_priced, op: lt, value: "2026-01-01"}
       # deal_class is blank on every 10-digit-id (Ipreo) deal: say the count
       # covers the OPUS source only.
+  - question: Largest equity deals priced in 2025 (convertibles excluded)
+    request:
+      source: capital_markets_deal
+      metric: row_count
+      dimensions: [deal_name, deal_id, equity_type, offering_type, deal_size, size_unit, last_priced]
+      filters:
+        - {field: product, op: eq, value: ECM}
+        - {field: equity_type, op: not_in, value: ['Convertible Bonds', 'Convertible Preferred', 'Exchangable Notes', 'Exchangeable Notes']}
+        - {field: last_priced, op: gte, value: "2025-01-01"}
+        - {field: last_priced, op: lt, value: "2026-01-01"}
+      order: [{field: deal_size, direction: desc}, {field: deal_id, direction: asc}]
+      limit: 10
+      # "equity deals" never include convertibles (user 2026-10-08).

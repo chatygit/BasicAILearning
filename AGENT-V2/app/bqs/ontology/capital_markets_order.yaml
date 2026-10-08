@@ -663,6 +663,11 @@ filters:
     suggestable: true
     case_insensitive: true
     description: >-
+      "EQUITY DEALS" / "in equity" = ECM WITHOUT convertibles (user ruling
+      2026-10-08): product eq ECM + equity_type not_in ['Convertible Bonds', 'Convertible Preferred', 'Exchangable Notes', 'Exchangeable Notes'].
+      A blank equity_type drops out (NOT never matches NULL): say so; an
+      'Equity' placeholder with a 'Convertible - …' offering type is a
+      convertible too — exclude it in the answer.
       ECM. Instrument CLASS — same known set and rules as
       capital_markets_deal.equity_type (Common Stock, Convertible Preferred,
       Convertible Bonds, Equity Units, Warrants, 'Exchangable Notes' sic,

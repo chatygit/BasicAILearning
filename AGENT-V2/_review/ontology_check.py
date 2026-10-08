@@ -1783,6 +1783,11 @@ for _vf in ("vw_deal_summary.sql", "vw_order_detail.sql", "vw_tranche_summary.sq
           f"[versions] {_vf}: OPUS_BASE_TRANSACTION is read with per-column MAX() across versions again")
     check("MAX(PRICING_DT) AS PRICING_DT" not in _t and "PARTITION BY TO_CHAR(I.ISS_ID)" in _t,
           f"[versions] {_vf}: IPREO_ISSUE is read with per-column MAX() across versions again")
+# "EQUITY DEALS" EXCLUDE CONVERTIBLES (user 2026-10-08).
+check(has(SKILL, "| equity deals · in equity |") and has(DEAL, "EQUITY DEALS")
+      and has(ORDER, "EQUITY DEALS") and has(TRANCHE, "EQUITY DEALS")
+      and has(DEAL, "question: Largest equity deals priced in 2025 (convertibles excluded)"),
+      "[equity] the equity-deals-exclude-convertibles rule left the SKILL, a card or the worked example")
 # PR bot 2026-10-07: never splice columns from different DataGlobe versions —
 # whole-row dedupe per product (ROW_NUMBER), not independent MAX()es; and the
 # Citi code regex must take multi-digit suffixes (CITIUS10).
@@ -2941,15 +2946,15 @@ check(has(SKILL, "An ORDER listing always projects `order_demand_qty`, `order_al
 _SIZE_CAPS = {
     SKILL: 63_402,
     AGENTS: 20_912,
-    ONT / "capital_markets_deal.yaml": 58_544,
+    ONT / "capital_markets_deal.yaml": 59_705,
     ONT / "capital_markets_designation.yaml": 7_861,
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 68_225,
+    ONT / "capital_markets_order.yaml": 68_644,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
-    ONT / "capital_markets_tranche.yaml": 90_971,
+    ONT / "capital_markets_tranche.yaml": 91_390,
 }
 for _p, _cap in _SIZE_CAPS.items():
     _n = len(_p.read_bytes())

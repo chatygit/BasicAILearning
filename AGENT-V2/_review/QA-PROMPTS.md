@@ -280,6 +280,9 @@ available yet", never a name search or a guess) and after batch C deploys
       agent (it went to the Wallet agent on 2026-10-07); tranche object,
       syndicate_member_name like '%GOLDMAN%' + product ECM + pricing 2026,
       ranked by tranche size with deal ids, Citi's own role shown beside.
+- [ ] 64. "Top 10 equity deals by size in 2025" — PASS: ECM, equity_type not_in
+      the convertible trio, no Convertible Bonds / Preferred / Exchangeable rows;
+      the answer says convertibles were excluded.
 Works TODAY (control prompts, run once): "greenshoe exercised in 2025"
 (over_allotment_exercised_shares), "lockups expiring next month" (lockup_ts),
 "IPOs priced below the range" (reoffer_low_price vs base_price), "144A deals

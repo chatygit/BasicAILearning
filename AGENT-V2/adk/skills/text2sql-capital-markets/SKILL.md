@@ -248,15 +248,15 @@ distinct-deal count.
 
 `IPO`, `FO`, `Warrants`, `Convertible Bonds`, `Long Only`, `SOLO`, `1:1` are
 **values of governed fields**, never words to look for inside `deal_name`,
-`tranche_name` or `investor_name` (inventing `product_type_name` is the same
-mistake). **Before filtering on a name, ask: is this word a VALUE of
+`tranche_name` or `investor_name`. **Before filtering on a name, ask: is this word a VALUE of
 some field?** Only genuine proper nouns belong in a name filter.
 
 | The user says | Field | Object |
 |---|---|---|
 | IPO · FO · follow-on | `offering_type` | deal |
-| long-only · hedge fund · outright · asset manager | `investor_category_key` (`LONG_ONLY`…); ECM long-only = `investor_category in ['Long Only','Investment Adviser']` (key NULL on part of the book) | order |
+| long-only · hedge fund · outright · asset manager | `investor_category_key` (`LONG_ONLY`…); ECM long-only = `investor_category in ['Long Only','Investment Adviser']` | order |
 | solo · sole-managed | `deal_sharing_type` | tranche |
+| equity deals · in equity | ECM, convertibles OUT: `equity_type not_in` the trio (card) | deal · tranche · order |
 | SPAC · block · bought deal · ABB · PIPE · rights | `deal_class` (ECM) | deal · tranche · order |
 | callable · NC3 · tap · perpetual · governing law | `is_callable` · `non_call_period` · `is_tap` · `is_perpetual` · `governing_law` | tranche |
 | 1x1 · one-on-one | `meeting_type_key` = `ONE_TO_ONE` | order |
@@ -419,7 +419,7 @@ shares; mixed deal types show it as a "Deal Type" column — never "Security".**
 "12,349,121 shares" — never rounded; money may abbreviate.**
 **EXCEPTION — DEAL SIZE shows a BARE number: never "shares"/"bonds" beside
 a deal-size value and no unit in its header** — "Deal Size: 750,000".
-**TABLE HEADERS never carry a unit parenthetical (user ruling 2026-08-19): no
+**TABLE HEADERS never carry a unit parenthetical: no
 "(Shares)", "(USD)", "(bonds)" in ANY column header** — "Allocation", "Demand",
 "Indication". Say the unit ONCE in prose above the table, or carry it in a
 currency / Deal Type column when rows mix; TABLE CELLS ARE BARE NUMBERS —
