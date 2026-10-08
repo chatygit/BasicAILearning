@@ -176,6 +176,21 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whose column is also in dimensions (0 rows by construction).
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+- [ ] OPUS_BASE_TRANSACTION LATEST VERSION (user 2026-10-08, Deliveroo 75059049
+      has versions 0 / 1 / 2 / 4): all three views took MAX() per column
+      across every version — the deal view could splice one version's region
+      with another's fee / money size. Now ROW_NUMBER per TRANSACTION_ID by
+      VERSION DESC, PUBLISHED_TS DESC (whole row). No new dependency, same
+      columns. Deploy with the order + tranche batch; deal view too.
+      SAME DAY, same class: IPREO_ISSUE (currency + pricing / offer /
+      settlement dates, all three views) → latest DG_VERSION whole row.
+      AUDIT of the remaining multi-MAX() blocks (not changed — each needs a
+      decision): OPUS + Ipreo TRANCHE_PRODUCT_DETAIL (security type + exchange
+      / equity type + final price per tranche — several PRODUCTS per tranche
+      or versions? census needed); the IOI blocks' MAX(LIMIT_VALUE) and
+      MAX(IOI_QTY) feeding ORDER_AMOUNT / demand (intentional curve
+      summaries, ORDER_AMOUNT question open with the user); STATUS blocks
+      (STATUS_TYPE is constant under the filter — safe).
 - [ ] ECM LIMITS (user 2026-10-08): "limit type and limit value for an ECM order"
       must use LIMIT_COUPON and LIMIT_PREMIUM too — only IOI type Limit / Scaled
       orders carry limits; common stock = LIMIT_VALUE (price), convertibles =

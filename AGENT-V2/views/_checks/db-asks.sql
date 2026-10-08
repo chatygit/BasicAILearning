@@ -23,8 +23,9 @@
 -- views' column counts 43 / 89 / 65), B-ECM (B08), B-DCM (B14), C (C08 / C09).
 -- Sections D-ECM / D-DCM are unchanged by this batch.
 
--- CLEARED (2026-10-08, census AA / AB / AC): deploy vw_order_detail and
--- vw_tranche_summary (the tranche view carries the Ipreo product-type, the
+-- CLEARED (2026-10-08, census AA / AB / AC): deploy vw_deal_summary,
+-- vw_order_detail and vw_tranche_summary (all three now take the latest
+-- OPUS_BASE_TRANSACTION version as a whole row) (the tranche view carries the Ipreo product-type, the
 -- whole-row product / fee dedupes and the Citi regex). Then deploy-check A0,
 -- A (A02 89 / A03 70), C (C11 must now PASS), D-ECM (D01 must now PASS; D15
 -- limit counts). Nothing else open.

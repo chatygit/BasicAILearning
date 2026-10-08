@@ -1772,6 +1772,16 @@ check("PARTITION BY Y.DEAL_TRANSACTION_ID" in _OV and "HAS_TRANCHE_ DESC" in _OV
       "[grain] vw_order_detail.sql: the OPUS ECM branch joins the transaction per (deal, txn) again — D01 duplicates return")
 check(_OV.count("ORDER BY I.IOI_QTY DESC NULLS LAST, I.ROWID") == 2,
       "[limit] both ECM branches must take the limit from the largest-IOI_QTY row")
+# OPUS_BASE_TRANSACTION is versioned (up to 1,232 rows per transaction): every
+# view takes the LATEST VERSION as one whole row, never MAX() per column
+# (user 2026-10-08 — the deal view spliced region / fee / money size).
+for _vf in ("vw_deal_summary.sql", "vw_order_detail.sql", "vw_tranche_summary.sql"):
+    _t = text(ROOT / "views" / _vf)
+    check("ORDER BY OB.VERSION DESC NULLS LAST, OB.PUBLISHED_TS DESC" in _t
+          and "MAX(DEAL_REGION) AS DEAL_REGION" not in _t,
+          f"[versions] {_vf}: OPUS_BASE_TRANSACTION is read with per-column MAX() across versions again")
+    check("MAX(PRICING_DT) AS PRICING_DT" not in _t and "PARTITION BY TO_CHAR(I.ISS_ID)" in _t,
+          f"[versions] {_vf}: IPREO_ISSUE is read with per-column MAX() across versions again")
 # PR bot 2026-10-07: never splice columns from different DataGlobe versions —
 # whole-row dedupe per product (ROW_NUMBER), not independent MAX()es; and the
 # Citi code regex must take multi-digit suffixes (CITIUS10).
