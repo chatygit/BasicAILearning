@@ -2948,7 +2948,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_order.yaml": 68_225,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
-    ONT / "capital_markets_tranche.yaml": 90_964,
+    ONT / "capital_markets_tranche.yaml": 90_971,
 }
 for _p, _cap in _SIZE_CAPS.items():
     _n = len(_p.read_bytes())

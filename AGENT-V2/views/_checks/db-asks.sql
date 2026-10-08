@@ -29,3 +29,21 @@
 -- whole-row product / fee dedupes and the Citi regex). Then deploy-check A0,
 -- A (A02 89 / A03 70), C (C11 must now PASS), D-ECM (D01 must now PASS; D15
 -- limit counts). Nothing else open.
+
+-- AD. CITI-SOLO REGEX COVERAGE (UAT, two statements). The OPUS ECM and DCM
+-- branches decide SOLO with '^CITI(GROUP|BANK)?([ _]|$)', so a label such as
+-- 'Citibank, N.A.' (comma after CITIBANK) is NOT Citi and turns a Citi-only
+-- tranche SHARED. List every Citi-looking label and whether the rule sees it.
+SELECT 'ECM' AS SRC, S.SYNDICATE_MEMBER_NAME AS LABEL_, COUNT(*) AS ROWS_,
+       CASE WHEN REGEXP_LIKE(S.SYNDICATE_MEMBER_NAME, '^CITI(GROUP|BANK)?([ _]|$)', 'i') THEN 'counted' ELSE 'MISSED' END AS RULE_
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE S
+WHERE  UPPER(S.SYNDICATE_MEMBER_NAME) LIKE 'CITI%'
+GROUP  BY S.SYNDICATE_MEMBER_NAME
+ORDER  BY RULE_, ROWS_ DESC;
+
+SELECT 'DCM' AS SRC, S.DEALER AS LABEL_, COUNT(*) AS ROWS_,
+       CASE WHEN REGEXP_LIKE(S.DEALER, '^CITI(GROUP|BANK)?([ _]|$)', 'i') THEN 'counted' ELSE 'MISSED' END AS RULE_
+FROM   DGSTREAM.OB_TRANCHE_SYNDICATE_MEMBER S
+WHERE  UPPER(S.DEALER) LIKE 'CITI%'
+GROUP  BY S.DEALER
+ORDER  BY RULE_, ROWS_ DESC;

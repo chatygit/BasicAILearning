@@ -98,9 +98,9 @@ how_to_use:
      no-B&D-recorded tranches that belong in a non-B&D answer. There is no
      not_like operator; the clean form is a governed computed_filter with
      negate, and this source declares none (see the note at the end of file)."
-  - "SOLO means CITI-SOLO. deal_sharing_type = 'SOLO' is set only when the
-     tranche had exactly ONE syndicate member AND that member is Citigroup
-     Global — on BOTH products now. So say 'Citi was the sole syndicate member',
+  - "SOLO means CITI-SOLO. deal_sharing_type = 'SOLO' is set only when EVERY
+     syndicate member on the tranche is a Citi entity (two Citi entities are
+     still SOLO — PO ruling) — on BOTH products. So say 'Citi was the sole bank',
      never a bare 'sole-managed': a tranche solely managed by ANOTHER bank reads
      'SHARED'. 'SHARED' also covers tranches with no syndicate rows at all. Do
      NOT cross-check it against syndicate_member_count — on ECM that count is
