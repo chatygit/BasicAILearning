@@ -1762,6 +1762,16 @@ check(text(ROOT / "views" / "vw_order_detail.sql").count(" AS LIMIT_COUPON") == 
       and "ORDER BY I.IOI_QTY DESC NULLS LAST, I.ROWID" in text(ROOT / "views" / "vw_order_detail.sql")
       and has(ORDER, "  limit_coupon:") and has(ORDER, "  limit_premium:"),
       "[limit] the ECM limit type / value / coupon / premium columns or their whole-row dedupe are gone")
+# ECM ORDER GRAIN (UAT D01, census W / AA 2026-10-08): a deal with two ECM
+# transactions doubled its orders. T keeps ONE transaction per deal (status-
+# passing, tranche-owning first) and TT joins on the tranche id alone (unique
+# across transactions: 50,425 ids = 50,425 pairs).
+_OV = text(ROOT / "views" / "vw_order_detail.sql")
+check("PARTITION BY Y.DEAL_TRANSACTION_ID" in _OV and "HAS_TRANCHE_ DESC" in _OV
+      and "    ON TO_CHAR(TT.ECM_TRANSACTION_TRANCHE_ID) = O.TRANCHE_ID\n" in _OV,
+      "[grain] vw_order_detail.sql: the OPUS ECM branch joins the transaction per (deal, txn) again — D01 duplicates return")
+check(_OV.count("ORDER BY I.IOI_QTY DESC NULLS LAST, I.ROWID") == 2,
+      "[limit] both ECM branches must take the limit from the largest-IOI_QTY row")
 # PR bot 2026-10-07: never splice columns from different DataGlobe versions —
 # whole-row dedupe per product (ROW_NUMBER), not independent MAX()es; and the
 # Citi code regex must take multi-digit suffixes (CITIUS10).
@@ -2925,7 +2935,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 67_888,
+    ONT / "capital_markets_order.yaml": 68_225,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 90_964,

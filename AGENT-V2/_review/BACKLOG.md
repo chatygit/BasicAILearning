@@ -187,7 +187,12 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       order has several IOI rows; the limit is the row with the LARGEST
       IOI_QTY (matches order_demand_qty) — dedupe ordered by IOI_QTY DESC.
       ORDER_AMOUNT (MAX limit value) is untouched and differs on scaled
-      orders; the card steers limit asks to limit_*. Open: AC1, AC3.
+      orders; the card steers limit asks to limit_*. CENSUS AC (2026-10-08):
+      Ipreo IOI mirror has LIMIT_TYPE / VALUE / COUPON / PREMIUM (no currency)
+      → wired the same way; 4,650 orders carry several limit rows, 4,633 of
+      them different (the largest-qty rule matters); LIMIT rows: PRICE 21.6k,
+      type NULL with coupon + premium 20.2k (convertibles), DISCOUNT 20,
+      PREMIUM 10; SCALED: PRICE 13.4k, NULL 4.3k; MARKET none.
 - [ ] ECM ORDER GRAIN (D01 FAIL on UAT 2026-10-07; census W): a deal with
       two ECM transaction records (UAT: the PerfAuto deal 85AA3193, 32
       orders) appears once per transaction in the order view — the OPUS
@@ -198,6 +203,9 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       keep ONE transaction per deal in T (prefer the one that owns tranches,
       then the latest) — orders keep their tranche fields whichever
       transaction owns them. Deal view / tranche view unaffected.
+      CENSUS AA (2026-10-08): tranche id unique (50,425 ids = 50,425 pairs);
+      8 multi-transaction deals, 37 orders. BUILT: T = one status-passing
+      transaction per deal, tranche-owning first; TT joined on tranche id.
 - [ ] IPREO PRODUCT_TYPE FROM securityType (defect item 6, 2026-10-07):
       the tranche view's Ipreo branch sets PRODUCT_TYPE = TPD.EQUITY_TYPE (the
       deal's equity type); the OPUS branch uses SECURITY_TYPE_NAME. Deploy-
