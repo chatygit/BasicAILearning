@@ -41,3 +41,46 @@ WHERE  OWNER = 'DGSTREAM' AND TABLE_NAME = 'IPREO_PRODUCTFEE' AND COLUMN_NAME = 
 -- both products and correctly rejects Citizens and CITIC; the only miss is the
 -- UAT-only label 'CitiTestSyndicate' (268 ECM rows, no space after CITI). No
 -- view change.
+
+-- ===========================================================================
+-- AE. ECM ALLOCATION SOURCE — RUN ON PROD (the deal is a PROD deal; UAT may
+-- not carry it). SELECTs only. The agent showed "Not recorded" for every
+-- top investor on Space Exploration Technologies: the ECM order view reads
+-- allocation from OB_ECM_ORDER.PRIVATE_ALLOC only. Which column actually
+-- carries ECM allocations — on this deal and across the book? Three
+-- statements, names from the 2026-08-31 table description.
+-- ===========================================================================
+
+-- AE1. The deal(s) and their status.
+SELECT ET.DEAL_TRANSACTION_ID, MAX(ET.SYNDICATE_DEAL_NAME) AS DEAL_NAME,
+       MAX(S.STATUS_VALUE) AS EXECUTION_STATUS
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION ET
+LEFT JOIN DGSTREAM.OPUS_ECM_TRANSACTION_STATUS S
+       ON S.ECM_TRANSACTION_ID = ET.ECM_TRANSACTION_ID AND S.STATUS_TYPE = 'Execution_Status'
+WHERE  UPPER(ET.SYNDICATE_DEAL_NAME) LIKE '%SPACE EXPLORATION%'
+GROUP  BY ET.DEAL_TRANSACTION_ID;
+
+-- AE2. Every allocation column on that deal's orders.
+SELECT O.DEAL_ID, O.ALLOCATION_STATUS,
+       COUNT(*) AS ORDER_ROWS,
+       COUNT(O.PRIVATE_ALLOC) AS PRIVATE_, SUM(O.PRIVATE_ALLOC) AS PRIVATE_SUM,
+       COUNT(O.FINAL_ALLOC) AS FINAL_, SUM(O.FINAL_ALLOC) AS FINAL_SUM,
+       COUNT(O.DRAFT_ALLOC) AS DRAFT_, SUM(O.DRAFT_ALLOC) AS DRAFT_SUM,
+       COUNT(O.INST_ALLOCATION_QTY) AS INST_, SUM(O.INST_ALLOCATION_QTY) AS INST_SUM
+FROM   DGSTREAM.OB_ECM_ORDER O
+WHERE  O.DEAL_ID IN (SELECT DEAL_TRANSACTION_ID FROM DGSTREAM.OPUS_ECM_TRANSACTION
+                     WHERE UPPER(SYNDICATE_DEAL_NAME) LIKE '%SPACE EXPLORATION%')
+GROUP  BY O.DEAL_ID, O.ALLOCATION_STATUS
+ORDER  BY O.DEAL_ID, ORDER_ROWS DESC;
+
+-- AE3. Across the whole ECM book: how often is each column filled when
+--      PRIVATE_ALLOC is blank (what a fallback would add). One full scan of
+--      OB_ECM_ORDER — run it on PROD too; on UAT the shape may differ.
+SELECT COUNT(*) AS ORDER_ROWS,
+       COUNT(PRIVATE_ALLOC) AS PRIVATE_,
+       COUNT(CASE WHEN PRIVATE_ALLOC IS NULL AND FINAL_ALLOC IS NOT NULL THEN 1 END) AS FINAL_ONLY,
+       COUNT(CASE WHEN PRIVATE_ALLOC IS NULL AND DRAFT_ALLOC IS NOT NULL THEN 1 END) AS DRAFT_ONLY,
+       COUNT(CASE WHEN PRIVATE_ALLOC IS NULL AND INST_ALLOCATION_QTY IS NOT NULL THEN 1 END) AS INST_ONLY,
+       COUNT(CASE WHEN PRIVATE_ALLOC IS NOT NULL AND FINAL_ALLOC IS NOT NULL
+                   AND PRIVATE_ALLOC <> FINAL_ALLOC THEN 1 END) AS PRIVATE_NE_FINAL
+FROM   DGSTREAM.OB_ECM_ORDER;

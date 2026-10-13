@@ -186,6 +186,10 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       Inc. 38k ECM / 21k DCM, Citi Group GMG, Citibank N.A. …) and rejects
       Citizens (370 + 116 + 29 + 11) and CITIC — correct. One miss, UAT-only:
       'CitiTestSyndicate' (268 ECM rows). No change.
+      2026-10-09 (user: 'Citizens Capital Markets, Inc. - CITIZENS'): the views
+      reject it, but the order card's billed_by note (2026-10-07) said 'billed
+      by Citi = like %Citi%' — fixed to 'Citigroup%' / 'Citi %'; gate [citi]
+      forbids a bare %Citi% in any card, SKILL or agents.
 - [ ] OPUS_BASE_TRANSACTION LATEST VERSION (user 2026-10-08, Deliveroo 75059049
       has versions 0 / 1 / 2 / 4): all three views took MAX() per column
       across every version — the deal view could splice one version's region
