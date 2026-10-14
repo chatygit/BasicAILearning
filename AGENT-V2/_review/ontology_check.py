@@ -1788,6 +1788,13 @@ for _vf in ("vw_deal_summary.sql", "vw_order_detail.sql", "vw_tranche_summary.sq
 for _p in (DEAL, ORDER, TRANCHE, SKILL, AGENTS):
     check(not re.search(r"like '%citi%'", text(_p), re.I),
           f"[citi] {_p.name} teaches a bare '%Citi%' match again (Citizens / CITIC)")
+# ONE LIMIT PER ORDER (user 2026-10-14): ECM ORDER_AMOUNT is the same largest-IOI-row
+# limit as LIMIT_VALUE (it was MAX(LIMIT_VALUE) across the curve: 45 vs 25 on a
+# scaled order), and the card forbids showing both.
+check(text(ROOT / "views" / "vw_order_detail.sql").count("CAST(NVL(LM.LIMIT_VALUE, 0) AS NUMBER(38,4)) AS ORDER_AMOUNT") == 2
+      and "NVL(OI.LIMIT_VALUE, 0)" not in text(ROOT / "views" / "vw_order_detail.sql")
+      and has(ORDER, "NEVER project order_amount beside limit_value on ECM"),
+      "[limit] ECM ORDER_AMOUNT is a second limit price again, or the card allows showing both")
 # NO PLACEHOLDER CATEGORIES (user 2026-10-13): a blank investor category renders
 # '—', never a guessed value such as 'Investment Adviser'.
 check(has(SKILL, "NEVER a guessed value") and has(ORDER, "NEVER fill it with a guessed category"),
@@ -2960,7 +2967,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 68_940,
+    ONT / "capital_markets_order.yaml": 68_704,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 91_390,

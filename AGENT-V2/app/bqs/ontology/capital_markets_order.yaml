@@ -362,7 +362,7 @@ dimensions:
   existing_holder: {column: existing_holder, products: ["ECM"], description: "ECM (V3). Existing-holder value (population unmeasured)."}
   active_price: {column: active_price, products: ["ECM"], description: "ECM (V3). Active book price at order level (NUMBER)."}
   book_status: {column: book_status, products: ["ECM"], description: "ECM (V3). Order-book status (e.g. NEVER_OPENED; open vocabulary) — 'is the book open' asks land here."}
-  order_amount: {column: order_amount, description: "Order amount. DCM: the order amount (money). ECM: the IOI LIMIT PRICE (the HIGHEST limit on the order's curve, USD per share; for a banker's limit ask use limit_type / limit_value / limit_coupon / limit_premium instead — on a scaled order the two differ) — a curve-level summary, NOT the price at which the demand figure was bid — label it 'IOI limit price', NEVER 'order size'/'indication'/shares; it is a price, so never sum it, never compare it with a share count, never use it to fill a blank indication. For 'indication' asks use order_demand_qty/total_demand."}
+  order_amount: {column: order_amount, description: "Order amount. DCM: the order amount (money). ECM: the order's LIMIT PRICE — the same number as limit_value (the largest-IOI row), 0 = no limit. NEVER project order_amount beside limit_value on ECM (one limit per order); for ECM limit asks use limit_type / limit_value / limit_coupon / limit_premium / limit_currency. Never SUM it on ECM."}
   limit_type: {column: limit_type, products: ["ECM"], description: "ECM. The order's LIMIT TYPE: PRICE (limit_value = price per share), rarely DISCOUNT / PREMIUM (limit_value is then that term); BLANK with limit_coupon / limit_premium filled = a CONVERTIBLE limit. MARKET orders carry no limit. 'Limit type and limit value for an order' = project limit_type, limit_value, limit_coupon, limit_premium, limit_currency together. Only IOI type Limit / Scaled orders carry limits; a SCALED order has several IOI rows and the limit is the one on its LARGEST IOI quantity (the same row as order_demand_qty) — never the highest price. Both ECM sources; NULL on DCM."}
   limit_value: {column: limit_value, products: ["ECM"], description: "ECM. Limit PRICE per share in limit_currency — the common-stock limit. Convertibles usually leave it blank and set limit_coupon / limit_premium instead."}
   limit_coupon: {column: limit_coupon, products: ["ECM"], description: "ECM. CONVERTIBLE limit: the coupon (%) the investor requires (e.g. 7.5). Show it as 'Coupon 7.5%'."}
@@ -610,7 +610,7 @@ filters:
     operators: [gt, gte, lt, lte, between, eq]
     description: >-
       ROW-LEVEL order-amount threshold. On DCM this is money — pair it with a
-      currency scope. On ECM it thresholds the highest IOI limit point, not an
+      currency scope. On ECM it is the limit price (= limit_value), not an
       order size. Absent values are stored as 0, so there is no is_null.
   currency:
     column: currency

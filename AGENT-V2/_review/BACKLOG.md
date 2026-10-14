@@ -198,6 +198,12 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whose column is also in dimensions (0 rows by construction).
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+- [ ] ONE LIMIT PER ORDER (user 2026-10-14, PROD answer showed Limit Value 25 and
+      IOI Limit Price 45 on one BlackRock order): ECM ORDER_AMOUNT was
+      MAX(LIMIT_VALUE) across the IOI curve; now NVL(LM.LIMIT_VALUE, 0), the
+      same largest-IOI row as LIMIT_VALUE, on both ECM branches. Card: never
+      show order_amount beside limit_value. Deploy-check D16. Closes the
+      ORDER_AMOUNT open decision.
 - [x] CITI-SOLO RULE AUDIT (db-asks AD, UAT 2026-10-08): '^CITI(GROUP|BANK)?([ _]|$)'
       counts every real Citi label (Citigroup 47k DCM, Citigroup Global Markets
       Inc. 38k ECM / 21k DCM, Citi Group GMG, Citibank N.A. …) and rejects

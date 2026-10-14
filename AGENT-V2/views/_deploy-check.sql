@@ -316,6 +316,7 @@ WITH agg AS (
                      AND ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS') THEN 1 END) AS ecm_ipreo_excluded,
          COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS ecm_alloc_null,
          COUNT(LIMIT_TYPE) AS ecm_limit_type,
+         COUNT(CASE WHEN ORDER_AMOUNT <> NVL(LIMIT_VALUE, 0) THEN 1 END) AS ecm_two_limits,
          COUNT(CASE WHEN LIMIT_COUPON IS NOT NULL OR LIMIT_PREMIUM IS NOT NULL THEN 1 END) AS ecm_limit_cvt,
          COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN BILLED_BY END) AS opus_billed,
          COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
@@ -346,6 +347,10 @@ SELECT 'D05. ECM orders with no allocation recorded (INFO — NULL kept since 20
 UNION ALL
 -- BILLED_BY is a broker NAME on OPUS orders and a broker CODE on Ipreo orders
 -- (no name exists at the Ipreo source — accepted). A code is short, upper-case.
+SELECT 'D16. ECM ORDER_AMOUNT equals LIMIT_VALUE (one limit per order, 2026-10-14)', 'Y',
+       CASE WHEN ecm_two_limits = 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN ecm_two_limits = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
 SELECT 'D15. ECM orders with a limit type / with convertible limit terms (INFO — OPUS only)', '(info)',
        TO_CHAR(ecm_limit_type) || ' typed / ' || TO_CHAR(ecm_limit_cvt) || ' coupon-or-premium of ' || TO_CHAR(rows_), 'INFO' FROM agg
 UNION ALL
