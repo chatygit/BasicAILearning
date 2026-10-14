@@ -283,6 +283,9 @@ available yet", never a name search or a guess) and after batch C deploys
 - [ ] 64. "Top 10 equity deals by size in 2025" — PASS: ECM, equity_type not_in
       the convertible trio, no Convertible Bonds / Preferred / Exchangeable rows;
       the answer says convertibles were excluded.
+- [ ] 65. "Top 20 investors on <an Ipreo ECM deal> with their investor type" —
+      PASS: blank categories show '—' (or 'Not classified' for 'None'), never
+      'Investment Adviser' or a type guessed from the name.
 Works TODAY (control prompts, run once): "greenshoe exercised in 2025"
 (over_allotment_exercised_shares), "lockups expiring next month" (lockup_ts),
 "IPOs priced below the range" (reoffer_low_price vs base_price), "144A deals

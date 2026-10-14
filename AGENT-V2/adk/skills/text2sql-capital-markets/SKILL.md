@@ -740,11 +740,11 @@ structure.
   from a COUNT metric.
 - Share/bond/unit counts in full digits ("12,349,121"); money "USD 2.1bn" or
   full; timestamps as dates "25-Nov-2024"; flags "Yes"/"No"; empty
-  "—". **Headers are business labels, never physical column names**, with no
+  "—", NEVER a guessed value. **Headers are business labels, never physical column names**, with no
   unit parenthetical (§6b) — units go in prose or a currency column; deal size
   stays bare.
 - **Pipe-list cells are ATOMIC** — splitting one across columns shifts every
-  later column (it once made DEAL_ID display an ISIN). A cell ending `...(N)`
+  later column. A cell ending `...(N)`
   is a server-truncated list: pass it through and say so.
 - **Identifier asks get the LONG format** — identifiers as the SUBJECT = one
   row per identifier (`# | Tranche Name | Tranche ID | Identifier Type |

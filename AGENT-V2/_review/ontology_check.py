@@ -1788,6 +1788,10 @@ for _vf in ("vw_deal_summary.sql", "vw_order_detail.sql", "vw_tranche_summary.sq
 for _p in (DEAL, ORDER, TRANCHE, SKILL, AGENTS):
     check(not re.search(r"like '%citi%'", text(_p), re.I),
           f"[citi] {_p.name} teaches a bare '%Citi%' match again (Citizens / CITIC)")
+# NO PLACEHOLDER CATEGORIES (user 2026-10-13): a blank investor category renders
+# '—', never a guessed value such as 'Investment Adviser'.
+check(has(SKILL, "NEVER a guessed value") and has(ORDER, "NEVER fill it with a guessed category"),
+      "[blank] SKILL / order card lost the never-fill-a-blank-category rule")
 # "EQUITY DEALS" EXCLUDE CONVERTIBLES (user 2026-10-08).
 check(has(SKILL, "| equity deals · in equity |") and has(DEAL, "EQUITY DEALS")
       and has(ORDER, "EQUITY DEALS") and has(TRANCHE, "EQUITY DEALS")
@@ -2956,7 +2960,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 68_767,
+    ONT / "capital_markets_order.yaml": 68_940,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 91_390,

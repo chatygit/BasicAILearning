@@ -13,6 +13,19 @@ are allowed but FROZEN (no new dependencies). We have NO PROD access — every
 PROD item is an ask. Finding ids (SKILL-n, CAT-n, V-n, SRV-n, RT-n, XL-n)
 refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
 
+## PROD STATE — promoted 2026-10-09 (commit 43fd526, 2026-10-08 13:15)
+IN PROD: views batch C (24 banker filters) + C.1 (DCM allocation from the match
+group, primary + secondary list) + ECM limit columns (largest-IOI_QTY rule) +
+ECM order-grain fix + latest-version dedupes (OPUS_BASE_TRANSACTION,
+IPREO_ISSUE, IPREO_PRODUCT, IPREO_PRODUCTFEE) + Ipreo product type from
+SEC_TYPE_CD + Citi code regex US[0-9]+ + DCM status exclusion + allocation
+NULL; catalogs (batch C fields, Deal Type wording, limits, equity-deals rule,
+allocation / unit notes); server (blank_dims / column_note, unit_note, product
+narrowing); SKILL + agents.yaml (routing description, equity-deals row, Deal
+Type, bare cells). NOT IN PROD (after 43fd526): order card 'never %Citi%'
+(2026-10-09), db-asks AE (PROD allocation census), and the 2026-10-13
+no-placeholder-category rule (SKILL + order card, uncommitted).
+
 ## 0. Sequence (analysis 2026-09-17)
 - Phase 0 — DONE 2026-09-17 except the UAT baselines: gate fails on SKIPped
   tests, size ratchet, slot-aware [names], corpus test with golden SQL, catalog↔view
@@ -33,6 +46,10 @@ refer to the 2026-09-17 workflow analysis (memory: analysis-2026-09-17).
   K7 regression = no handover.
 
 ## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
+- [ ] NO PLACEHOLDER CATEGORIES (user 2026-10-13): the agent filled blank
+      investor categories with 'Investment Adviser' (the views pass the stored
+      value through, no default). SKILL formatting rule + order card: blank =
+      '—', 'None' = 'Not classified', never a guessed value. Verify QA 65.
 - [ ] EQUITY DEALS EXCLUDE CONVERTIBLES (user 2026-10-08): SKILL word-table row
       (promotable now) + the three cards' equity_type filter + a deal worked
       example (train). Filter: product ECM + equity_type not_in [Convertible
