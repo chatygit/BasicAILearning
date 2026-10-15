@@ -111,21 +111,12 @@ WITH agg AS (
          COUNT(DISTINCT DEAL_ID) AS keys_,
          COUNT(CASE WHEN CURRENCIES IS NOT NULL
                      AND REGEXP_LIKE(CURRENCIES, '[A-Za-z]') THEN 1 END) AS ecm_alpha,
-         COUNT(DISTINCT CASE WHEN CURRENCIES IS NOT NULL
-                              AND REGEXP_LIKE(CURRENCIES, '(^|\| )[0-9]+( \||$)')
-                             THEN DEAL_ID END) AS ecm_unmapped,
          COUNT(CASE WHEN TOTAL_ALLOCATION > 0 THEN 1 END) AS ecm_alloc_deals,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN 1 END) AS ecm_ipreo_rows,
-         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') AND ORDER_COUNT > 0 THEN 1 END) AS ecm_ipreo_ordered,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN LAST_PRICED END) AS ecm_ipreo_priced,
-         COUNT(DEAL_CLASS) AS ecm_class,
-         COUNT(CASE WHEN SIZE_UNIT = 'bonds' THEN 1 END) AS ecm_bond_unit,
          COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN ISSUER_NAME END) AS opus_issuer,
          COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                     AND UPPER(TRIM(ISSUER_NAME)) = UPPER(TRIM(DEAL_NAME)) THEN 1 END) AS opus_issuer_eq_deal,
-         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN ISSUER_NAME END) AS ipreo_issuer,
-         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                     AND UPPER(TRIM(ISSUER_NAME)) = UPPER(TRIM(DEAL_NAME)) THEN 1 END) AS ipreo_issuer_eq_deal
+                     AND UPPER(TRIM(ISSUER_NAME)) = UPPER(TRIM(DEAL_NAME)) THEN 1 END) AS opus_issuer_eq_deal
   FROM DGSTREAM.VW_DEAL_SUMMARY
   WHERE PRODUCT = 'ECM'
 )
@@ -136,9 +127,6 @@ UNION ALL
 SELECT 'B02. ECM currency names resolve (a broken CURRENCY_NAME join = zero alphabetic codes)', 'Y',
        CASE WHEN ecm_alpha > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_alpha > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
-SELECT 'B03. ECM deals with an unmapped numeric currency token (INFO, UAT ~377)', '(info)',
-       TO_CHAR(ecm_unmapped), 'INFO' FROM agg
 UNION ALL
 SELECT 'B04. ECM deals carry allocation (OD join intact)', 'Y',
        CASE WHEN ecm_alloc_deals > 0 THEN 'Y' ELSE 'N' END,
@@ -152,12 +140,6 @@ SELECT 'B06. Ipreo ECM deals carry LAST_PRICED (date windows need it)', 'Y',
        CASE WHEN ecm_ipreo_priced > 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_ipreo_priced > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT 'B07. Ipreo ECM deals with orders (INFO — 0 = OD key mismatch)', '(info)',
-       TO_CHAR(ecm_ipreo_ordered) || ' of ' || TO_CHAR(ecm_ipreo_rows), 'INFO' FROM agg
-UNION ALL
-SELECT 'B08. ECM deals with DEAL_CLASS / bonds unit (INFO — batch C; OPUS ~25.8k classed)', '(info)',
-       TO_CHAR(ecm_class) || ' classed / ' || TO_CHAR(ecm_bond_unit) || ' bonds of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
 -- Defect item 3 (2026-10-07): issuer_name must not be a copy of deal_name.
 -- OPUS: party master → orderbook issuer by GFCID → source issuer; a copy on
 -- more than half the deals = the source is filling issuer with the deal
@@ -166,12 +148,6 @@ UNION ALL
 SELECT 'B15. OPUS ECM issuer_name is not a copy of deal_name on most deals (item 3)', 'Y',
        CASE WHEN opus_issuer > 0 AND opus_issuer_eq_deal * 2 > opus_issuer THEN 'N' ELSE 'Y' END,
        CASE WHEN opus_issuer > 0 AND opus_issuer_eq_deal * 2 > opus_issuer THEN 'FAIL' ELSE 'PASS' END FROM agg
-UNION ALL
-SELECT 'B15b. OPUS ECM issuer_name equal to deal_name / populated (INFO)', '(info)',
-       TO_CHAR(opus_issuer_eq_deal) || ' of ' || TO_CHAR(opus_issuer), 'INFO' FROM agg
-UNION ALL
-SELECT 'B16. Ipreo ECM issuer_name equal to deal_name / populated (INFO — equal by construction until an issuer source lands)', '(info)',
-       TO_CHAR(ipreo_issuer_eq_deal) || ' of ' || TO_CHAR(ipreo_issuer), 'INFO' FROM agg
 ORDER BY 1;
 
 -- B-DCM. DEAL VIEW, DCM branch — one scan that touches NO order-book column,
@@ -184,9 +160,7 @@ WITH agg AS (
          COUNT(CASE WHEN REGEXP_LIKE(CURRENCIES,
                      '(^|\| )([A-Za-z]+)( \|.*\| | \| )\2( \||$)') THEN 1 END) AS dcm_dupcur,
          COUNT(CASE WHEN UPPER(DEAL_STATUS) IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')
-                    THEN 1 END) AS dcm_excluded_status,
-         COUNT(DCM_DEAL_CLASS) AS dcm_class,
-         COUNT(ISSUER_COUNTRY) AS dcm_country
+                    THEN 1 END) AS dcm_excluded_status
   FROM DGSTREAM.VW_DEAL_SUMMARY
   WHERE PRODUCT = 'DCM'
 )
@@ -201,12 +175,6 @@ UNION ALL
 SELECT 'B12. no DCM deal carries an excluded status (status exclusion 2026-09-28)', 'Y',
        CASE WHEN dcm_excluded_status = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_excluded_status = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
-SELECT 'B13. DCM deals (INFO — UAT ~46.3k after the exclusion)', '(info)',
-       TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT 'B14. DCM deals with DCM_DEAL_CLASS / ISSUER_COUNTRY (INFO — batch C)', '(info)',
-       TO_CHAR(dcm_class) || ' class / ' || TO_CHAR(dcm_country) || ' country of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
 -- B-DCM-2. THE ORDER-BOOK ROW — aggregates every DCM order (the K3 class:
@@ -226,32 +194,17 @@ WITH agg AS (
   SELECT /*+ MATERIALIZE */
          COUNT(*) AS rows_,
          COUNT(DISTINCT PRODUCT||'~'||DEAL_ID||'~'||TRANCHE_ID) AS keys_,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN 1 END) AS ecm_rows,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN 1 END) AS dcm_rows,
          COUNT(CASE WHEN IDENTIFIER_TYPE <> UPPER(IDENTIFIER_TYPE) THEN 1 END) AS lowercase_idtypes,
          COUNT(CASE WHEN PRODUCT = 'DCM' AND DEAL_SHARING_TYPE = 'SOLO' THEN 1 END) AS dcm_solo,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN 1 END) AS ecm_ipreo_rows,
-         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN TOTAL_FEE END) AS ecm_ipreo_fee,
-         COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRICE END) AS ecm_ipreo_price,
          COUNT(CASE WHEN PRODUCT = 'DCM' AND UPPER(TRANCHE_STATUS) IN ('CANCELLED', 'POSTPONED', 'DELETED', 'ARCHIVED')
                     THEN 1 END) AS dcm_excluded_tr,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN LAST_CLOSE_BEFORE_OFFER END) AS ecm_last_close,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN PRIMARY_SHARES END) AS ecm_primary,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN TRANCHE_OFFER_AMOUNT END) AS ecm_offer_amt,
-         COUNT(CASE WHEN PRODUCT = 'ECM' THEN INITIAL_DEAL_SIZE END) AS ecm_initial,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN IS_CALLABLE END) AS dcm_callable,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN IS_TAP END) AS dcm_tap,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN GOVERNING_LAW END) AS dcm_law,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN EXCHANGE END) AS dcm_exchange,
-         COUNT(CASE WHEN PRODUCT = 'DCM' THEN ISSUER_COUNTRY END) AS dcm_country,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRODUCT_TYPE END) AS opus_ptype,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                      AND UPPER(TRIM(PRODUCT_TYPE)) = UPPER(TRIM(EQUITY_TYPE)) THEN 1 END) AS opus_ptype_eq,
-         COUNT(DISTINCT CASE WHEN PRODUCT = 'ECM' AND NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRODUCT_TYPE END) AS opus_ptype_values,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRODUCT_TYPE END) AS ipreo_ptype,
          COUNT(CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                     AND UPPER(TRIM(PRODUCT_TYPE)) = UPPER(TRIM(EQUITY_TYPE)) THEN 1 END) AS ipreo_ptype_eq,
-         COUNT(DISTINCT CASE WHEN PRODUCT = 'ECM' AND REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN PRODUCT_TYPE END) AS ipreo_ptype_values
+                     AND UPPER(TRIM(PRODUCT_TYPE)) = UPPER(TRIM(EQUITY_TYPE)) THEN 1 END) AS ipreo_ptype_eq
   FROM DGSTREAM.VW_TRANCHE_SUMMARY
 )
 SELECT 'C01. tranche grain (rows = PRODUCT+DEAL+TRANCHE)' AS check_, 'Y' AS expected_,
@@ -274,15 +227,6 @@ SELECT 'C05. no DCM tranche carries an excluded status (cancelled/postponed/dele
        CASE WHEN dcm_excluded_tr = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_excluded_tr = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT 'C06. DCM tranches (INFO — UAT ~73.5k after the exclusion)', '(info)',
-       TO_CHAR(dcm_rows), 'INFO' FROM agg
-UNION ALL
-SELECT 'C07. Ipreo tranches with fee / price (INFO — fee table + product detail joins)', '(info)',
-       TO_CHAR(ecm_ipreo_fee) || ' fee / ' || TO_CHAR(ecm_ipreo_price) || ' price of ' || TO_CHAR(ecm_ipreo_rows), 'INFO' FROM agg
-UNION ALL
-SELECT 'C08. ECM tranches: last close / primary shares / offer amount / initial size (INFO — batch C; raw UAT 27% / 72% / 78% / 80%)', '(info)',
-       TO_CHAR(ecm_last_close) || ' / ' || TO_CHAR(ecm_primary) || ' / ' || TO_CHAR(ecm_offer_amt) || ' / ' || TO_CHAR(ecm_initial) || ' of ' || TO_CHAR(ecm_rows), 'INFO' FROM agg
-UNION ALL
 -- Defect item 6 (2026-10-07): product_type must come from the product's
 -- securityType, not the deal's equity type. If it is derived from equity
 -- type it EQUALS equity_type on every populated row; a real security type
@@ -291,18 +235,9 @@ SELECT 'C10. OPUS ECM product_type is not a copy of equity_type (item 6)', 'Y',
        CASE WHEN opus_ptype > 0 AND opus_ptype_eq = opus_ptype THEN 'N' ELSE 'Y' END,
        CASE WHEN opus_ptype > 0 AND opus_ptype_eq = opus_ptype THEN 'FAIL' ELSE 'PASS' END FROM agg
 UNION ALL
-SELECT 'C10b. OPUS ECM product_type: equal to equity_type / populated / distinct values (INFO)', '(info)',
-       TO_CHAR(opus_ptype_eq) || ' equal of ' || TO_CHAR(opus_ptype) || ' populated, ' || TO_CHAR(opus_ptype_values) || ' distinct', 'INFO' FROM agg
-UNION ALL
 SELECT 'C11. Ipreo ECM product_type is not a copy of equity_type (item 6)', 'Y',
        CASE WHEN ipreo_ptype > 0 AND ipreo_ptype_eq = ipreo_ptype THEN 'N' ELSE 'Y' END,
        CASE WHEN ipreo_ptype > 0 AND ipreo_ptype_eq = ipreo_ptype THEN 'FAIL' ELSE 'PASS' END FROM agg
-UNION ALL
-SELECT 'C11b. Ipreo ECM product_type: equal to equity_type / populated / distinct values (INFO)', '(info)',
-       TO_CHAR(ipreo_ptype_eq) || ' equal of ' || TO_CHAR(ipreo_ptype) || ' populated, ' || TO_CHAR(ipreo_ptype_values) || ' distinct', 'INFO' FROM agg
-UNION ALL
-SELECT 'C09. DCM tranches: callable / tap / governing law / exchange / country (INFO — batch C; raw UAT ~14% / 13% / 13% / 13% / 27%)', '(info)',
-       TO_CHAR(dcm_callable) || ' / ' || TO_CHAR(dcm_tap) || ' / ' || TO_CHAR(dcm_law) || ' / ' || TO_CHAR(dcm_exchange) || ' / ' || TO_CHAR(dcm_country) || ' of ' || TO_CHAR(dcm_rows), 'INFO' FROM agg
 ORDER BY 1;
 
 -- D-ECM. ORDER VIEW, ECM branches — one scan.
@@ -310,20 +245,10 @@ WITH agg AS (
   SELECT /*+ MATERIALIZE NO_PARALLEL */
          COUNT(*) AS rows_,
          COUNT(DISTINCT ORDER_ID) AS keys_,
-         COUNT(ORDER_DEMAND_QTY) AS ecm_demand,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN 1 END) AS ecm_ipreo_rows,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                      AND ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS') THEN 1 END) AS ecm_ipreo_excluded,
-         COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS ecm_alloc_null,
-         COUNT(LIMIT_TYPE) AS ecm_limit_type,
-         COUNT(CASE WHEN ORDER_AMOUNT <> NVL(LIMIT_VALUE, 0) THEN 1 END) AS ecm_two_limits,
-         COUNT(CASE WHEN LIMIT_COUPON IS NOT NULL OR LIMIT_PREMIUM IS NOT NULL THEN 1 END) AS ecm_limit_cvt,
-         COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN BILLED_BY END) AS opus_billed,
-         COUNT(CASE WHEN NOT REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                     AND REGEXP_LIKE(BILLED_BY, '^[A-Z0-9]{2,10}$') THEN 1 END) AS opus_billed_code,
-         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN BILLED_BY END) AS ipreo_billed,
-         COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
-                     AND REGEXP_LIKE(BILLED_BY, '^[A-Z0-9]{2,10}$') THEN 1 END) AS ipreo_billed_code
+         COUNT(CASE WHEN ORDER_AMOUNT <> NVL(LIMIT_VALUE, 0) THEN 1 END) AS ecm_two_limits
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'ECM'
 )
@@ -339,23 +264,9 @@ SELECT 'D03. Ipreo cancelled/deleted/pass orders excluded', 'Y',
        CASE WHEN ecm_ipreo_excluded = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_ipreo_excluded = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
-SELECT 'D04. ECM orders with a share-equivalent indication (INFO — IOI rebuild; UAT ~72%)', '(info)',
-       TO_CHAR(ecm_demand) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT 'D05. ECM orders with no allocation recorded (INFO — NULL kept since 2026-09-29)', '(info)',
-       TO_CHAR(ecm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
--- BILLED_BY is a broker NAME on OPUS orders and a broker CODE on Ipreo orders
--- (no name exists at the Ipreo source — accepted). A code is short, upper-case.
 SELECT 'D16. ECM ORDER_AMOUNT equals LIMIT_VALUE (one limit per order, 2026-10-14)', 'Y',
        CASE WHEN ecm_two_limits = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_two_limits = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
-SELECT 'D15. ECM orders with a limit type / with convertible limit terms (INFO — OPUS only)', '(info)',
-       TO_CHAR(ecm_limit_type) || ' typed / ' || TO_CHAR(ecm_limit_cvt) || ' coupon-or-premium of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT 'D14. BILLED_BY code-like / populated — OPUS then Ipreo (INFO — Ipreo has no broker name at source, codes accepted 2026-10-07; Citi codes render as Citigroup (CODE))', '(info)',
-       TO_CHAR(opus_billed_code) || ' of ' || TO_CHAR(opus_billed) || ' OPUS; ' || TO_CHAR(ipreo_billed_code) || ' of ' || TO_CHAR(ipreo_billed) || ' Ipreo', 'INFO' FROM agg
 ORDER BY 1;
 
 -- D-DCM. ORDER VIEW, DCM branch — one scan (the large one).
@@ -365,10 +276,7 @@ WITH agg AS (
          COUNT(DISTINCT ORDER_ID) AS keys_,
          SUM(ORDER_ALLOCATION) AS dcm_alloc,
          COUNT(PRODUCT_CLASS) AS dcm_class,
-         SUM(CASE WHEN UPPER(ORDER_STATUS) NOT IN ('ACCEPTED', 'BOOKED', 'UPDATED', 'NEW') THEN 1 ELSE 0 END) AS dcm_out_of_scope,
-         COUNT(CASE WHEN ORDER_STATUS IS NULL THEN 1 END) AS dcm_null_status,
-         COUNT(CASE WHEN ORDER_ALLOCATION IS NULL THEN 1 END) AS dcm_alloc_null,
-         COUNT(CASE WHEN ORDER_ALLOCATION > 0 THEN 1 END) AS dcm_allocated
+         SUM(CASE WHEN UPPER(ORDER_STATUS) NOT IN ('ACCEPTED', 'BOOKED', 'UPDATED', 'NEW') THEN 1 ELSE 0 END) AS dcm_out_of_scope
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'DCM'
 )
@@ -387,18 +295,6 @@ UNION ALL
 SELECT 'D09. DCM order statuses in scope only (accepted/booked/updated/new)', 'Y',
        CASE WHEN dcm_out_of_scope = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN dcm_out_of_scope = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
-UNION ALL
-SELECT 'D10. NULL-status DCM orders (INFO — kept by the NULL-safe filter; UAT 0 because every one was RQ)', '(info)',
-       TO_CHAR(dcm_null_status) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT 'D11. DCM orders (INFO — UAT ~1.25M after the exclusion)', '(info)',
-       TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT 'D12. DCM orders with no allocation recorded (INFO — NULL kept since 2026-09-29)', '(info)',
-       TO_CHAR(dcm_alloc_null) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
-UNION ALL
-SELECT 'D13. DCM orders with an allocation > 0 (INFO — match-group source since 2026-10-06; OB_ORDER alone gave ~196k raw)', '(info)',
-       TO_CHAR(dcm_allocated) || ' of ' || TO_CHAR(rows_), 'INFO' FROM agg
 ORDER BY 1;
 
 -- E. THE OTHER FIVE VIEWS — grain only, one scan each.
@@ -421,10 +317,6 @@ SELECT 'E4. designation grain' AS check_, 'Y' AS expected_,
        CASE WHEN COUNT(*) = COUNT(DISTINCT DESIGNATION_ID) THEN 'Y' ELSE 'N' END AS actual_,
        CASE WHEN COUNT(*) = COUNT(DISTINCT DESIGNATION_ID) THEN 'PASS' ELSE 'FAIL' END AS verdict_
 FROM DGSTREAM.VW_DESIGNATION;
-
-SELECT 'E5. trade-syndicate rows (INFO — source empty today; rows = news)' AS check_,
-       '(info)' AS expected_, TO_CHAR(COUNT(*)) AS actual_, 'INFO' AS verdict_
-FROM DGSTREAM.VW_TRADE_SYNDICATE;
 
 -- ===========================================================================
 -- K. TIMING PROBES — run with elapsed time visible; the seconds are the

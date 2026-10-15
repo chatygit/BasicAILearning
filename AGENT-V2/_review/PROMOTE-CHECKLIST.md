@@ -33,8 +33,9 @@ A failure becomes a gate-1 pin wherever it can be mechanised.
    LAST_DDL_TIME on every changed view; section A (A01-A09 = column count per
    view against the repo, A10-A12 types) all PASS; every PASS/FAIL row in
    B-ECM / B-DCM / C / D-ECM / D-DCM / E PASS (grain, currency names, Ipreo
-   presence, status exclusions, order statuses); INFO rows judged zero-vs-
-   healthy; section K timings screenshotted (K3 / K4 = the Ipreo branch).
+   presence, status exclusions, order statuses, one limit per order). Below A0
+   the check is PASS/FAIL only (2026-10-14) — population counts are census
+   work in db-asks; section K timings screenshotted (K3 / K4 = Ipreo).
    Sections B and D are one statement PER PRODUCT since 2026-09-23 (QA hit the
    instance PGA limit materialising all branches at once); never add session
    commands (ALTER SESSION …) to the check — the user's account would be

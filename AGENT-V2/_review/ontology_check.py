@@ -494,9 +494,7 @@ check(has(ROOT / "app" / "bqs" / "ontology" / "capital_markets_deal.yaml",
           "NUMERIC TOKENS ARE NOT CURRENCIES"),
       "[answer] capital_markets_deal.yaml: currencies lost the numeric-token "
       "rule — the id fallback leaks to users as a 'currency'")
-check(r"(^|\| )[0-9]+( \||$)" in text(ROOT / "views" / "_deploy-check.sql"),
-      "[deploy] _deploy-check.sql: row B03 (unmapped currency tokens) is back to the whole-string regex "
-      "— a multi-currency id fallback like '1 | 4' passes the deploy check")
+# (2026-10-14: the unmapped-currency INFO row left the deploy check — PASS/FAIL only now.)
 # STALE RELATIVE WINDOW (QA 2026-08-18): the model fired run_bqs_query in
 # the SAME turn as discovery — before the date_anchor existed — and "this
 # year" ran as 2024, answered as fact. Three layers now hold: the server
