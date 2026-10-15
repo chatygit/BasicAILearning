@@ -204,6 +204,12 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       same largest-IOI row as LIMIT_VALUE, on both ECM branches. Card: never
       show order_amount beside limit_value. Deploy-check D16. Closes the
       ORDER_AMOUNT open decision.
+      LIVE ON UAT (db-asks AF 2026-10-15: order 2362660896406 reads 10 / 10);
+      reaches PROD with the next view promotion.
+- [x] ECM ALLOCATION SOURCE (db-asks AE, UAT 2026-10-15): PRIVATE_ALLOC is the
+      only populated ECM allocation column — FINAL / DRAFT / INST never fill
+      a gap and never disagree. The PROD 'Not recorded' allocations on Space
+      Exploration Technologies are the source's, not the view's. No change.
 - [x] CITI-SOLO RULE AUDIT (db-asks AD, UAT 2026-10-08): '^CITI(GROUP|BANK)?([ _]|$)'
       counts every real Citi label (Citigroup 47k DCM, Citigroup Global Markets
       Inc. 38k ECM / 21k DCM, Citi Group GMG, Citibank N.A. …) and rejects
