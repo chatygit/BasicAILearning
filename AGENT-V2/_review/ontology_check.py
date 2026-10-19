@@ -1788,7 +1788,8 @@ for _p in (DEAL, ORDER, TRANCHE, SKILL, AGENTS):
           f"[citi] {_p.name} teaches a bare '%Citi%' match again (Citizens / CITIC)")
 # SCALED ORDERS SHOW THE LADDER (PO 2026-10-19): quantities are cumulative — the
 # order is the largest level, never the sum — and listings show every level.
-check(text(ROOT / "views" / "vw_order_detail.sql").count("LV.IOI_LEVELS AS IOI_LEVELS") == 2
+check(text(ROOT / "views" / "vw_order_detail.sql").count("ELSE '' END || LV.IOI_LEVELS END AS IOI_LEVELS") == 2
+      and "FM999,999,999,990.9999" in text(ROOT / "views" / "vw_order_detail.sql")
       and "CAST(NULL AS VARCHAR2(4000)) AS IOI_LEVELS" in text(ROOT / "views" / "vw_order_detail.sql")
       and "WITHIN GROUP (ORDER BY V.IOI_QTY)" in text(ROOT / "views" / "vw_order_detail.sql")
       and has(ORDER, "  ioi_levels:") and has(ORDER, "NEVER the sum")
@@ -2973,7 +2974,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 70_065,
+    ONT / "capital_markets_order.yaml": 70_302,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 91_390,

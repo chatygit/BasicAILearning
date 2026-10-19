@@ -213,6 +213,10 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       blank (view falls back to the largest level), 1,566 another figure.
       The view cannot produce a summed 60,000; the PO's 'not 60,000' is the
       rule, now stated in the card. Optional AH samples the 1,566.
+      AH (2026-10-19): the 1,566 are CURRENCY / PERCENT bids — DEMAND_QTY is the
+      share-equivalent (correct, no change). Ladder fixed: quantities keep
+      decimals (68.32 %) and carry the bid unit ('amounts:', '% of deal:',
+      'face:'); '@ market' marks a level with no limit.
       PO also wrote "I can't see the investor names" — need that agent answer
       to diagnose (order listings must project investor_name).
 - [ ] ONE LIMIT PER ORDER (user 2026-10-14, PROD answer showed Limit Value 25 and

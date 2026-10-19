@@ -78,7 +78,11 @@ SELECT
     CAST(LM.LIMIT_COUPON AS NUMBER(38,6)) AS LIMIT_COUPON,
     CAST(LM.LIMIT_PREMIUM AS NUMBER(38,6)) AS LIMIT_PREMIUM,
     LM.LIMIT_CURRENCY AS LIMIT_CURRENCY,
-    LV.IOI_LEVELS AS IOI_LEVELS
+    CASE WHEN LV.IOI_LEVELS IS NOT NULL
+         THEN CASE UPPER(O.IOI_UNIT) WHEN 'CURRENCY' THEN 'amounts: '
+                                     WHEN 'PERCENT' THEN '% of deal: '
+                                     WHEN 'FACE' THEN 'face: '
+                                     ELSE '' END || LV.IOI_LEVELS END AS IOI_LEVELS
 FROM (
     SELECT E.*
     FROM (
@@ -150,7 +154,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT V.ORDER_ID,
            CASE WHEN COUNT(*) > 1 THEN
-             LISTAGG(TRIM(TO_CHAR(V.IOI_QTY, '999,999,999,990')) ||
+             LISTAGG(RTRIM(TO_CHAR(V.IOI_QTY, 'FM999,999,999,990.9999'), '.') ||
                      CASE WHEN V.LIMIT_VALUE IS NOT NULL
                           THEN ' @ ' || TRIM(TO_CHAR(V.LIMIT_VALUE, '999,999,990.00'))
                           WHEN V.LIMIT_COUPON IS NOT NULL OR V.LIMIT_PREMIUM IS NOT NULL
@@ -307,7 +311,11 @@ SELECT
     CAST(LM.LIMIT_COUPON AS NUMBER(38,6)) AS LIMIT_COUPON,
     CAST(LM.LIMIT_PREMIUM AS NUMBER(38,6)) AS LIMIT_PREMIUM,
     CAST(NULL AS VARCHAR2(400)) AS LIMIT_CURRENCY,
-    LV.IOI_LEVELS AS IOI_LEVELS
+    CASE WHEN LV.IOI_LEVELS IS NOT NULL
+         THEN CASE UPPER(O.IOI_UNIT) WHEN 'CURRENCY' THEN 'amounts: '
+                                     WHEN 'PERCENT' THEN '% of deal: '
+                                     WHEN 'FACE' THEN 'face: '
+                                     ELSE '' END || LV.IOI_LEVELS END AS IOI_LEVELS
 FROM (
     SELECT E.*
     FROM (
@@ -366,7 +374,7 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT V.ORDER_ID,
            CASE WHEN COUNT(*) > 1 THEN
-             LISTAGG(TRIM(TO_CHAR(V.IOI_QTY, '999,999,999,990')) ||
+             LISTAGG(RTRIM(TO_CHAR(V.IOI_QTY, 'FM999,999,999,990.9999'), '.') ||
                      CASE WHEN V.LIMIT_VALUE IS NOT NULL
                           THEN ' @ ' || TRIM(TO_CHAR(V.LIMIT_VALUE, '999,999,990.00'))
                           WHEN V.LIMIT_COUPON IS NOT NULL OR V.LIMIT_PREMIUM IS NOT NULL
