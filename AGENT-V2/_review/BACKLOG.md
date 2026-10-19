@@ -209,6 +209,10 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       check A03 = 71, D17. Open: db-asks AG — is OB_ECM_ORDER.DEMAND_QTY the
       largest level or the SUM on scaled orders (the 60,000)? If SUM, the
       demand expression switches to the largest IOI level for scaled orders.
+      AG ANSWERED (UAT 2026-10-19): never the SUM — 1,531 largest level, 3,031
+      blank (view falls back to the largest level), 1,566 another figure.
+      The view cannot produce a summed 60,000; the PO's 'not 60,000' is the
+      rule, now stated in the card. Optional AH samples the 1,566.
       PO also wrote "I can't see the investor names" — need that agent answer
       to diagnose (order listings must project investor_name).
 - [ ] ONE LIMIT PER ORDER (user 2026-10-14, PROD answer showed Limit Value 25 and
