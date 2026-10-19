@@ -198,6 +198,19 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whose column is also in dimensions (0 rows by construction).
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+- [ ] SCALED-ORDER LADDER (PO Michael Armeno, 2026-10-19: "when displaying a
+      scaled order, we want to see all the price levels like the orderbook. The
+      quantity is a cumulative total — 30,000 @ $10, not 60,000"). Order view
+      +IOI_LEVELS on both ECM branches: deduped IOI rows per order, listed
+      '10,000 @ 12.00 | 20,000 @ 11.00 | 30,000 @ 10.00' by ascending quantity
+      (convertible levels: coupon / premium), only when 2+ levels; DCM NULL.
+      Card: ioi_levels, 'never the sum' on order_demand_qty, billed_by =
+      bank / broker / syndicate member on an order, worked example. Deploy-
+      check A03 = 71, D17. Open: db-asks AG — is OB_ECM_ORDER.DEMAND_QTY the
+      largest level or the SUM on scaled orders (the 60,000)? If SUM, the
+      demand expression switches to the largest IOI level for scaled orders.
+      PO also wrote "I can't see the investor names" — need that agent answer
+      to diagnose (order listings must project investor_name).
 - [ ] ONE LIMIT PER ORDER (user 2026-10-14, PROD answer showed Limit Value 25 and
       IOI Limit Price 45 on one BlackRock order): ECM ORDER_AMOUNT was
       MAX(LIMIT_VALUE) across the IOI curve; now NVL(LM.LIMIT_VALUE, 0), the

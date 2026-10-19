@@ -1786,6 +1786,14 @@ for _vf in ("vw_deal_summary.sql", "vw_order_detail.sql", "vw_tranche_summary.sq
 for _p in (DEAL, ORDER, TRANCHE, SKILL, AGENTS):
     check(not re.search(r"like '%citi%'", text(_p), re.I),
           f"[citi] {_p.name} teaches a bare '%Citi%' match again (Citizens / CITIC)")
+# SCALED ORDERS SHOW THE LADDER (PO 2026-10-19): quantities are cumulative — the
+# order is the largest level, never the sum — and listings show every level.
+check(text(ROOT / "views" / "vw_order_detail.sql").count("LV.IOI_LEVELS AS IOI_LEVELS") == 2
+      and "CAST(NULL AS VARCHAR2(4000)) AS IOI_LEVELS" in text(ROOT / "views" / "vw_order_detail.sql")
+      and "WITHIN GROUP (ORDER BY V.IOI_QTY)" in text(ROOT / "views" / "vw_order_detail.sql")
+      and has(ORDER, "  ioi_levels:") and has(ORDER, "NEVER the sum")
+      and has(ORDER, "question: Scaled orders on a deal with every price level"),
+      "[ladder] the scaled-order price ladder (view column, card rule or worked example) is gone")
 # ONE LIMIT PER ORDER (user 2026-10-14): ECM ORDER_AMOUNT is the same largest-IOI-row
 # limit as LIMIT_VALUE (it was MAX(LIMIT_VALUE) across the curve: 45 vs 25 on a
 # scaled order), and the card forbids showing both.
@@ -2965,7 +2973,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 68_704,
+    ONT / "capital_markets_order.yaml": 70_065,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 91_390,

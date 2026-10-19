@@ -182,7 +182,7 @@ the column is a typed NULL stub.
 | 32 | TRADE_STATUS |  |
 | 33 | PUBLISHED_TS |  |
 
-## VW_ORDER_DETAIL (70 columns, 3 branches)
+## VW_ORDER_DETAIL (71 columns, 3 branches)
 
 | # | Column | NULL on branch |
 |---|---|---|
@@ -251,11 +251,12 @@ the column is a typed NULL stub.
 | 63 | TENORS | 0, 1 |
 | 64 | PRODUCT_CLASS | 0, 1 |
 | 65 | DEAL_CLASS | 1, 2 |
-| 66 | LIMIT_TYPE | 1, 2 |
-| 67 | LIMIT_VALUE | 1, 2 |
-| 68 | LIMIT_COUPON | 1, 2 |
-| 69 | LIMIT_PREMIUM | 1, 2 |
+| 66 | LIMIT_TYPE | 2 |
+| 67 | LIMIT_VALUE | 2 |
+| 68 | LIMIT_COUPON | 2 |
+| 69 | LIMIT_PREMIUM | 2 |
 | 70 | LIMIT_CURRENCY | 1, 2 |
+| 71 | IOI_LEVELS | 2 |
 
 ## VW_TRADE_DETAIL (30 columns, 2 branches)
 

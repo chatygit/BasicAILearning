@@ -34,7 +34,7 @@ FROM (
          TO_CHAR(COUNT(*)) AS actual_
   FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
   UNION ALL
-  SELECT 'A03. VW_ORDER_DETAIL has every repo column' AS check_, '70' AS expected_,
+  SELECT 'A03. VW_ORDER_DETAIL has every repo column' AS check_, '71' AS expected_,
          TO_CHAR(COUNT(*)) AS actual_
   FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
   UNION ALL
@@ -248,7 +248,8 @@ WITH agg AS (
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$') THEN 1 END) AS ecm_ipreo_rows,
          COUNT(CASE WHEN REGEXP_LIKE(DEAL_ID, '^[0-9]{10}$')
                      AND ORDER_STATUS IN ('CANCELLED', 'DELETED', 'PASS') THEN 1 END) AS ecm_ipreo_excluded,
-         COUNT(CASE WHEN ORDER_AMOUNT <> NVL(LIMIT_VALUE, 0) THEN 1 END) AS ecm_two_limits
+         COUNT(CASE WHEN ORDER_AMOUNT <> NVL(LIMIT_VALUE, 0) THEN 1 END) AS ecm_two_limits,
+         COUNT(CASE WHEN UPPER(IOI_TYPE) = 'SCALED' AND IOI_LEVELS IS NOT NULL THEN 1 END) AS ecm_ladders
   FROM DGSTREAM.VW_ORDER_DETAIL
   WHERE PRODUCT = 'ECM'
 )
@@ -263,6 +264,10 @@ UNION ALL
 SELECT 'D03. Ipreo cancelled/deleted/pass orders excluded', 'Y',
        CASE WHEN ecm_ipreo_excluded = 0 THEN 'Y' ELSE 'N' END,
        CASE WHEN ecm_ipreo_excluded = 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
+UNION ALL
+SELECT 'D17. ECM scaled orders carry their price ladder (IOI_LEVELS, 2026-10-19)', 'Y',
+       CASE WHEN ecm_ladders > 0 THEN 'Y' ELSE 'N' END,
+       CASE WHEN ecm_ladders > 0 THEN 'PASS' ELSE 'FAIL' END FROM agg
 UNION ALL
 SELECT 'D16. ECM ORDER_AMOUNT equals LIMIT_VALUE (one limit per order, 2026-10-14)', 'Y',
        CASE WHEN ecm_two_limits = 0 THEN 'Y' ELSE 'N' END,
