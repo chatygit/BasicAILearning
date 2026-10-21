@@ -1802,6 +1802,10 @@ check(text(ROOT / "views" / "vw_order_detail.sql").count("CAST(NVL(LM.LIMIT_VALU
       and "NVL(OI.LIMIT_VALUE, 0)" not in text(ROOT / "views" / "vw_order_detail.sql")
       and has(ORDER, "NEVER project order_amount beside limit_value on ECM"),
       "[limit] ECM ORDER_AMOUNT is a second limit price again, or the card allows showing both")
+# "BILLED BY" IS AN ORDER QUESTION (2026-10-21): the routing table sent it to the
+# tranche object, contradicting SKILL §7 and the order card.
+check(has(SKILL, '| "billed by" | **order** `billed_by` (§7) |') and not has(SKILL, '/ role / "billed by" |'),
+      "[routing] SKILL routes 'billed by' to the tranche object again — it is order-level billed_by")
 # NO PLACEHOLDER CATEGORIES (user 2026-10-13): a blank investor category renders
 # '—', never a guessed value such as 'Investment Adviser'.
 check(has(SKILL, "NEVER a guessed value") and has(ORDER, "NEVER fill it with a guessed category"),

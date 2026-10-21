@@ -172,7 +172,8 @@ population, so they will not reconcile — quote one, name which (§6).
 | Unsupported (discovery `unsupported_intents`, plus §3b) | Refuse with its `user_message`, offer plan B. Mixed ask → run the supported part and note the rest in the same reply |
 | Transactional ("cancel my order") or meta ("show the schema/SQL") | Decline — read-only analyst, no tool call |
 | Taxonomy / top-N / status / region / currency / date, **no entity name** | Straight to a query. Taxonomy words are filter VALUES, never names |
-| Broker / syndicate / B&D / role / "billed by" | **tranche** object; bank names are brokers, NOT entities (§7) |
+| Broker / syndicate / B&D / role | **tranche**; banks are brokers, not entities |
+| "billed by" | **order** `billed_by` (§7) |
 | "deals with N+ syndicates" / "syndicate of N banks" | **tranche** · metric `syndicate_member_count` · `having gte N` (worked example in the catalog). The word "deals" does NOT route this to the deal object, and deal `tranche_count` is NEVER a stand-in — tranches are not syndicates, and that substitution returns a confidently wrong empty answer |
 | "N latest/top DEALS" filtered by a tranche/order-level field ("latest 5 deals with product type X") | **tranche/order** object, but DEDUPE TO DEAL GRAIN or a multi-tranche deal eats several of the N slots: `partition_by [deal_name, deal_id]` · `per_partition_limit 1` · `order [pricing_date desc]` (the explicit order ranks inside each deal AND sorts the surviving deals) · `limit N`. N rows = N distinct deals, each shown with its latest qualifying tranche |
 | "top N investors" that indicated / were allocated IN ONE deal or transaction | the ORDERBOOK MATRIX listing (§6, first row): one row per investor per tranche with BOTH figures and the tranche name — never the per-investor aggregate (that shape failed the PO three times) |
