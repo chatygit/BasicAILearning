@@ -73,9 +73,11 @@ how_to_use:
      coverage (deal subscription_ratio, 'x'), total indication and total final
      allocation — from the deal object or a SUM metric, never by adding the
      rows. (2) One table, columns in this order: # · Account / Investor Name ·
-     Status (order_type when it is not REGULAR, e.g. OTT; 'Pot' when is_pot; else blank) · Acct No. / GP Num
+Source (order_source, ONEBOOK = '1B') · Status (order_type when it is not
+     REGULAR, e.g. OTT; 'Pot' when is_pot; else blank) · Acct No. / GP Num
      (investor_id) · Tranche (tranche_name) · Indication (order_demand_qty) ·
-     Indication Type · Indication as Entered · Final Allocation. Indication
+     Indication Type · Indication USD (indication_usd) · Indication as Entered ·
+     Final Allocation. Indication
      Type from demand_unit: SHARES/BOND = the security (equity_type, e.g.
      'Common Shares'), CURRENCY = 'Cash - <currency>', PERCENT = '% of Deal
      Size', FACE = 'Face - <currency>'. Indication as Entered = demand_as_
@@ -385,6 +387,8 @@ dimensions:
   limit_premium: {column: limit_premium, products: ["ECM"], description: "ECM. CONVERTIBLE limit: the conversion premium (%) the investor accepts (e.g. 30). Show it as 'Premium 30%'."}
   limit_currency: {column: limit_currency, products: ["ECM"], description: "ECM. Currency of limit_value (USD…); blank on 10-digit-id deals — use the row's currency."}
   ioi_levels: {column: ioi_levels, products: ["ECM"], description: "ECM. The order's PRICE LADDER when it has 2+ IOI levels (scaled orders): '30,000 @ 10.00 | 20,000 @ 11.00 | 10,000 @ 12.00', LARGEST level first as the Orderbook screen shows it; convertible levels show coupon / premium; '@ market' = a level with no limit. Quantities are in the BID's unit: shares / bonds plain, prefixed 'amounts:' (currency bids, money), '% of deal:' or 'face:' — project demand_unit beside it; order_demand_qty is the share-equivalent. Quantities are CUMULATIVE — the order is the LARGEST level (= order_demand_qty, here 30,000 @ 10.00), NEVER the sum. Project it on every scaled-order or orderbook listing and show it as ONE cell (pipe list). Blank = a single-level order; NULL on DCM."}
+  order_source: {column: order_source, products: ["ECM"], description: "ECM (OPUS deals). Where the order came from — ONEBOOK (show as '1B', our own book), ISN (IssueNet: another bank's book, no GP number), CMG, SALES, DA. The Orderbook screen's Source column. Blank on 10-digit-id deals; NULL on DCM."}
+  indication_usd: {column: indication_usd, products: ["ECM"], description: "ECM. The indication in USD as the Orderbook screen shows it: a cash bid = the amount entered; a share bid with a USD limit = largest-level quantity x its limit. Blank for market orders, percent bids and non-USD limits — never estimate it. For a scaled order's other levels the USD is that level's quantity x its limit (from ioi_levels)."}
   currency: {column: currency, description: "Pricing currency (scalar). Required alongside any DCM money figure. NULL on many ECM rows (the newer ECM source records it on ~1 in 10 orders; an order whose tranche id matches no tranche has none) — a currency filter silently drops them: size with is_null and disclose."}
   pricing_date: {column: pricing_ts, description: "Tranche pricing timestamp (default time field). NULL on ECM orders whose tranche id matches no tranche — those rows drop out of every date-bounded query."}
   # --- DENORMALISED from the deal/tranche grain (added 2026-08-11). These do
@@ -1048,7 +1052,7 @@ examples:
     request:
       source: capital_markets_order
       metric: row_count
-      dimensions: [investor_name, investor_id, order_id, order_type, is_pot, tranche_name, order_demand_qty, demand_unit, demand_as_submitted, currency, ioi_type, ioi_levels, order_allocation, equity_type]
+      dimensions: [investor_name, order_source, order_type, is_pot, investor_id, order_id, tranche_name, order_demand_qty, demand_unit, indication_usd, demand_as_submitted, currency, ioi_type, ioi_levels, order_allocation, equity_type]
       filters:
         - {field: product, op: eq, value: ECM}
         - {field: deal_id, op: eq, value: "85AA3193"}

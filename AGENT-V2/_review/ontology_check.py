@@ -1792,6 +1792,10 @@ for _p in (DEAL, ORDER, TRANCHE, SKILL, AGENTS):
 check(has(ORDER, "ORDERBOOK LAYOUT (Product 2026-10-23)")
       and has(ORDER, "question: Orderbook for one ECM deal, as the Orderbook screen shows it"),
       "[layout] the Orderbook-screen layout note or its worked example left the order card")
+check(text(ROOT / "views" / "vw_order_detail.sql").count(" AS ORDER_SOURCE") == 3
+      and text(ROOT / "views" / "vw_order_detail.sql").count(" AS INDICATION_USD") == 3
+      and has(ORDER, "  order_source:") and has(ORDER, "  indication_usd:"),
+      "[layout] the Orderbook-screen Source / Indication USD columns left the view or the card")
 # SCALED ORDERS SHOW THE LADDER (PO 2026-10-19): quantities are cumulative — the
 # order is the largest level, never the sum — and listings show every level.
 check(text(ROOT / "views" / "vw_order_detail.sql").count("ELSE '' END || LV.IOI_LEVELS END AS IOI_LEVELS") == 2
@@ -2985,7 +2989,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 72_338,
+    ONT / "capital_markets_order.yaml": 73_172,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 91_390,

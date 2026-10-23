@@ -34,7 +34,7 @@ FROM (
          TO_CHAR(COUNT(*)) AS actual_
   FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_TRANCHE_SUMMARY'
   UNION ALL
-  SELECT 'A03. VW_ORDER_DETAIL has every repo column' AS check_, '71' AS expected_,
+  SELECT 'A03. VW_ORDER_DETAIL has every repo column' AS check_, '73' AS expected_,
          TO_CHAR(COUNT(*)) AS actual_
   FROM   all_tab_columns WHERE owner = 'DGSTREAM' AND table_name = 'VW_ORDER_DETAIL'
   UNION ALL

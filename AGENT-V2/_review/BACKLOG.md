@@ -63,6 +63,14 @@ no-placeholder-category rule (SKILL + order card, uncommitted).
       (Status = order_type unless REGULAR). AI showed the QA ladder (still
       ascending) and '#####' on 15-digit quantities / large limits — number
       masks widened to 18+ digits. AK calibrates against the screen deal.
+      AK (UAT 2026-10-23): Source = OB_ECM_ORDER.SOURCE (ONEBOOK shown as '1B',
+      ISN, CMG, SALES, DA — ISN orders carry no GP number, as on screen);
+      Indication USD = cash amount entered, or quantity x limit per level.
+      BUILT: ORDER_SOURCE + INDICATION_USD on the order view (73 columns),
+      card fields, layout note and example updated, A03 = 73. GAPS: the
+      screen shows cash bids converted to shares (ADIA 37,374 USD → 12,458)
+      where our demand is blank unless the desk stored DEMAND_QTY; 'PB'
+      badge has no column.
 - [ ] NO PLACEHOLDER CATEGORIES (user 2026-10-13): the agent filled blank
       investor categories with 'Investment Adviser' (the views pass the stored
       value through, no default). SKILL formatting rule + order card: blank =
