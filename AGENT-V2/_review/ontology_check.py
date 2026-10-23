@@ -1786,12 +1786,18 @@ for _vf in ("vw_deal_summary.sql", "vw_order_detail.sql", "vw_tranche_summary.sq
 for _p in (DEAL, ORDER, TRANCHE, SKILL, AGENTS):
     check(not re.search(r"like '%citi%'", text(_p), re.I),
           f"[citi] {_p.name} teaches a bare '%Citi%' match again (Citizens / CITIC)")
+# ORDERBOOK LAYOUT (Product 2026-10-23): one-deal orderbook answers mirror the
+# Orderbook screen — summary line, fixed column order, Indication Type labels,
+# scaled orders as continuation rows — taught by a card note AND an example.
+check(has(ORDER, "ORDERBOOK LAYOUT (Product 2026-10-23)")
+      and has(ORDER, "question: Orderbook for one ECM deal, as the Orderbook screen shows it"),
+      "[layout] the Orderbook-screen layout note or its worked example left the order card")
 # SCALED ORDERS SHOW THE LADDER (PO 2026-10-19): quantities are cumulative — the
 # order is the largest level, never the sum — and listings show every level.
 check(text(ROOT / "views" / "vw_order_detail.sql").count("ELSE '' END || LV.IOI_LEVELS END AS IOI_LEVELS") == 2
       and "FM999,999,999,990.9999" in text(ROOT / "views" / "vw_order_detail.sql")
       and "CAST(NULL AS VARCHAR2(4000)) AS IOI_LEVELS" in text(ROOT / "views" / "vw_order_detail.sql")
-      and "WITHIN GROUP (ORDER BY V.IOI_QTY)" in text(ROOT / "views" / "vw_order_detail.sql")
+      and text(ROOT / "views" / "vw_order_detail.sql").count("WITHIN GROUP (ORDER BY V.IOI_QTY DESC)") == 2
       and has(ORDER, "  ioi_levels:") and has(ORDER, "NEVER the sum")
       and has(ORDER, "question: Scaled orders on a deal with every price level"),
       "[ladder] the scaled-order price ladder (view column, card rule or worked example) is gone")
@@ -2978,7 +2984,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 70_302,
+    ONT / "capital_markets_order.yaml": 72_303,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 91_390,

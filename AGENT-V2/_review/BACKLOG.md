@@ -46,6 +46,18 @@ no-placeholder-category rule (SKILL + order card, uncommitted).
   K7 regression = no handover.
 
 ## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
+- [ ] ORDERBOOK SCREEN PARITY (Product 2026-10-23: "make the agent display the
+      data as close to the Orderbook UI as possible"). Screen: # · Account /
+      Investor Name · Source (1B / ISN) · Status (OTT) · Acct No. / GPNum ·
+      Tranche · Indication (Common Shares) · Indication Type · Indication USD ·
+      Indication as Entered · Final Allocation (Common Shares); summary rows
+      for coverage (120.87x), total indication, total USD, allocation; Pot /
+      PB badges; scaled orders as continuation rows, largest level first.
+      DONE (repo): order-card ORDERBOOK LAYOUT note + worked example; ladder
+      reordered largest-first (view, QA-deployed copy is ascending — redeploy).
+      OPEN: db-asks AJ for Source / PB / Indication USD (view columns after);
+      DECISION: headers 'Indication (Common Shares)' break the 2026-08-19
+      no-unit-in-headers ruling — allow it for the one-deal orderbook layout?
 - [ ] NO PLACEHOLDER CATEGORIES (user 2026-10-13): the agent filled blank
       investor categories with 'Investment Adviser' (the views pass the stored
       value through, no default). SKILL formatting rule + order card: blank =

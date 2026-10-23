@@ -289,6 +289,10 @@ available yet", never a name search or a guess) and after batch C deploys
 - [ ] 66. "Show the scaled orders on <an ECM deal> with all price levels" — PASS:
       investor name, ONE ladder cell per order ('10,000 @ 12.00 | 20,000 @ 11.00 |
       30,000 @ 10.00'), demand = the largest level (never the sum), allocation.
+- [ ] 67. "Show me the orderbook for <an ECM deal>" — PASS: summary line (coverage,
+      total indication, total allocation) then the Orderbook-screen columns in
+      order; Indication Type 'Common Shares' / 'Cash - USD' / '% of Deal Size';
+      scaled orders as continuation rows, largest level first; sorted by name.
 Works TODAY (control prompts, run once): "greenshoe exercised in 2025"
 (over_allotment_exercised_shares), "lockups expiring next month" (lockup_ts),
 "IPOs priced below the range" (reoffer_low_price vs base_price), "144A deals
