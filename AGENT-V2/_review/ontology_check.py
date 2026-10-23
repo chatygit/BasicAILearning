@@ -1750,7 +1750,8 @@ check(has(ORDER, "match group"), "[alloc] order card does not say where a DCM al
 check("SELECT P.PRD_ID, P.OFFER_PX, P.SEC_TYPE_CD" in text(ROOT / "views" / "vw_tranche_summary.sql")
       and "NVL(PP.SEC_TYPE_CD, TPD.EQUITY_TYPE) AS PRODUCT_TYPE" in text(ROOT / "views" / "vw_tranche_summary.sql"),
       "[ipreo] vw_tranche_summary.sql: Ipreo PRODUCT_TYPE is the deal's equity type again (defect item 6)")
-check("THEN 'Citigroup (' || RO.BILLED_BY_BRK_CD || ')' ELSE RO.BILLED_BY_BRK_CD END AS BILLED_BY" in text(ROOT / "views" / "vw_order_detail.sql"),
+check("THEN 'Citigroup (' || RO.BILLED_BY_BRK_CD || ')' ELSE RO.BILLED_BY_BRK_CD END) AS BILLED_BY" in text(ROOT / "views" / "vw_order_detail.sql")
+      and "FROM DGLOBE.CMNSYNDREF_EXTERNAL_BROKER" in text(ROOT / "views" / "vw_order_detail.sql"),
       "[ipreo] vw_order_detail.sql: Ipreo BILLED_BY lost the Citigroup (CODE) rendering")
 # ECM LIMITS (user 2026-10-08): a limit ask shows type + value + coupon + premium;
 # common stock carries a limit price, convertibles carry coupon / premium; a

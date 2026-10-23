@@ -223,6 +223,18 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       whose column is also in dimensions (0 rows by construction).
 
 ## 3. Views (approval-gated batches; files handed verbatim, comment-free)
+- [ ] TEAMMATE'S IPREO CHANGES (applied in repo 2026-10-23, validate with db-asks
+      AL before deploying): (1) issuer-name regex also strips trailing (Common)
+      / (…Convert…) / (Block Trade) / (New) / (PIPE) / (Series X) — carried to
+      the TRANCHE view too, which the teammate missed; (2) Ipreo demand =
+      ROUND(IOI_QTY) for every bid unit (deal TOTAL_DEMAND + order
+      ORDER_DEMAND_QTY) — right only if the mirror's IOI_QTY is a share count
+      for currency / percent / face bids (AL2); (3) investor name normalised
+      per GP number to the commonest mixed-case spelling (CN) — a full
+      aggregate of IPREO_OB_ECM_ORDER on every Ipreo query, time K3 after;
+      (4) billed-by names from DGLOBE.CMNSYNDREF_EXTERNAL_BROKER (EB) — FIRST
+      cross-schema dependency: DGSTREAM needs SELECT WITH GRANT OPTION or the
+      deploy fails (ORA-01720) (AL1). Gate pin updated for (4).
 - [ ] SCALED-ORDER LADDER (PO Michael Armeno, 2026-10-19: "when displaying a
       scaled order, we want to see all the price levels like the orderbook. The
       quantity is a cumulative total — 30,000 @ $10, not 60,000"). Order view
