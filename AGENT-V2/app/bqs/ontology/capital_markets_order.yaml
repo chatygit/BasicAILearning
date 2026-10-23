@@ -73,7 +73,7 @@ how_to_use:
      coverage (deal subscription_ratio, 'x'), total indication and total final
      allocation — from the deal object or a SUM metric, never by adding the
      rows. (2) One table, columns in this order: # · Account / Investor Name ·
-     Status (order_type, e.g. OTT; 'Pot' when is_pot) · Acct No. / GP Num
+     Status (order_type when it is not REGULAR, e.g. OTT; 'Pot' when is_pot; else blank) · Acct No. / GP Num
      (investor_id) · Tranche (tranche_name) · Indication (order_demand_qty) ·
      Indication Type · Indication as Entered · Final Allocation. Indication
      Type from demand_unit: SHARES/BOND = the security (equity_type, e.g.

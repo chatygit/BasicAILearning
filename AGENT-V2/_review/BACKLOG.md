@@ -58,6 +58,11 @@ no-placeholder-category rule (SKILL + order card, uncommitted).
       OPEN: db-asks AJ for Source / PB / Indication USD (view columns after);
       DECISION: headers 'Indication (Common Shares)' break the 2026-08-19
       no-unit-in-headers ruling — allow it for the one-deal orderbook layout?
+      AJ / AI (QA 2026-10-23): OB_ECM_ORDER has SOURCE, SOURCE_SYSTEM and
+      RELATIVE_INDICATION; no USD or PB column; ORDER_TYPE = REGULAR / OTT
+      (Status = order_type unless REGULAR). AI showed the QA ladder (still
+      ascending) and '#####' on 15-digit quantities / large limits — number
+      masks widened to 18+ digits. AK calibrates against the screen deal.
 - [ ] NO PLACEHOLDER CATEGORIES (user 2026-10-13): the agent filled blank
       investor categories with 'Investment Adviser' (the views pass the stored
       value through, no default). SKILL formatting rule + order card: blank =

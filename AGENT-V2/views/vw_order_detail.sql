@@ -154,9 +154,9 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT V.ORDER_ID,
            CASE WHEN COUNT(*) > 1 THEN
-             LISTAGG(RTRIM(TO_CHAR(V.IOI_QTY, 'FM999,999,999,990.9999'), '.') ||
+             LISTAGG(RTRIM(TO_CHAR(V.IOI_QTY, 'FM999,999,999,999,999,999,990.9999'), '.') ||
                      CASE WHEN V.LIMIT_VALUE IS NOT NULL
-                          THEN ' @ ' || TRIM(TO_CHAR(V.LIMIT_VALUE, '999,999,990.00'))
+                          THEN ' @ ' || TRIM(TO_CHAR(V.LIMIT_VALUE, '999,999,999,999,999,990.00'))
                           WHEN V.LIMIT_COUPON IS NOT NULL OR V.LIMIT_PREMIUM IS NOT NULL
                           THEN ' @ coupon ' || TRIM(TO_CHAR(V.LIMIT_COUPON, '990.0999')) ||
                                '% / premium ' || TRIM(TO_CHAR(V.LIMIT_PREMIUM, '990.0999')) || '%'
@@ -374,9 +374,9 @@ LEFT JOIN (
 LEFT JOIN (
     SELECT V.ORDER_ID,
            CASE WHEN COUNT(*) > 1 THEN
-             LISTAGG(RTRIM(TO_CHAR(V.IOI_QTY, 'FM999,999,999,990.9999'), '.') ||
+             LISTAGG(RTRIM(TO_CHAR(V.IOI_QTY, 'FM999,999,999,999,999,999,990.9999'), '.') ||
                      CASE WHEN V.LIMIT_VALUE IS NOT NULL
-                          THEN ' @ ' || TRIM(TO_CHAR(V.LIMIT_VALUE, '999,999,990.00'))
+                          THEN ' @ ' || TRIM(TO_CHAR(V.LIMIT_VALUE, '999,999,999,999,999,990.00'))
                           WHEN V.LIMIT_COUPON IS NOT NULL OR V.LIMIT_PREMIUM IS NOT NULL
                           THEN ' @ coupon ' || TRIM(TO_CHAR(V.LIMIT_COUPON, '990.0999')) ||
                                '% / premium ' || TRIM(TO_CHAR(V.LIMIT_PREMIUM, '990.0999')) || '%'
