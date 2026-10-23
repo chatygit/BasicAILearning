@@ -235,6 +235,19 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       (4) billed-by names from DGLOBE.CMNSYNDREF_EXTERNAL_BROKER (EB) — FIRST
       cross-schema dependency: DGSTREAM needs SELECT WITH GRANT OPTION or the
       deploy fails (ORA-01720) (AL1). Gate pin updated for (4).
+      AL (UAT 2026-10-23): (1) regex — 20 samples strip only deal-type suffixes
+      ('Shopify Inc. (Common)' -> 'Shopify Inc.') — OK; (2) demand — the
+      mirror's IOI_QTY is the share / bond equivalent for every unit
+      (currency median 588,235 vs 12.5m entered; face 10,000 vs 10m;
+      percent mostly 0 = never converted) — OK, but the order row now keeps
+      0 as NULL (NULLIF) so an unconverted bid reads 'not converted', not
+      '0 shares' — feed back to the teammate; (3) names resolve (CITIUSA ->
+      Citigroup Global Markets Inc., GS, MSCO, BARCAP…), card updated;
+      (4) BLOCKER: only role grants on the DGLOBE table, none to DGSTREAM
+      — DBA grant WITH GRANT OPTION needed in every env (ASKS-external §7).
+      DECIDED (user 2026-10-23): no grant — EB is now an inline list of the 15
+      AL3 codes (~all Ipreo orders); unlisted codes show as the code. No DGLOBE
+      reference left in the views; gate forbids one.
 - [ ] SCALED-ORDER LADDER (PO Michael Armeno, 2026-10-19: "when displaying a
       scaled order, we want to see all the price levels like the orderbook. The
       quantity is a cumulative total — 30,000 @ $10, not 60,000"). Order view

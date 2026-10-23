@@ -1751,7 +1751,8 @@ check("SELECT P.PRD_ID, P.OFFER_PX, P.SEC_TYPE_CD" in text(ROOT / "views" / "vw_
       and "NVL(PP.SEC_TYPE_CD, TPD.EQUITY_TYPE) AS PRODUCT_TYPE" in text(ROOT / "views" / "vw_tranche_summary.sql"),
       "[ipreo] vw_tranche_summary.sql: Ipreo PRODUCT_TYPE is the deal's equity type again (defect item 6)")
 check("THEN 'Citigroup (' || RO.BILLED_BY_BRK_CD || ')' ELSE RO.BILLED_BY_BRK_CD END) AS BILLED_BY" in text(ROOT / "views" / "vw_order_detail.sql")
-      and "FROM DGLOBE.CMNSYNDREF_EXTERNAL_BROKER" in text(ROOT / "views" / "vw_order_detail.sql"),
+      and "SELECT 'CITIUSA' AS BROKER_CODE, 'Citigroup Global Markets Inc.'" in text(ROOT / "views" / "vw_order_detail.sql")
+      and not re.search(r"FROM\s+DGLOBE\.", text(ROOT / "views" / "vw_order_detail.sql")),
       "[ipreo] vw_order_detail.sql: Ipreo BILLED_BY lost the Citigroup (CODE) rendering")
 # ECM LIMITS (user 2026-10-08): a limit ask shows type + value + coupon + premium;
 # common stock carries a limit price, convertibles carry coupon / premium; a
@@ -1836,7 +1837,7 @@ check("PARTITION BY P.PRD_ID ORDER BY P.DG_VERSION DESC" in text(ROOT / "views" 
 for _vf in ("vw_tranche_summary.sql", "vw_order_detail.sql"):
     check("US[0-9]+|UKE" in text(ROOT / "views" / _vf) and "US[0-9]|UKE" not in text(ROOT / "views" / _vf),
           f"[ipreo] {_vf}: the Citi code regex matches single-digit US suffixes only again")
-check(has(TRANCHE, "Ipreo security CODE") and has(ORDER, "Citigroup (CITIUSA)"),
+check(has(TRANCHE, "Ipreo security CODE") and has(ORDER, "CITIUSA = 'Citigroup Global Markets Inc.'"),
       "[ipreo] the tranche / order cards no longer describe the Ipreo product-type codes / broker-code rendering")
 check(has(SKILL, "TABLE CELLS ARE BARE NUMBERS") and has(AGENTS, "cells are bare numbers"),
       "[units] SKILL/agents lost the bare-cell rule — units go behind every "
@@ -2990,7 +2991,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 73_172,
+    ONT / "capital_markets_order.yaml": 73_259,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 91_390,

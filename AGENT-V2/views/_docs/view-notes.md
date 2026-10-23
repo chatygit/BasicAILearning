@@ -944,3 +944,19 @@ card; B15 / B16 measure the copy rate. (broker) BILLED_BY on Ipreo orders is
 the broker code (no name at source); Citi codes now render 'Citigroup
 (CODE)' like the tranche syndicate list; D14 is INFO. Deploy the tranche +
 order views; the deal view is unchanged by this addendum.
+
+## ADDENDUM 18 — 2026-10-23 teammate's Ipreo changes, validated (db-asks AL)
+Applied on the Ipreo branches: (1) the issuer-name regex also strips trailing
+(Common) / (…Convert…) / (Block Trade) / (New) / (PIPE) / (Series X) — all three
+views, the tranche view added by us; (2) Ipreo demand = ROUND(IOI_QTY) for every
+bid unit (the mirror's IOI_QTY is the share / bond equivalent for every unit,
+0 when never converted; the ORDER row keeps NULLIF(…, 0) so an unconverted bid
+reads 'not converted'); (3) investor name normalised per GP number to the
+commonest mixed-case spelling (CN); (4) billed-by broker NAMES. The teammate's
+version read DGLOBE.CMNSYNDREF_EXTERNAL_BROKER; DGSTREAM has no grant on it and
+none will be given, so EB is an INLINE code -> name list of the 15 codes on
+~all Ipreo orders (db-asks AL3): CITIUSA, GS, MSCO, BARCAP, BAMLS, JPMLLC, CS,
+JEFFLLC, CITIBRAS, WACHOCRP, DBABNYC, CANFITCO, SVBL, ITAUMM, TGRBR. An unlisted
+code shows as the code (Citi codes as 'Citigroup (CODE)'). To extend the list,
+run db-asks AM (it reads the DGLOBE table through your own role) and add rows to
+the EB block.

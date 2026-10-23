@@ -272,3 +272,7 @@ Follow-up, Alex (ECM): add Postponed (12 deals on UAT) to the existing
 Confidential / Withdrawn / Terminated exclusion? ECM tranche status is NULL, so
 there is no tranche rule to make; ECM orders already drop CANCELLED / DELETED /
 PASS.
+
+## 7. (WITHDRAWN 2026-10-23) DBA grant for DGLOBE.CMNSYNDREF_EXTERNAL_BROKER —
+the grant will not be given; the order view carries a maintained code → name
+list instead (db-asks AL3 codes).
