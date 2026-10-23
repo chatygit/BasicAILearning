@@ -12,15 +12,8 @@
 -- deal-type suffixes; Ipreo IOI_QTY is the share / bond equivalent for every unit
 -- (0 when never converted). No grant to DGSTREAM on the DGLOBE table and none
 -- will be given — the view now carries a maintained code -> name list instead.
--- OPTIONAL AM: every Ipreo billed-by code with its reference name, to extend it.
-SELECT R.BILLED_BY_BRK_CD AS CODE_, MAX(B.EXTERNAL_BROKER_NAME) AS NAME_, COUNT(*) AS ORDERS_
-FROM   DGSTREAM.IPREO_ORDER R
-LEFT JOIN DGLOBE.CMNSYNDREF_EXTERNAL_BROKER B
-       ON UPPER(TRIM(B.EXTERNAL_BROKER_CODE)) = UPPER(TRIM(R.BILLED_BY_BRK_CD))
-WHERE  R.BILLED_BY_BRK_CD IS NOT NULL
-GROUP  BY R.BILLED_BY_BRK_CD
-ORDER  BY ORDERS_ DESC
-OFFSET 15 ROWS FETCH NEXT 50 ROWS ONLY;
+-- AM answered 2026-10-23: all 42 further codes added except LADENBUR (no name in
+-- the reference) — the view lists 56 codes.
 
 -- AFTER the deploy (not before): deploy-check A0 + A (A01 43 / A02 89 / A03 73)
 -- + D-ECM, and time K3 — the investor-name block (CN) aggregates the whole

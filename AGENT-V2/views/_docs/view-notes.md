@@ -956,7 +956,12 @@ commonest mixed-case spelling (CN); (4) billed-by broker NAMES. The teammate's
 version read DGLOBE.CMNSYNDREF_EXTERNAL_BROKER; DGSTREAM has no grant on it and
 none will be given, so EB is an INLINE code -> name list of the 15 codes on
 ~all Ipreo orders (db-asks AL3): CITIUSA, GS, MSCO, BARCAP, BAMLS, JPMLLC, CS,
-JEFFLLC, CITIBRAS, WACHOCRP, DBABNYC, CANFITCO, SVBL, ITAUMM, TGRBR. An unlisted
+JEFFLLC, CITIBRAS, WACHOCRP, DBABNYC, CANFITCO, SVBL, ITAUMM, TGRBR, plus 27 from
+db-asks AM (CICCHK … GUGGS; 'evercor' stored lower-case, listed as EVERCOR —
+the join upper-cases the code; ACCIONES name shortened to the legal-entity
+prefix, the shot cut it off) and 14 more (DRXHAM … MITSEC) — 56 codes, every
+Ipreo billed-by code on UAT except LADENBUR, which has no name in the reference
+table. An unlisted
 code shows as the code (Citi codes as 'Citigroup (CODE)'). To extend the list,
 run db-asks AM (it reads the DGLOBE table through your own role) and add rows to
 the EB block.
