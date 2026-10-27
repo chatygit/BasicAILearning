@@ -46,6 +46,18 @@ no-placeholder-category rule (SKILL + order card, uncommitted).
   K7 regression = no handover.
 
 ## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
+- [ ] ORDERBOOK PRESENTATION JIRA (Product 2026-10-27) — three styles by ask:
+      (1) indications + allocations for a deal; (2) one investor across deals
+      with pricing date; (3) indications for a deal with Limit (USD) /
+      Indication Type / Indication Entered As, scaled orders EXPANDED (market
+      scale first, limits by descending price, investor repeated) or collapsed
+      to the lowest limit on request. Built: order-card ORDERBOOK STYLES note +
+      three worked examples (replaces the 2026-10-23 screen-mirroring layout);
+      SKILL + agents.yaml header exception for orderbook tables ('Indication
+      (shares)', 'Limit (USD)'); view ladder reordered to market-first then
+      descending limit (vw_order_detail redeploy). QA 68-70. The screen
+      columns built 2026-10-23 (Source, Indication USD) stay available for
+      follow-ups.
 - [ ] ORDERBOOK SCREEN PARITY (Product 2026-10-23: "make the agent display the
       data as close to the Orderbook UI as possible"). Screen: # · Account /
       Investor Name · Source (1B / ISN) · Status (OTT) · Acct No. / GPNum ·

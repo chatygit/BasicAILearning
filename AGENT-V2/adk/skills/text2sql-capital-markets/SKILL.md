@@ -128,7 +128,7 @@ of proceeds, tenor or product class is **ONE request now** on the order
 object (never search `deal_name` for "IPO" — §3c-bis). Only tranche-grain attributes orders don't carry (coupon,
 seniority, ESG bond label, ratings, exchange, security identifiers) need the id
 two-step, and then the two-step is MANDATORY — never a refusal, never a menu
-back to the user (§3d: the question already authorised the work).
+back to the user.
 
 **The two-step — two iron rules.** **(1) Ferry ids from the SMALLER side.**
 R1 order object: `investor_name like '%BLACKROCK%'` + the year's `pricing_date`
@@ -346,7 +346,7 @@ and `investor_count` undercounts — say so on a headcount.
 | allocation, got/received | order · `total_allocation` |
 | DCM order amount / order size | order · `total_order_amount` — on DCM the SAME stored figure as demand; one number, never two facts |
 | ECM order size | order · `total_allocation` / `total_demand` — **never SUM `order_amount` on ECM** (it is an IOI limit price; display only) |
-| "away / home orders", "our book", "Citi's own orders" | order · `order_ownership` (ECM only; HOME/AWAY). ALL ECM figures cover the FULL book (never read the ~45% jump vs the old config as growth); "our orders" = eq HOME; an unfiltered total on an "our book" ask says it includes away. DCM: not tracked |
+| "away / home orders", "our book", "Citi's own orders" | order · `order_ownership` (ECM only; HOME/AWAY). ALL ECM figures cover the FULL book; "our orders" = eq HOME; an unfiltered total on an "our book" ask says it includes away. DCM: not tracked |
 | "tranches settling in <period>" | tranche · `settlement_ts` (partial on ECM; NULL → deal object) |
 | "price range" / "reoffer range" | deal · `reoffer_low_price` + `reoffer_high_price` (ECM). No stage history — "Initial vs Revised" is not tracked, say so |
 | fees / gross spread / economics | deal · `deal_fee_mm`(+currency) ECM deal fee; tranche · `total_fee` (+components) — DCM deal fee = SUM tranche total_fee; ECM fees are per share, never SUM them; per-designation = designation object. Disclose blanks |
@@ -420,9 +420,9 @@ shares; mixed deal types show it as a "Deal Type" column — never "Security".**
 "12,349,121 shares" — never rounded; money may abbreviate.**
 **EXCEPTION — DEAL SIZE shows a BARE number: never "shares"/"bonds" beside
 a deal-size value and no unit in its header** — "Deal Size: 750,000".
-**TABLE HEADERS never carry a unit parenthetical: no
-"(Shares)", "(USD)", "(bonds)" in ANY column header** — "Allocation", "Demand",
-"Indication". Say the unit ONCE in prose above the table, or carry it in a
+**TABLE HEADERS never carry a unit parenthetical** — "Allocation", not
+"Allocation (Shares)" — EXCEPT orderbook tables (order card ORDERBOOK
+STYLES: "Indication (shares)"). Otherwise say the unit ONCE in prose above the table, or carry it in a
 currency / Deal Type column when rows mix; TABLE CELLS ARE BARE NUMBERS —
 never "12,000 shares" in a cell; prose keeps its label.
 

@@ -6,7 +6,7 @@
 #
 # Supported agent_type values: LOCAL_ADK | SEQUENTIAL | PARALLEL | LOOP
 #
-# Key LOCAL_ADK attributes (from the file's own reference block):
+# Key LOCAL_ADK attributes:
 #   name / display_name / description (the ROOT USES THIS TO ROUTE — be specific)
 #   agent_type / model / config_model
 #   execution_mode: single_turn   # handles the request in one LLM call (default)
@@ -237,8 +237,8 @@ agents:
       ANSWER STYLE (skill §11): a bold one-line headline with the key figure,
       an at-a-glance line, the table, 2-3 'what stands out' bullets, numbered
       next steps. Table headers NEVER carry a unit parenthetical — 'Allocation',
-      not 'Allocation (Shares)'; cells are bare numbers and the unit goes in
-      prose or a currency / Deal Type column.
+      not 'Allocation (Shares)' (orderbook tables: order card);
+      cells are bare numbers, the unit in prose or a currency / Deal Type column.
       NEVER PRINT MORE THAN 50 DATA ROWS — show the first 50 (cut to ~25
       when the table is WIDE: 8+ columns or pipe-list cells). A TOTAL ONLY
       COMES FROM A COUNT METRIC — the response's

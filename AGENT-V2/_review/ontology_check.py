@@ -1791,9 +1791,10 @@ for _p in (DEAL, ORDER, TRANCHE, SKILL, AGENTS):
 # ORDERBOOK LAYOUT (Product 2026-10-23): one-deal orderbook answers mirror the
 # Orderbook screen — summary line, fixed column order, Indication Type labels,
 # scaled orders as continuation rows — taught by a card note AND an example.
-check(has(ORDER, "ORDERBOOK LAYOUT (Product 2026-10-23)")
-      and has(ORDER, "question: Orderbook for one ECM deal, as the Orderbook screen shows it"),
-      "[layout] the Orderbook-screen layout note or its worked example left the order card")
+check(has(ORDER, "ORDERBOOK STYLES (Product Jira 2026-10-27)")
+      and all(has(ORDER, f"(orderbook style {i})") for i in (1, 2, 3))
+      and has(SKILL, "EXCEPT orderbook tables") and has(AGENTS, "orderbook tables: order card"),
+      "[layout] the Jira's three orderbook styles (card note, three worked examples, header exception) are incomplete")
 check(text(ROOT / "views" / "vw_order_detail.sql").count(" AS ORDER_SOURCE") == 3
       and text(ROOT / "views" / "vw_order_detail.sql").count(" AS INDICATION_USD") == 3
       and has(ORDER, "  order_source:") and has(ORDER, "  indication_usd:"),
@@ -1804,7 +1805,7 @@ check(text(ROOT / "views" / "vw_order_detail.sql").count("ELSE '' END || LV.IOI_
       and "FM999,999,999,999,999,999,990.9999" in text(ROOT / "views" / "vw_order_detail.sql")
       and "'999,999,990.00'" not in text(ROOT / "views" / "vw_order_detail.sql")
       and "CAST(NULL AS VARCHAR2(4000)) AS IOI_LEVELS" in text(ROOT / "views" / "vw_order_detail.sql")
-      and text(ROOT / "views" / "vw_order_detail.sql").count("WITHIN GROUP (ORDER BY V.IOI_QTY DESC)") == 2
+      and text(ROOT / "views" / "vw_order_detail.sql").count("V.LIMIT_VALUE DESC NULLS LAST, V.IOI_QTY)") == 2
       and has(ORDER, "  ioi_levels:") and has(ORDER, "NEVER the sum")
       and has(ORDER, "question: Scaled orders on a deal with every price level"),
       "[ladder] the scaled-order price ladder (view column, card rule or worked example) is gone")
@@ -2991,7 +2992,7 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 73_259,
+    ONT / "capital_markets_order.yaml": 74_669,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
     ONT / "capital_markets_tranche.yaml": 91_390,

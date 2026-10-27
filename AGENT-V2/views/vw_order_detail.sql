@@ -167,7 +167,9 @@ LEFT JOIN (
                                '% / premium ' || TRIM(TO_CHAR(V.LIMIT_PREMIUM, '990.0999')) || '%'
                           ELSE ' @ market' END,
                      ' | ' ON OVERFLOW TRUNCATE '...' WITH COUNT)
-               WITHIN GROUP (ORDER BY V.IOI_QTY DESC)
+               WITHIN GROUP (ORDER BY CASE WHEN V.LIMIT_VALUE IS NULL AND V.LIMIT_COUPON IS NULL
+                                            AND V.LIMIT_PREMIUM IS NULL THEN 0 ELSE 1 END,
+                                       V.LIMIT_VALUE DESC NULLS LAST, V.IOI_QTY)
            END AS IOI_LEVELS
     FROM (
         SELECT DISTINCT I.ORDER_ID, I.IOI_QTY, I.LIMIT_VALUE, I.LIMIT_COUPON, I.LIMIT_PREMIUM
@@ -389,7 +391,9 @@ LEFT JOIN (
                                '% / premium ' || TRIM(TO_CHAR(V.LIMIT_PREMIUM, '990.0999')) || '%'
                           ELSE ' @ market' END,
                      ' | ' ON OVERFLOW TRUNCATE '...' WITH COUNT)
-               WITHIN GROUP (ORDER BY V.IOI_QTY DESC)
+               WITHIN GROUP (ORDER BY CASE WHEN V.LIMIT_VALUE IS NULL AND V.LIMIT_COUPON IS NULL
+                                            AND V.LIMIT_PREMIUM IS NULL THEN 0 ELSE 1 END,
+                                       V.LIMIT_VALUE DESC NULLS LAST, V.IOI_QTY)
            END AS IOI_LEVELS
     FROM (
         SELECT DISTINCT I.ORDER_ID, I.IOI_QTY, I.LIMIT_VALUE, I.LIMIT_COUPON, I.LIMIT_PREMIUM

@@ -293,6 +293,18 @@ available yet", never a name search or a guess) and after batch C deploys
       total indication, total allocation) then the Orderbook-screen columns in
       order; Indication Type 'Common Shares' / 'Cash - USD' / '% of Deal Size';
       scaled orders as continuation rows, largest level first; sorted by name.
+- [ ] 68. JIRA STYLE 1: "Give me a list of indications and allocations for <ECM deal>" —
+      PASS: Investor · GPNum · Tranche · Indication (shares) · Allocation (shares),
+      by investor; then "convert from shares to notional" multiplies by the offer
+      price; "add sales trader / meeting type / bill and deliver" append columns.
+- [ ] 69. JIRA STYLE 2: "Give me a list of indications and allocations for BlackRock
+      over the past 2 months" — PASS: Investor · Deal Name · GPNum · Tranche ·
+      Indication (shares) · Allocation (shares) · Pricing Date, newest first.
+- [ ] 70. JIRA STYLE 3: "Give me a list of indications for <ECM deal>" — PASS: Investor ·
+      GPNum · Tranche · Indication (shares) · Limit (USD) · Indication Type ·
+      Indication Entered As; market orders have a blank limit; a scaled order is
+      expanded (market scale first, then limits by descending price, investor
+      repeated); "collapse the scaled orders" shows the lowest limit only.
 Works TODAY (control prompts, run once): "greenshoe exercised in 2025"
 (over_allotment_exercised_shares), "lockups expiring next month" (lockup_ts),
 "IPOs priced below the range" (reoffer_low_price vs base_price), "144A deals
