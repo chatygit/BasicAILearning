@@ -260,6 +260,12 @@ SKILL compression, pass 2 (63,402 → ≤45,000 bytes) after the token measureme
       DECIDED (user 2026-10-23): no grant — EB is now an inline list of the 15
       AL3 codes (~all Ipreo orders); unlisted codes show as the code. No DGLOBE
       reference left in the views; gate forbids one.
+      PR BOT 2026-10-27: (a) Ipreo INDICATION_USD now covers cash bids (amount
+      entered, as OPUS); (b)+(c) demand dropped PERCENT bids again — deal
+      TOTAL_DEMAND and order ORDER_DEMAND_QTY sum / show SHARES, BOND, FACE,
+      CURRENCY only (rounded, as the teammate wanted) until db-asks AN shows
+      whether a non-zero percent IOI_QTY is shares or a raw percentage.
+      Rounding kept: these are share / bond counts.
 - [ ] SCALED-ORDER LADDER (PO Michael Armeno, 2026-10-19: "when displaying a
       scaled order, we want to see all the price levels like the orderbook. The
       quantity is a cumulative total — 30,000 @ $10, not 60,000"). Order view

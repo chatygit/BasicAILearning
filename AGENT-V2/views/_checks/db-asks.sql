@@ -7,6 +7,21 @@
 -- 'other' scaled orders are CURRENCY / PERCENT bids where DEMAND_QTY is the
 -- share-equivalent — correct. The ladder now shows the bid's unit and decimals.
 
+-- AN. IPREO PERCENT BIDS (UAT, one statement). PR bot 2026-10-27: is a non-zero
+-- IOI_QTY on a PERCENT bid a converted SHARE count or the raw percentage (10 for
+-- a 10% order)? Percent bids are excluded from Ipreo demand until this answers.
+SELECT CASE WHEN I.IOI_QTY = 0 THEN '0 (never converted)'
+            WHEN I.IOI_QTY <= 100 THEN '0 < qty <= 100 (looks like a percentage)'
+            ELSE '> 100 (looks like shares)' END AS BUCKET,
+       COUNT(*) AS ORDERS_, MIN(I.IOI_QTY) AS MIN_, MAX(I.IOI_QTY) AS MAX_
+FROM   DGSTREAM.IPREO_OB_ECM_ORDER O
+JOIN   (SELECT ORDER_ID, MAX(IOI_QTY) AS IOI_QTY FROM DGSTREAM.IPREO_OB_ECM_ORDER_IOI GROUP BY ORDER_ID) I
+       ON I.ORDER_ID = O.ORDER_ID
+WHERE  O.IOI_UNIT = 'PERCENT'
+GROUP  BY CASE WHEN I.IOI_QTY = 0 THEN '0 (never converted)'
+               WHEN I.IOI_QTY <= 100 THEN '0 < qty <= 100 (looks like a percentage)'
+               ELSE '> 100 (looks like shares)' END;
+
 -- AL answered (UAT 2026-10-23): broker table columns exist and resolve every top
 -- code (CITIUSA -> Citigroup Global Markets Inc.); the issuer regex strips only
 -- deal-type suffixes; Ipreo IOI_QTY is the share / bond equivalent for every unit
