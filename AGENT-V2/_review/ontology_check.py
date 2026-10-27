@@ -1820,6 +1820,16 @@ check(text(ROOT / "views" / "vw_order_detail.sql").count("CAST(NVL(LM.LIMIT_VALU
 # tranche object, contradicting SKILL §7 and the order card.
 check(has(SKILL, '| "billed by" | **order** `billed_by` (§7) |') and not has(SKILL, '/ role / "billed by" |'),
       "[routing] SKILL routes 'billed by' to the tranche object again — it is order-level billed_by")
+# TEAMMATE DOCTRINE (2026-10-27): a deal's "B&D bank" is the tranche's bnd_bank,
+# never order billed_by grouped by tranche; product_type is shown as stored, never
+# expanded into invented code / description columns.
+check(has(SKILL, '"B&D bank" for a deal → project `bnd_bank` on the tranche object')
+      and has(TRANCHE, "never the order object's billed_by grouped by tranche")
+      and has(ORDER, "A DEAL's 'B&D bank' is the tranche object's bnd_bank"),
+      "[bnd] the deal-B&D-bank = tranche bnd_bank rule left the SKILL or a card")
+check(has(SKILL, "`product_type` — show AS STORED in one column")
+      and has(TRANCHE, "never add 'Product Type Code'/'Product Type Description' columns"),
+      "[ptype] the product_type-as-stored rule left the SKILL or the tranche card")
 # NO PLACEHOLDER CATEGORIES (user 2026-10-13): a blank investor category renders
 # '—', never a guessed value such as 'Investment Adviser'.
 check(has(SKILL, "NEVER a guessed value") and has(ORDER, "NEVER fill it with a guessed category"),
@@ -2992,10 +3002,10 @@ _SIZE_CAPS = {
     ONT / "capital_markets_entity.yaml": 25_751,
     ONT / "capital_markets_hedge.yaml": 12_597,
     ONT / "capital_markets_hedge_trade.yaml": 8_693,
-    ONT / "capital_markets_order.yaml": 74_669,
+    ONT / "capital_markets_order.yaml": 74_761,
     ONT / "capital_markets_trade.yaml": 10_690,
     ONT / "capital_markets_trade_syndicate.yaml": 3_027,
-    ONT / "capital_markets_tranche.yaml": 91_390,
+    ONT / "capital_markets_tranche.yaml": 91_753,
 }
 for _p, _cap in _SIZE_CAPS.items():
     _n = len(_p.read_bytes())

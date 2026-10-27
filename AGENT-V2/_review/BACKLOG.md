@@ -46,6 +46,12 @@ no-placeholder-category rule (SKILL + order card, uncommitted).
   K7 regression = no handover.
 
 ## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
+- [ ] TEAMMATE DOCTRINE (applied 2026-10-27): deal 'B&D bank' = tranche bnd_bank,
+      never order billed_by grouped by tranche (SKILL §7 bullet, tranche +
+      order cards); product_type shown AS STORED in one column, never
+      invented code / description columns (SKILL vocabulary bullet,
+      tranche card). SKILL made room by dropping four parentheticals that
+      repeated other sections. Gate [bnd] / [ptype].
 - [ ] ORDERBOOK PRESENTATION JIRA (Product 2026-10-27) — three styles by ask:
       (1) indications + allocations for a deal; (2) one investor across deals
       with pricing date; (3) indications for a deal with Limit (USD) /
