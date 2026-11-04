@@ -7,6 +7,75 @@
 -- 'other' scaled orders are CURRENCY / PERCENT bids where DEMAND_QTY is the
 -- share-equivalent — correct. The ladder now shows the bid's unit and decimals.
 
+-- ===========================================================================
+-- SB. STARBURST INVENTORY (run in STARBURST, Trino SQL — not Oracle). Maps the
+-- Iceberg landing area before we port the nine views. Read-only metadata.
+-- ===========================================================================
+
+-- SB1. Every schema and its table count in the candidate catalogs.
+SELECT table_cat, table_schem, count(*) AS tables_
+FROM   system.jdbc.tables
+WHERE  table_cat IN ('dataglobe_s3', 'dcm', 'ecm', 'dealogic', 'dms', 'dsi')
+  AND  table_schem <> 'information_schema'
+GROUP  BY 1, 2
+ORDER  BY 1, 2;
+
+-- SB2. Which of the 38 DG tables our views read already exist anywhere in
+--      Starburst outside the Oracle catalog, and where.
+SELECT table_cat, table_schem, table_name
+FROM   system.jdbc.tables
+WHERE  table_cat <> 'bds_dg_oraas'
+  AND  lower(table_name) IN (
+    'ipreo_issue',
+    'ipreo_ob_ecm_order',
+    'ipreo_ob_ecm_order_ioi',
+    'ipreo_opus_ecm_transaction',
+    'ipreo_opus_ecm_transaction_status',
+    'ipreo_opus_ecm_transaction_tranche',
+    'ipreo_opus_ecm_transaction_tranche_product_detail',
+    'ipreo_opus_ecm_transaction_tranche_syndicate',
+    'ipreo_order',
+    'ipreo_orderioi',
+    'ipreo_product',
+    'ipreo_productfee',
+    'ipreo_tranche',
+    'ob_deal_issuer',
+    'ob_deal_tranche',
+    'ob_ecm_order',
+    'ob_ecm_order_ioi',
+    'ob_ecm_trade_book_designation',
+    'ob_ecm_trade_book_investor_trade',
+    'ob_hedge_order',
+    'ob_hedge_trade',
+    'ob_order',
+    'ob_order_match_group',
+    'ob_order_size',
+    'ob_order_trade',
+    'ob_order_trade_syndicate',
+    'ob_tranche',
+    'ob_tranche_rating',
+    'ob_tranche_syndicate_member',
+    'opus_base_transaction',
+    'opus_base_transaction_related_parties',
+    'opus_ecm_transaction',
+    'opus_ecm_transaction_status',
+    'opus_ecm_transaction_tranche',
+    'opus_ecm_transaction_tranche_demand_currency',
+    'opus_ecm_transaction_tranche_product_detail',
+    'opus_ecm_transaction_tranche_product_detail_identifier',
+    'opus_ecm_transaction_tranche_syndicate')
+ORDER  BY table_name, table_cat;
+
+-- SB3. What dataglobe_s3 holds (all tables, with the connector's table type).
+SELECT table_schema, table_name, table_type
+FROM   dataglobe_s3.information_schema.tables
+WHERE  table_schema <> 'information_schema'
+ORDER  BY 1, 2;
+
+-- SB4. One table's DDL: shows the format (Iceberg / Parquet), partitioning and
+--      column types. Put the first table name from SB3 in.
+-- SHOW CREATE TABLE dataglobe_s3.dg_s3_reference.<table_from_SB3>;
+
 -- AN. IPREO PERCENT BIDS (UAT, one statement). PR bot 2026-10-27: is a non-zero
 -- IOI_QTY on a PERCENT bid a converted SHARE count or the raw percentage (10 for
 -- a 10% order)? Percent bids are excluded from Ipreo demand until this answers.

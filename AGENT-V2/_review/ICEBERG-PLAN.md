@@ -282,3 +282,46 @@ becomes core/serve SQL like every other branch) · Starburst as the query engine
 - DataGlobe: are `SOURCE_PUBLISHED_TS` / `DG_PROCESSED_TS` / `DG_VERSION`
   monotonic per row, and is there a direct Iceberg or Kafka sink already?
 - Scheduling: is there an approved scheduler for Trino SQL jobs on OCP?
+
+## Decision 2026-11-04 — every DG table moves to Iceberg
+DataGlobe will migrate EVERY DGSTREAM table to Iceberg, and new sources (Ipreo-
+style raw tables) land as Iceberg tables too. That replaces the "Phase 0 nightly
+CTAS from the Oracle views" idea: the raw layer IS the migrated DG tables.
+
+Our port, measured from the repo (nine views, 38 source tables):
+| Oracle construct | Uses | Trino replacement |
+|---|---:|---|
+| ROWID as a dedupe tie-break | 44 | a real version key (DG_VERSION, then SOURCE_PUBLISHED_TS / DG_PROCESSED_TS) — Iceberg has no ROWID, and ROWID was never deterministic anyway |
+| NVL | 73 | coalesce |
+| CAST(... AS VARCHAR2/NUMBER(p,s)) | ~400 | varchar / decimal(p,s) |
+| CAST(NULL AS ...) typed stubs | many | same, Trino types |
+| FROM DUAL (the 56-row broker list) | 56 | one VALUES clause |
+| TO_CHAR with number masks (ladder) | ~30 | format('%,.2f') / format_number |
+| TO_NUMBER(x DEFAULT NULL ON CONVERSION ERROR) | 10 | try_cast |
+| LISTAGG ... ON OVERFLOW TRUNCATE | 18 | listagg (Trino supports the same overflow clause) |
+| REGEXP_LIKE / _REPLACE with 'i' | 13 | regexp_like / regexp_replace with a (?i) prefix |
+| CONNECT BY ... SYS_GUID (secondary-list explode) | 2 | CROSS JOIN UNNEST(split(list, ',')) |
+
+Sequence (our side):
+1. PORT 1:1 — the nine views as Trino views over the Iceberg tables, same column
+   names, types and row rules. Nothing else changes.
+2. PARITY — Starburst sees both catalogs, so one query per view compares them:
+   row count, key count, and EXCEPT in both directions on the key + figures.
+   Zero difference before the agent switches.
+3. SWITCH — the nine catalogs' base_view (one line each) + golden SQL; SKILL /
+   agents untouched.
+4. SPEED — only then materialise the heavy views (order, deal, entity) as tables
+   per the core / serve design above; same contract, same parity check.
+
+Open questions for DataGlobe / platform:
+- Catalog and schema names for the Iceberg DG tables, per environment.
+- Are the tables column-identical to DGSTREAM (names, types: NUMBER → decimal or
+  double?), and do they keep EVERY version row like today, or current state only?
+- Which tables carry DG_VERSION / SOURCE_PUBLISHED_TS (our dedupe keys)?
+- The new source tables: list and schemas, and whether the Ipreo mirrors
+  (IPREO_OPUS_*) continue or are replaced by raw Ipreo tables.
+- Can we create views / tables in an Iceberg schema of our own, per environment?
+- Refresh cadence and lag versus Oraas today.
+- Starburst roles: the agent's service account reads the new catalog (and any
+  reference tables, e.g. DGLOBE's broker table — the Oracle grant problem goes
+  away if the role covers it).
