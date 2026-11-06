@@ -46,6 +46,34 @@ no-placeholder-category rule (SKILL + order card, uncommitted).
   K7 regression = no handover.
 
 ## 1. Config (SKILL / agents.yaml / QA-PROMPTS) — ships freely; PROD freeze = SKILL + agents.yaml only
+- [ ] ECM EXECUTION REVIEW (Product, 2026-11-06; sheet received as screenshots
+      ~/Desktop/ADK 1-6). Doctrine from the sheet: (a) VERSIONS — priced deals
+      answer from FINAL; never mix initial / revised / final in one answer;
+      initial or revised only when asked; (b) ARRAYS — commitment, expected
+      fees, actual fees, retail are per-broker arrays, return the whole array;
+      (c) gross spread defaults to % (cross-comparable), $ / share only for one
+      deal on request; "pricing terms" = per-share economics, shown VERTICALLY
+      for one deal; "underwriting percentages" = Broker · Role · % of Tranche
+      (+ Deal Name column for several deals, total row). Stabilization Terms
+      block = Low (copies). Documents / Review out of scope.
+      MAP (first pass): EXPOSED ~40 — region, issuer, deal name, GFCID, sector,
+      ticker, country, type / deal type / deal class, exchange, product type,
+      offering format, size, currency, amount, Citi sole, use of proceeds,
+      tranche name / currency / identifier, initial size + amount, primary /
+      secondary, price range, offer price, pricing / trade / settlement / first
+      trade dates, syndicate names + roles (arrays), gross spread, U/W, mgmt,
+      SC, praecipium, greenshoe authorised / exercised. AT SOURCE, NOT EXPOSED
+      ~25 — deal captain, current file size, final tranche amount, launch /
+      filing / pre-marketing / book open-close / postponed / withdrawn /
+      terminated dates, incentive / global coord / re-allowance / internal SC
+      fees (+ _PER_), notional OA exercised, OA expiration date, demand
+      currency. UNPLACED ~50 — % fee variants, revised range / shares, per-
+      broker commitment / expected / actual fees / retail, stabilization
+      position / naked short / secondary trades, share class, registration and
+      document type, agents (stabilization / settlement / logistics /
+      duplicate IOI), project name. Census = db-asks AO. Then: one tranche-view
+      batch + catalog FIELD BLOCKS (server auto-projects the block, like
+      equity_type) + card examples copied from the sheet's 4 economics prompts.
 - [ ] TEAMMATE DOCTRINE (applied 2026-10-27): deal 'B&D bank' = tranche bnd_bank,
       never order billed_by grouped by tranche (SKILL §7 bullet, tranche +
       order cards); product_type shown AS STORED in one column, never

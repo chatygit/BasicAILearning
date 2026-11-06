@@ -21,10 +21,11 @@ GROUP  BY 1, 2
 ORDER  BY 1, 2;
 
 -- SB2. Which of the 38 DG tables our views read already exist anywhere in
---      Starburst outside the Oracle catalog, and where.
+--      the catalogs you can read (naming them avoids catalogs you are not
+--      authorised for, e.g. wl_sb_lds, which fail the whole statement).
 SELECT table_cat, table_schem, table_name
 FROM   system.jdbc.tables
-WHERE  table_cat <> 'bds_dg_oraas'
+WHERE  table_cat IN ('dataglobe_s3', 'dcm', 'ecm', 'dealogic', 'dms', 'dsi')
   AND  lower(table_name) IN (
     'ipreo_issue',
     'ipreo_ob_ecm_order',
@@ -90,6 +91,24 @@ WHERE  O.IOI_UNIT = 'PERCENT'
 GROUP  BY CASE WHEN I.IOI_QTY = 0 THEN '0 (never converted)'
                WHEN I.IOI_QTY <= 100 THEN '0 < qty <= 100 (looks like a percentage)'
                ELSE '> 100 (looks like shares)' END;
+
+-- AO. ECM EXECUTION FIELD MAP (UAT, one statement, dictionary only). Product's
+-- Deal Launcher sheet (2026-11-06) asks for blocks we cannot place yet: per-broker
+-- commitment % / shares, expected and actual fees per broker, retail per broker,
+-- revised size / range, % fee variants, stabilization position, secondary trades.
+-- Lists every OPUS ECM table (column 1 = inventory), the whole syndicate table,
+-- and the matching columns anywhere else in DGSTREAM.
+SELECT TABLE_NAME, COLUMN_ID, COLUMN_NAME, DATA_TYPE
+FROM   ALL_TAB_COLUMNS
+WHERE  OWNER = 'DGSTREAM'
+  AND  TABLE_NAME NOT LIKE 'IPREO%'
+  AND (   (TABLE_NAME LIKE '%ECM%' AND COLUMN_ID = 1)
+       OR  TABLE_NAME = 'OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE'
+       OR  TABLE_NAME LIKE '%STABIL%'
+       OR (TABLE_NAME LIKE 'OPUS_ECM%' AND REGEXP_LIKE(COLUMN_NAME,
+             'REVIS|FINAL|CURRENT|COMMIT|_PCT|PERCENT|_PER_|EXPECT|ACTUAL|^ACT_|RETAIL|DIRECTED|WEALTH|PRIVATE|PVT|STABIL|ALLOT|NAKED|SHORT|POSITION|WEIGHTED|GAIN|LOSS|INCENTIVE|COORD|ALLOW|PRAE|INTERNAL|POT_SPLIT|SPREAD|LOGISTIC|AGENT|CAPTAIN|SHARE_CLASS|REGISTRATION|DOCUMENT|DELIVERY|LAST_SALE|FILING|BOOK|POSTPONE|WITHDRAW|TERMINAT|PROJECT|DEMAND'))
+       OR (TABLE_NAME NOT LIKE 'OPUS_ECM%' AND REGEXP_LIKE(COLUMN_NAME, 'STABIL|NAKED|OVER_?ALLOT')))
+ORDER  BY TABLE_NAME, COLUMN_ID;
 
 -- AL answered (UAT 2026-10-23): broker table columns exist and resolve every top
 -- code (CITIUSA -> Citigroup Global Markets Inc.); the issuer regex strips only
