@@ -67,12 +67,25 @@ no-placeholder-category rule (SKILL + order card, uncommitted).
       filing / pre-marketing / book open-close / postponed / withdrawn /
       terminated dates, incentive / global coord / re-allowance / internal SC
       fees (+ _PER_), notional OA exercised, OA expiration date, demand
-      currency. UNPLACED ~50 — % fee variants, revised range / shares, per-
-      broker commitment / expected / actual fees / retail, stabilization
-      position / naked short / secondary trades, share class, registration and
-      document type, agents (stabilization / settlement / logistics /
-      duplicate IOI), project name. Census = db-asks AO. Then: one tranche-view
-      batch + catalog FIELD BLOCKS (server auto-projects the block, like
+      currency. AO (UAT 2026-11-12) PLACED the rest: TRANCHE has FINAL_
+      TRANCHE_OFFER_SIZE/_AMOUNT, FINAL_PRIMARY/SECONDARY_SHARES, TRANCHE_
+      CURRENT_FILE_SIZE/_AMOUNT (= revised), LAST_SALE_BEFORE_DISTRIBUTION_
+      DATE, DSP_AGENT; _SYNDICATE (per broker) has UNDERWRITING_COMMITMENT,
+      COMM_SHARES, GROSS_SPREAD, UN_FEE(_PER), MANAGEMENT_FEE(_PER), SELLING_
+      CONCESSION(_PER), INCENTIVE_FEE_PER, RETAIL_FEE, PRIVATE_BANKING / WEALTH_
+      MANAGEMENT / RETAIL_RETENTION / DIRECTED_SHARES / TOTAL_RETAIL (+ _RETAIL
+      twins); _TRANCHE_STABILIZATION (DG_VERSION) has CURRENT_POSITION, CURRENT_
+      NAKED_SHORT_POSITION, INITIAL_*_POSITION, MAX_OVERALLOTMENT_OPTION,
+      OVERALLOTMENT_AVAILABLE/_EXERCISED, OVERALLOTMENT_GRANTED/EXCERCISE/
+      EXPIRY_TS (+_DESC), SECONDARY_TRADE_TOTALS/_AVERAGE_PRICE/_LOSS_OR_GAIN
+      (VARCHAR2); _STABILIZATION_SECONDARY_TRADES = trade list (SHARES VARCHAR2,
+      PRICE, TRADE_TS); PRODUCT_DETAIL has SHARE_CLASS, REGISTRATION, document
+      codes; identifier table DOCUMENT_DELIVERY_TYPE. STILL NOT FOUND: actual
+      fees per broker, revised price range, stabilization / settlement /
+      logistics / duplicate-IOI agents in OPUS (STABILIZATION_AGENT exists only
+      in EQUITY_SYNDICATE_DEAL — new dependency, not taken). Units = db-asks
+      AP. Then: one tranche-view batch + a per-broker syndicate view (array
+      grain) + catalog FIELD BLOCKS (server auto-projects the block, like
       equity_type) + card examples copied from the sheet's 4 economics prompts.
 - [ ] TEAMMATE DOCTRINE (applied 2026-10-27): deal 'B&D bank' = tranche bnd_bank,
       never order billed_by grouped by tranche (SKILL §7 bullet, tranche +

@@ -7,8 +7,100 @@
 -- 'other' scaled orders are CURRENCY / PERCENT bids where DEMAND_QTY is the
 -- share-equivalent — correct. The ladder now shows the bid's unit and decimals.
 
+-- AN answered (UAT 2026-11-12): non-zero percent IOI_QTY is a SHARE count (1,498
+-- orders, min 896,525); 11,374 are 0 (no conversion). PERCENT is back in Ipreo
+-- demand (vw_order_detail, vw_deal_summary).
+-- AO answered (UAT 2026-11-12): the ECM Execution fields live in
+-- OPUS_ECM_TRANSACTION_TRANCHE (final / current-file sizes, _PER_ fees, dates),
+-- _TRANCHE_SYNDICATE (per-broker commitment, fees, retail), _TRANCHE_STABILIZATION
+-- (position, over-allotment, secondary trade totals), _STABILIZATION_SECONDARY_TRADES
+-- and _PRODUCT_DETAIL (share class, registration). AP settles their units.
+
 -- ===========================================================================
--- SB. STARBURST INVENTORY (run in STARBURST, Trino SQL — not Oracle). Maps the
+-- AP. ECM EXECUTION UNITS (ORACLE, UAT, four SELECTs). Before these columns go
+-- into the views: is each one a %, a share count, or $ per share?
+-- ===========================================================================
+
+-- AP1. Per-broker syndicate columns: fill and range (one row).
+SELECT COUNT(*) AS ROWS_,
+       COUNT(UNDERWRITING_COMMITMENT) AS UWC_N, MIN(UNDERWRITING_COMMITMENT) AS UWC_MIN, MAX(UNDERWRITING_COMMITMENT) AS UWC_MAX,
+       COUNT(COMM_SHARES) AS CSH_N, MIN(COMM_SHARES) AS CSH_MIN, MAX(COMM_SHARES) AS CSH_MAX,
+       COUNT(GROSS_SPREAD) AS GS_N, MIN(GROSS_SPREAD) AS GS_MIN, MAX(GROSS_SPREAD) AS GS_MAX,
+       COUNT(UN_FEE_PER) AS UWP_N, MIN(UN_FEE_PER) AS UWP_MIN, MAX(UN_FEE_PER) AS UWP_MAX,
+       COUNT(MANAGEMENT_FEE_PER) AS MGP_N, MAX(MANAGEMENT_FEE_PER) AS MGP_MAX,
+       COUNT(SELLING_CONCESSION_PER) AS SCP_N, MAX(SELLING_CONCESSION_PER) AS SCP_MAX,
+       COUNT(TOTAL_RETAIL) AS RET_N, COUNT(TOTAL_RETAIL_RETAIL) AS RETR_N,
+       COUNT(PRIVATE_BANKING_RETAIL) AS PB_N, COUNT(DIRECTED_SHARES) AS DS_N
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE;
+
+-- AP2. Tranche fee and version columns: fill and range (one row).
+SELECT COUNT(*) AS ROWS_,
+       COUNT(GROSS_SPREAD_PER_FEE) AS GS_N, MIN(GROSS_SPREAD_PER_FEE) AS GS_MIN, MAX(GROSS_SPREAD_PER_FEE) AS GS_MAX,
+       COUNT(UNDERWRITING_PER_FEE) AS UWP_N, MAX(UNDERWRITING_PER_FEE) AS UWP_MAX,
+       COUNT(MANAGEMENT_PER_FEE) AS MGP_N, MAX(MANAGEMENT_PER_FEE) AS MGP_MAX,
+       COUNT(SELLING_CONCESSION_PER_FEE) AS SCP_N, MAX(SELLING_CONCESSION_PER_FEE) AS SCP_MAX,
+       COUNT(INCENTIVE_FEE) AS INC_N, COUNT(GLOBAL_COORDINATOR_FEE) AS GC_N,
+       COUNT(RE_ALLOWANCE_FEE) AS RA_N, COUNT(INTERNAL_SELLING_CONCESSION_FEE) AS ISC_N,
+       COUNT(FINAL_TRANCHE_OFFER_SIZE) AS FIN_N, COUNT(FINAL_PRIMARY_SHARES) AS FINP_N,
+       COUNT(TRANCHE_CURRENT_FILE_SIZE) AS CUR_N, COUNT(TRANCHE_CURRENT_FILE_AMOUNT) AS CURA_N,
+       COUNT(BOOKS_OPEN_AT) AS BO_N, COUNT(PUBLIC_FILING_DATE) AS PF_N, COUNT(DEAL_CAPTAIN) AS CAP_N
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE;
+
+-- AP3. Stabilization table: grain, fill, and what LOSS_OR_GAIN holds (one row).
+SELECT COUNT(*) AS ROWS_, COUNT(DISTINCT ECM_TRANSACTION_TRANCHE_ID) AS TRANCHES_,
+       COUNT(CURRENT_POSITION) AS POS_N, COUNT(CURRENT_NAKED_SHORT_POSITION) AS NAKED_N,
+       COUNT(OVERALLOTMENT_EXERCISED) AS OAX_N, COUNT(OVERALLOTMENT_AVAILABLE) AS OAA_N,
+       COUNT(OVERALLOTMENT_GRANTED_TS) AS GR_N, COUNT(OVERALLOTMENT_EXPIRY_TS) AS EXP_N,
+       COUNT(SECONDARY_TRADE_TOTALS) AS ST_N, COUNT(SECONDARY_TRADE_AVERAGE_PRICE) AS SAP_N,
+       MIN(SECONDARY_TRADE_LOSS_OR_GAIN) AS LG_MIN, MAX(SECONDARY_TRADE_LOSS_OR_GAIN) AS LG_MAX
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_STABILIZATION;
+
+-- AP4. One tranche side by side: its brokers' commitment and fee columns next
+--      to the tranche size and spread, newest syndicate version only. Shows
+--      whether commitment is % or shares and whether _PER_ is % or $ / share.
+WITH PICK AS (
+    SELECT ECM_TRANSACTION_TRANCHE_ID FROM (
+        SELECT ECM_TRANSACTION_TRANCHE_ID FROM DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE
+        WHERE  COMM_SHARES > 0 ORDER BY DG_UPDATED_TS DESC NULLS LAST)
+    WHERE ROWNUM = 1)
+SELECT S.SYNDICATE_MEMBER_NAME, S.SYNDICATE_ROLE, S.DG_VERSION,
+       S.UNDERWRITING_COMMITMENT, S.COMM_SHARES, S.GROSS_SPREAD, S.UN_FEE, S.UN_FEE_PER,
+       S.MANAGEMENT_FEE, S.MANAGEMENT_FEE_PER, S.SELLING_CONCESSION, S.SELLING_CONCESSION_PER,
+       T.FINAL_TRANCHE_OFFER_SIZE, T.FINAL_TRANCHE_OFFER_AMOUNT, T.GROSS_SPREAD_PER_FEE,
+       T.UNDERWRITING_PER_FEE, T.MANAGEMENT_PER_FEE, T.SELLING_CONCESSION_PER_FEE
+FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE S
+JOIN   PICK P ON P.ECM_TRANSACTION_TRANCHE_ID = S.ECM_TRANSACTION_TRANCHE_ID
+LEFT JOIN (
+    SELECT X.*, ROW_NUMBER() OVER (PARTITION BY X.ECM_TRANSACTION_TRANCHE_ID
+                                   ORDER BY X.DG_VERSION DESC NULLS LAST, X.ROWID DESC) AS RN_
+    FROM   DGSTREAM.OPUS_ECM_TRANSACTION_TRANCHE X
+    WHERE  X.ECM_TRANSACTION_TRANCHE_ID IN (SELECT ECM_TRANSACTION_TRANCHE_ID FROM PICK)) T
+       ON T.ECM_TRANSACTION_TRANCHE_ID = S.ECM_TRANSACTION_TRANCHE_ID AND T.RN_ = 1
+ORDER  BY S.DG_VERSION DESC, S.COMM_SHARES DESC NULLS LAST;
+
+-- AL answered (UAT 2026-10-23): broker table columns exist and resolve every top
+-- code (CITIUSA -> Citigroup Global Markets Inc.); the issuer regex strips only
+-- deal-type suffixes; Ipreo IOI_QTY is the share / bond equivalent for every unit
+-- (0 when never converted). No grant to DGSTREAM on the DGLOBE table and none
+-- will be given — the view now carries a maintained code -> name list instead.
+-- AM answered 2026-10-23: all 42 further codes added except LADENBUR (no name in
+-- the reference) — the view lists 56 codes.
+
+-- AFTER the deploy (not before): deploy-check A0 + A (A01 43 / A02 89 / A03 73)
+-- + D-ECM, and time K3 — the investor-name block (CN) aggregates the whole
+-- Ipreo order table on every Ipreo query; K3 was sub-second before.
+
+-- AK answered (UAT 2026-10-23): Source = OB_ECM_ORDER.SOURCE (ONEBOOK = '1B',
+-- ISN, CMG, SALES, DA); Indication USD = cash amount / quantity x USD limit;
+-- RELATIVE_INDICATION empty. Both now view columns.
+
+-- Deploy vw_order_detail (ladder largest-first, wider number masks,
+-- ORDER_SOURCE, INDICATION_USD), then deploy-check A0 + A (A03 = 73) + D-ECM.
+
+-- ===========================================================================
+-- SB. STARBURST ONLY — Trino SQL. In SQL Developer / Oracle these fail with
+-- ORA-00933 "SQL command not properly ended" (system.jdbc.tables is a
+-- three-part Trino name). Run them in the Starburst query editor. Maps the
 -- Iceberg landing area before we port the nine views. Read-only metadata.
 -- ===========================================================================
 
@@ -76,55 +168,3 @@ ORDER  BY 1, 2;
 -- SB4. One table's DDL: shows the format (Iceberg / Parquet), partitioning and
 --      column types. Put the first table name from SB3 in.
 -- SHOW CREATE TABLE dataglobe_s3.dg_s3_reference.<table_from_SB3>;
-
--- AN. IPREO PERCENT BIDS (UAT, one statement). PR bot 2026-10-27: is a non-zero
--- IOI_QTY on a PERCENT bid a converted SHARE count or the raw percentage (10 for
--- a 10% order)? Percent bids are excluded from Ipreo demand until this answers.
-SELECT CASE WHEN I.IOI_QTY = 0 THEN '0 (never converted)'
-            WHEN I.IOI_QTY <= 100 THEN '0 < qty <= 100 (looks like a percentage)'
-            ELSE '> 100 (looks like shares)' END AS BUCKET,
-       COUNT(*) AS ORDERS_, MIN(I.IOI_QTY) AS MIN_, MAX(I.IOI_QTY) AS MAX_
-FROM   DGSTREAM.IPREO_OB_ECM_ORDER O
-JOIN   (SELECT ORDER_ID, MAX(IOI_QTY) AS IOI_QTY FROM DGSTREAM.IPREO_OB_ECM_ORDER_IOI GROUP BY ORDER_ID) I
-       ON I.ORDER_ID = O.ORDER_ID
-WHERE  O.IOI_UNIT = 'PERCENT'
-GROUP  BY CASE WHEN I.IOI_QTY = 0 THEN '0 (never converted)'
-               WHEN I.IOI_QTY <= 100 THEN '0 < qty <= 100 (looks like a percentage)'
-               ELSE '> 100 (looks like shares)' END;
-
--- AO. ECM EXECUTION FIELD MAP (UAT, one statement, dictionary only). Product's
--- Deal Launcher sheet (2026-11-06) asks for blocks we cannot place yet: per-broker
--- commitment % / shares, expected and actual fees per broker, retail per broker,
--- revised size / range, % fee variants, stabilization position, secondary trades.
--- Lists every OPUS ECM table (column 1 = inventory), the whole syndicate table,
--- and the matching columns anywhere else in DGSTREAM.
-SELECT TABLE_NAME, COLUMN_ID, COLUMN_NAME, DATA_TYPE
-FROM   ALL_TAB_COLUMNS
-WHERE  OWNER = 'DGSTREAM'
-  AND  TABLE_NAME NOT LIKE 'IPREO%'
-  AND (   (TABLE_NAME LIKE '%ECM%' AND COLUMN_ID = 1)
-       OR  TABLE_NAME = 'OPUS_ECM_TRANSACTION_TRANCHE_SYNDICATE'
-       OR  TABLE_NAME LIKE '%STABIL%'
-       OR (TABLE_NAME LIKE 'OPUS_ECM%' AND REGEXP_LIKE(COLUMN_NAME,
-             'REVIS|FINAL|CURRENT|COMMIT|_PCT|PERCENT|_PER_|EXPECT|ACTUAL|^ACT_|RETAIL|DIRECTED|WEALTH|PRIVATE|PVT|STABIL|ALLOT|NAKED|SHORT|POSITION|WEIGHTED|GAIN|LOSS|INCENTIVE|COORD|ALLOW|PRAE|INTERNAL|POT_SPLIT|SPREAD|LOGISTIC|AGENT|CAPTAIN|SHARE_CLASS|REGISTRATION|DOCUMENT|DELIVERY|LAST_SALE|FILING|BOOK|POSTPONE|WITHDRAW|TERMINAT|PROJECT|DEMAND'))
-       OR (TABLE_NAME NOT LIKE 'OPUS_ECM%' AND REGEXP_LIKE(COLUMN_NAME, 'STABIL|NAKED|OVER_?ALLOT')))
-ORDER  BY TABLE_NAME, COLUMN_ID;
-
--- AL answered (UAT 2026-10-23): broker table columns exist and resolve every top
--- code (CITIUSA -> Citigroup Global Markets Inc.); the issuer regex strips only
--- deal-type suffixes; Ipreo IOI_QTY is the share / bond equivalent for every unit
--- (0 when never converted). No grant to DGSTREAM on the DGLOBE table and none
--- will be given — the view now carries a maintained code -> name list instead.
--- AM answered 2026-10-23: all 42 further codes added except LADENBUR (no name in
--- the reference) — the view lists 56 codes.
-
--- AFTER the deploy (not before): deploy-check A0 + A (A01 43 / A02 89 / A03 73)
--- + D-ECM, and time K3 — the investor-name block (CN) aggregates the whole
--- Ipreo order table on every Ipreo query; K3 was sub-second before.
-
--- AK answered (UAT 2026-10-23): Source = OB_ECM_ORDER.SOURCE (ONEBOOK = '1B',
--- ISN, CMG, SALES, DA); Indication USD = cash amount / quantity x USD limit;
--- RELATIVE_INDICATION empty. Both now view columns.
-
--- Deploy vw_order_detail (ladder largest-first, wider number masks,
--- ORDER_SOURCE, INDICATION_USD), then deploy-check A0 + A (A03 = 73) + D-ECM.

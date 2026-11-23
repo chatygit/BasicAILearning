@@ -283,6 +283,14 @@ becomes core/serve SQL like every other branch) · Starburst as the query engine
   monotonic per row, and is there a direct Iceberg or Kafka sink already?
 - Scheduling: is there an approved scheduler for Trino SQL jobs on OCP?
 
+## Update 2026-11-23 — three source buckets, not one
+DataGlobe lands ECM, DCM and OPUS in SEPARATE S3 buckets with separate
+entitlements (one catalog each). Our raw layer is therefore READ from those
+three catalogs, not copied into ours; our own catalog holds only clean + serve.
+One load service account reads all three (plan A); if that grant is refused,
+an ECM load (ECM + OPUS) and a DCM load write separate serve tables and the MCP
+unions them (plan B). Team-facing summary: `STARBURST-PLAN-SIMPLE.md`.
+
 ## Decision 2026-11-04 — every DG table moves to Iceberg
 DataGlobe will migrate EVERY DGSTREAM table to Iceberg, and new sources (Ipreo-
 style raw tables) land as Iceberg tables too. That replaces the "Phase 0 nightly
