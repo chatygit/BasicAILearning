@@ -170,26 +170,46 @@ ORDER  BY 2, 3;
 -- STILL MISSING: SB11 for ecm_history_data_iceberg, ecm_history_data,
 -- dataglobe_s3, dataglobe, ecm, dcm and SB12 for the first three (result or error).
 
--- SB16. FULL table list of the migrated DG data (needed to write ds_deal_summary
---       and the other eight datasets: every source table as catalog.schema.table).
---       Screenshot every row, or the error.
+-- SB16 partial + SB13/SB14 answered (2026-11-25):
+-- * Catalog ecm_history_data_iceberg (assumed: schema ecm_data_iceberg) holds
+--   the DG tables as *_HIST (every version): ob_ecm_order(_ioi/_allocation/
+--   _book_*/_shared_*)_hist, ob_ecm_trade_book_*_hist, opus_ecm_transaction(_
+--   status/_issuer_*/_document)_hist, opus_ecm_transaction_tranche(_syndicate/
+--   _stabilization/_product_detail(_identifier)/_demand_currency/_fee_comment)
+--   _hist. The screenshot STARTS at ob_ecm_order_allocation_hist — rows sorting
+--   before it (equity_*, ipreo_*, ob_deal_*) were not in the shot.
+-- * ds_ecm_orders (33,616 rows) = SECURITY DEFINER view over
+--   ecm.ecmo_onebook.ecmo_orders — the LIVE OneBook MongoDB, nested columns
+--   (orderioi array(row(ioiQty, limitValue, limitType)), investordetails
+--   row(_id, name, type, gpnum, region)); no allocation, no deal fields.
+--   NOT A SOURCE (user 2026-11-25): we never read live Mongo. The live catalog
+--   will carry exactly the DGSTREAM tables, shared by all data products.
+
+-- SB16b. The top of the same list (everything sorting before
+--        ob_ecm_order_allocation_hist) — DCM (ob_deal_*, ob_order*), Ipreo
+--        and opus_base tables would sit here if they were migrated.
 SELECT table_schema, table_name
 FROM   ecm_history_data_iceberg.information_schema.tables
 WHERE  table_schema <> 'information_schema'
+  AND  table_name < 'ob_ecm_order_allocation_hist'
 ORDER  BY 1, 2;
 
+-- SB16c. The Hive twin (did not come back): same question.
 SELECT table_schema, table_name
 FROM   ecm_history_data.information_schema.tables
 WHERE  table_schema <> 'information_schema'
 ORDER  BY 1, 2;
 
--- SB13. How the existing ECM orders data product is built (which catalog and
---       tables it reads — the fastest map of where ECM order data lives).
-SHOW CREATE VIEW bds_iceberg_ref.dp_deal_execution_ecm_orders.ds_ecm_orders;
+-- SB17. One migrated table vs Oracle: columns, format, partitioning.
+DESCRIBE ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_tranche_hist;
+SHOW CREATE TABLE ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_tranche_hist;
 
--- SB14. Its columns and size.
-DESCRIBE bds_iceberg_ref.dp_deal_execution_ecm_orders.ds_ecm_orders;
-SELECT count(*) AS rows_ FROM bds_iceberg_ref.dp_deal_execution_ecm_orders.ds_ecm_orders;
+-- SB18. Versions: rows vs distinct tranches, and how fresh the copy is.
+SELECT count(*) AS rows_,
+       count(DISTINCT ecm_transaction_tranche_id) AS tranches_,
+       max(dg_version) AS max_version_,
+       max(dg_updated_ts) AS last_update_
+FROM   ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_tranche_hist;
 
 -- SB15. Where the OPUS base data comes from in Starburst.
 SHOW CREATE VIEW bds_iceberg_ref.bds_views.sb_opus_transaction_vw;
