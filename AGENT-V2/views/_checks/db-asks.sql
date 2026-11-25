@@ -98,71 +98,71 @@ ORDER  BY S.DG_VERSION DESC, S.COMM_SHARES DESC NULLS LAST;
 -- ORDER_SOURCE, INDICATION_USD), then deploy-check A0 + A (A03 = 73) + D-ECM.
 
 -- ===========================================================================
--- SB. STARBURST DEV ACCESS MAP (Trino SQL, run in the STARBURST editor, DEV).
--- Not Oracle: in SQL Developer these fail with ORA-00933. Read-only metadata,
--- no CREATE / INSERT. One round: run top to bottom, screenshot each result.
--- If a statement fails naming a catalog you are not authorised for, add that
--- catalog to the NOT IN list of SB4 / SB5 and re-run just that statement.
+-- SB. STARBURST DEV ACCESS MAP (Trino SQL, Starburst editor, DEV). No schema
+-- or catalog needs selecting: every name below is fully qualified.
+-- SB1 (groups) + SB3 (catalogs) answered 2026-11-25: 38 catalogs; the
+-- candidates are ecm_history_data(_iceberg) (hive / iceberg), bds_iceberg_ref,
+-- dataglobe_s3 / dataglobe (hive), ecm / dcm / opus (MONGODB), bds_dg_oraas
+-- (oracle, today's source). Groups include app_ibcbsb-dev-ecm-bds-dp,
+-- app_ibcbsb-dev-dcm-bds-dp and app_ibcbsb-dev-ranger-users (Ranger).
+-- WHY THE OLD SB4-SB6 FAILED: system.jdbc.tables walks EVERY catalog, so one
+-- catalog you cannot read (or a slow Mongo / SQL Server one) fails the whole
+-- statement. Now: one statement per catalog — a failure only costs that line.
 -- ===========================================================================
 
--- SB1. Who Starburst thinks you are.
-SELECT current_user AS user_, current_groups() AS groups_;
+-- (SB10 dropped 2026-11-25: bds_dg_oraas is NOT a Starburst source for the new
+-- design — the DG data is migrated to ecm_history_data; live events will land
+-- in a new S3 / Iceberg catalog, name TBC.)
 
--- SB2. Your roles.
-SHOW CURRENT ROLES;
+-- SB11. Schemas and table counts, one catalog per statement. Screenshot each
+--       result or its error; an "Access Denied" is an answer too.
+SELECT 'ecm_history_data_iceberg' AS cat_, table_schema, count(*) AS tables_
+FROM   ecm_history_data_iceberg.information_schema.tables
+WHERE  table_schema <> 'information_schema' GROUP BY 1, 2 ORDER BY 2;
+SELECT 'ecm_history_data' AS cat_, table_schema, count(*) AS tables_
+FROM   ecm_history_data.information_schema.tables
+WHERE  table_schema <> 'information_schema' GROUP BY 1, 2 ORDER BY 2;
+SELECT 'bds_iceberg_ref' AS cat_, table_schema, count(*) AS tables_
+FROM   bds_iceberg_ref.information_schema.tables
+WHERE  table_schema <> 'information_schema' GROUP BY 1, 2 ORDER BY 2;
+SELECT 'dataglobe_s3' AS cat_, table_schema, count(*) AS tables_
+FROM   dataglobe_s3.information_schema.tables
+WHERE  table_schema <> 'information_schema' GROUP BY 1, 2 ORDER BY 2;
+SELECT 'dataglobe' AS cat_, table_schema, count(*) AS tables_
+FROM   dataglobe.information_schema.tables
+WHERE  table_schema <> 'information_schema' GROUP BY 1, 2 ORDER BY 2;
+SELECT 'ecm' AS cat_, table_schema, count(*) AS tables_
+FROM   ecm.information_schema.tables
+WHERE  table_schema <> 'information_schema' GROUP BY 1, 2 ORDER BY 2;
+SELECT 'dcm' AS cat_, table_schema, count(*) AS tables_
+FROM   dcm.information_schema.tables
+WHERE  table_schema <> 'information_schema' GROUP BY 1, 2 ORDER BY 2;
+SELECT 'opus' AS cat_, table_schema, count(*) AS tables_
+FROM   opus.information_schema.tables
+WHERE  table_schema <> 'information_schema' GROUP BY 1, 2 ORDER BY 2;
 
--- SB3. Every catalog you can see, and what kind it is (iceberg / hive /
---      oracle / ...). The ECM, DCM and OPUS buckets should appear here.
-SELECT catalog_name, connector_name FROM system.metadata.catalogs ORDER BY 1;
+-- SB12. Our source tables by name, in the four S3 catalogs most likely to hold
+--       the DataGlobe landings (run each; each is one catalog).
+SELECT 'ecm_history_data_iceberg' AS cat_, table_schema, table_name
+FROM   ecm_history_data_iceberg.information_schema.tables
+WHERE  regexp_like(lower(table_name), 'opus|ipreo|ob_|ecm|dcm|tranche|syndicate|order')
+ORDER  BY 2, 3;
+SELECT 'ecm_history_data' AS cat_, table_schema, table_name
+FROM   ecm_history_data.information_schema.tables
+WHERE  regexp_like(lower(table_name), 'opus|ipreo|ob_|ecm|dcm|tranche|syndicate|order')
+ORDER  BY 2, 3;
+SELECT 'dataglobe_s3' AS cat_, table_schema, table_name
+FROM   dataglobe_s3.information_schema.tables
+WHERE  regexp_like(lower(table_name), 'opus|ipreo|ob_|ecm|dcm|tranche|syndicate|order')
+ORDER  BY 2, 3;
+SELECT 'bds_iceberg_ref' AS cat_, table_schema, table_name
+FROM   bds_iceberg_ref.information_schema.tables
+WHERE  regexp_like(lower(table_name), 'opus|ipreo|ob_|ecm|dcm|tranche|syndicate|order')
+ORDER  BY 2, 3;
 
--- SB4. Schemas and table counts per catalog you can read.
-SELECT table_cat, table_schem, count(*) AS tables_
-FROM   system.jdbc.tables
-WHERE  table_cat NOT IN ('system', 'wl_sb_lds')
-  AND  table_schem <> 'information_schema'
-GROUP  BY 1, 2
-ORDER  BY 1, 2;
-
--- SB5. Where the 38 tables our views read live today (any catalog, any schema).
-SELECT table_cat, table_schem, table_name, table_type
-FROM   system.jdbc.tables
-WHERE  table_cat NOT IN ('system', 'wl_sb_lds')
-  AND  lower(table_name) IN (
-    'ipreo_issue', 'ipreo_ob_ecm_order', 'ipreo_ob_ecm_order_ioi',
-    'ipreo_opus_ecm_transaction', 'ipreo_opus_ecm_transaction_status',
-    'ipreo_opus_ecm_transaction_tranche', 'ipreo_opus_ecm_transaction_tranche_product_detail',
-    'ipreo_opus_ecm_transaction_tranche_syndicate', 'ipreo_order', 'ipreo_orderioi',
-    'ipreo_product', 'ipreo_productfee', 'ipreo_tranche',
-    'ob_deal_issuer', 'ob_deal_tranche', 'ob_ecm_order', 'ob_ecm_order_ioi',
-    'ob_ecm_trade_book_designation', 'ob_ecm_trade_book_investor_trade',
-    'ob_hedge_order', 'ob_hedge_trade', 'ob_order', 'ob_order_match_group',
-    'ob_order_size', 'ob_order_trade', 'ob_order_trade_syndicate', 'ob_tranche',
-    'ob_tranche_rating', 'ob_tranche_syndicate_member',
-    'opus_base_transaction', 'opus_base_transaction_related_parties',
-    'opus_ecm_transaction', 'opus_ecm_transaction_status', 'opus_ecm_transaction_tranche',
-    'opus_ecm_transaction_tranche_demand_currency',
-    'opus_ecm_transaction_tranche_product_detail',
-    'opus_ecm_transaction_tranche_product_detail_identifier',
-    'opus_ecm_transaction_tranche_syndicate', 'opus_ecm_transaction_tranche_stabilization')
-ORDER  BY table_name, table_cat;
-
--- SB6. Anything that looks like ours under another name (Iceberg landings
---      sometimes rename or prefix tables).
-SELECT table_cat, table_schem, table_name
-FROM   system.jdbc.tables
-WHERE  table_cat NOT IN ('system', 'wl_sb_lds')
-  AND  regexp_like(lower(table_name), 'opus|ipreo|ecm|dcm|orderbook|ob_order|ob_deal|tranche|syndicate')
-ORDER  BY 1, 2, 3;
-
--- AFTER SB3-SB6 (fill in the catalog / schema / table they show; one each):
--- SB7. Table format, partitioning, column types of one landed table:
---   SHOW CREATE TABLE <catalog>.<schema>.<table>;
--- SB8. What you may do in a catalog (SELECT only, or also CREATE / INSERT):
---   SELECT grantee, table_schema, table_name, privilege_type
---   FROM   <catalog>.information_schema.table_privileges
---   WHERE  grantee = current_user ORDER BY 2, 3, 4;
--- SB9. Freshness and versions of one landed table vs Oracle (row count, latest
---      update, versions per key):
---   SELECT count(*), max(dg_updated_ts), max(dg_version),
---          count(*) - count(DISTINCT ecm_transaction_tranche_id) AS extra_version_rows
---   FROM   <catalog>.<schema>.opus_ecm_transaction_tranche;
+-- AFTER SB11-SB12 (fill in one real catalog.schema.table from the results):
+-- SB7. SHOW CREATE TABLE <catalog>.<schema>.<table>;
+-- SB8. SELECT grantee, table_schema, table_name, privilege_type
+--      FROM <catalog>.information_schema.table_privileges ORDER BY 2, 3, 4;
+-- SB9. SELECT count(*), max(dg_updated_ts), max(dg_version)
+--      FROM <catalog>.<schema>.opus_ecm_transaction_tranche;

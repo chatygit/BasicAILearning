@@ -283,6 +283,20 @@ becomes core/serve SQL like every other branch) · Starburst as the query engine
   monotonic per row, and is there a direct Iceberg or Kafka sink already?
 - Scheduling: is there an approved scheduler for Trino SQL jobs on OCP?
 
+## Update 2026-11-25 — CONFIRMED direction; sources named
+Starburst is the confirmed direction. bds_dg_oraas (Oracle) is NOT a source:
+the DGSTREAM data is migrated to the `ecm_history_data` catalog (Hive; an
+Iceberg twin `ecm_history_data_iceberg` exists, where the data product
+`ask_banking_capital_markets` is being created). A new live catalog (name TBC,
+e.g. `ecm_live_data`) will hold new AND existing events as S3 files exposed as
+Iceberg tables. Consequences: (1) no pass-through phase — the nine views must
+be PORTED to Trino SQL over the Starburst tables before anything works;
+(2) serve = history + live, keeping the latest version of each row across
+both (or live alone, if it carries every existing event); (3) the Oracle
+parity check compares the port against today's UAT views, not a Starburst
+pass-through. `ecm` / `dcm` / `opus` in DEV are MongoDB catalogs (app stores),
+not the landing area.
+
 ## Update 2026-11-23 — three source buckets, not one
 DataGlobe lands ECM, DCM and OPUS in SEPARATE S3 buckets with separate
 entitlements (one catalog each). Our raw layer is therefore READ from those
