@@ -200,9 +200,25 @@ FROM   ecm_history_data.information_schema.tables
 WHERE  table_schema <> 'information_schema'
 ORDER  BY 1, 2;
 
--- SB17. One migrated table vs Oracle: columns, format, partitioning.
+-- SB17. COLUMN NAMES of the six tables ds_deal_summary reads. Publishing failed
+--       2026-11-25 with "Column 'x.ecm_transaction_id' cannot be resolved" on
+--       opus_ecm_transaction_hist: the migrated names differ from DGSTREAM.
+--       Screenshot every column of each (scroll the long ones).
+DESCRIBE ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_hist;
+DESCRIBE ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_status_hist;
 DESCRIBE ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_tranche_hist;
-SHOW CREATE TABLE ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_tranche_hist;
+DESCRIBE ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_tranche_demand_currency_hist;
+DESCRIBE ecm_history_data_iceberg.ecm_data_iceberg.ob_ecm_order_hist;
+DESCRIBE ecm_history_data_iceberg.ecm_data_iceberg.ob_ecm_order_ioi_hist;
+
+-- SB17b. Faster alternative to the six DESCRIBEs: one list, every column.
+SELECT table_name, ordinal_position, column_name, data_type
+FROM   ecm_history_data_iceberg.information_schema.columns
+WHERE  table_schema = 'ecm_data_iceberg'
+  AND  table_name IN ('opus_ecm_transaction_hist', 'opus_ecm_transaction_status_hist',
+                      'opus_ecm_transaction_tranche_hist', 'opus_ecm_transaction_tranche_demand_currency_hist',
+                      'ob_ecm_order_hist', 'ob_ecm_order_ioi_hist')
+ORDER  BY table_name, ordinal_position;
 
 -- SB18. Versions: rows vs distinct tranches, and how fresh the copy is.
 SELECT count(*) AS rows_,
