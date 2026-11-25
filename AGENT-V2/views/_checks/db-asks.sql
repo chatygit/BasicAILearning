@@ -160,6 +160,40 @@ FROM   bds_iceberg_ref.information_schema.tables
 WHERE  regexp_like(lower(table_name), 'opus|ipreo|ob_|ecm|dcm|tranche|syndicate|order')
 ORDER  BY 2, 3;
 
+-- SB11/SB12 partial (2026-11-25): bds_iceberg_ref ALREADY HOLDS DATA PRODUCTS —
+-- schema dp_deal_execution_ecm_orders (dataset ds_ecm_orders) and
+-- dp_wallet_external (ds_external_dealbankcompanytranche); bds_views holds
+-- Starburst ports of the OPUS base views (sb_opus_transaction_vw,
+-- sb_opus_transaction_related_parties_vw, entitlements ...); dataglobe_iceberg
+-- holds dealogic tranche attributes + opus dms entitlement. Convention: schema
+-- dp_<product>, dataset ds_<name>. opus (MongoDB) = app databases, not ours.
+-- STILL MISSING: SB11 for ecm_history_data_iceberg, ecm_history_data,
+-- dataglobe_s3, dataglobe, ecm, dcm and SB12 for the first three (result or error).
+
+-- SB16. FULL table list of the migrated DG data (needed to write ds_deal_summary
+--       and the other eight datasets: every source table as catalog.schema.table).
+--       Screenshot every row, or the error.
+SELECT table_schema, table_name
+FROM   ecm_history_data_iceberg.information_schema.tables
+WHERE  table_schema <> 'information_schema'
+ORDER  BY 1, 2;
+
+SELECT table_schema, table_name
+FROM   ecm_history_data.information_schema.tables
+WHERE  table_schema <> 'information_schema'
+ORDER  BY 1, 2;
+
+-- SB13. How the existing ECM orders data product is built (which catalog and
+--       tables it reads — the fastest map of where ECM order data lives).
+SHOW CREATE VIEW bds_iceberg_ref.dp_deal_execution_ecm_orders.ds_ecm_orders;
+
+-- SB14. Its columns and size.
+DESCRIBE bds_iceberg_ref.dp_deal_execution_ecm_orders.ds_ecm_orders;
+SELECT count(*) AS rows_ FROM bds_iceberg_ref.dp_deal_execution_ecm_orders.ds_ecm_orders;
+
+-- SB15. Where the OPUS base data comes from in Starburst.
+SHOW CREATE VIEW bds_iceberg_ref.bds_views.sb_opus_transaction_vw;
+
 -- AFTER SB11-SB12 (fill in one real catalog.schema.table from the results):
 -- SB7. SHOW CREATE TABLE <catalog>.<schema>.<table>;
 -- SB8. SELECT grantee, table_schema, table_name, privilege_type
