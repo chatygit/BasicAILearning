@@ -3,7 +3,7 @@ et AS (
     SELECT * FROM (
         SELECT x.*,
                row_number() OVER (PARTITION BY x.ecm_transaction_id
-                                  ORDER BY x.dg_version DESC NULLS LAST, x.dg_updated_ts DESC NULLS LAST) AS rn_
+                                  ORDER BY try_cast(x.dg_version AS bigint) DESC NULLS LAST, try_cast(x.dg_updated_ts AS timestamp(6)) DESC NULLS LAST) AS rn_
         FROM ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_hist x
         WHERE x.deal_transaction_id IS NOT NULL
     ) WHERE rn_ = 1
@@ -15,7 +15,7 @@ st AS (
     FROM (
         SELECT x.*,
                row_number() OVER (PARTITION BY x.ecm_transaction_id, x.status_type
-                                  ORDER BY x.dg_version DESC NULLS LAST, x.dg_updated_ts DESC NULLS LAST) AS rn_
+                                  ORDER BY try_cast(x.dg_version AS bigint) DESC NULLS LAST, try_cast(x.dg_updated_ts AS timestamp(6)) DESC NULLS LAST) AS rn_
         FROM ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_status_hist x
     )
     WHERE rn_ = 1
@@ -27,7 +27,7 @@ tt AS (
     SELECT * FROM (
         SELECT x.*,
                row_number() OVER (PARTITION BY x.ecm_transaction_id, x.ecm_transaction_tranche_id
-                                  ORDER BY x.dg_version DESC NULLS LAST, x.dg_updated_ts DESC NULLS LAST) AS rn_
+                                  ORDER BY try_cast(x.dg_version AS bigint) DESC NULLS LAST, try_cast(x.dg_updated_ts AS timestamp(6)) DESC NULLS LAST) AS rn_
         FROM ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_tranche_hist x
     ) WHERE rn_ = 1
 ),
@@ -35,7 +35,7 @@ dc AS (
     SELECT * FROM (
         SELECT x.*,
                row_number() OVER (PARTITION BY x.ecm_transaction_id, x.ecm_transaction_tranche_id, x.currency_id
-                                  ORDER BY x.dg_version DESC NULLS LAST, x.dg_updated_ts DESC NULLS LAST) AS rn_
+                                  ORDER BY try_cast(x.dg_version AS bigint) DESC NULLS LAST, try_cast(x.dg_updated_ts AS timestamp(6)) DESC NULLS LAST) AS rn_
         FROM ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_tranche_demand_currency_hist x
     ) WHERE rn_ = 1
 ),
@@ -43,15 +43,15 @@ o AS (
     SELECT * FROM (
         SELECT x.*,
                row_number() OVER (PARTITION BY x.order_id
-                                  ORDER BY x.dg_version DESC NULLS LAST, x.dg_updated_ts DESC NULLS LAST) AS rn_
+                                  ORDER BY try_cast(x.dg_version AS bigint) DESC NULLS LAST, try_cast(x.dg_updated_ts AS timestamp(6)) DESC NULLS LAST) AS rn_
         FROM ecm_history_data_iceberg.ecm_data_iceberg.ob_ecm_order_hist x
     ) WHERE rn_ = 1
 ),
 iq AS (
-    SELECT order_id, max(CAST(ioi_qty AS decimal(38,4))) AS ioi_qty
+    SELECT order_id, max(try_cast(ioi_qty AS decimal(38,4))) AS ioi_qty
     FROM (
         SELECT x.*,
-               rank() OVER (PARTITION BY x.order_id ORDER BY x.dg_version DESC NULLS LAST) AS rk_
+               rank() OVER (PARTITION BY x.order_id ORDER BY try_cast(x.dg_version AS bigint) DESC NULLS LAST) AS rk_
         FROM ecm_history_data_iceberg.ecm_data_iceberg.ob_ecm_order_ioi_hist x
     )
     WHERE rk_ = 1
@@ -61,8 +61,8 @@ tr AS (
     SELECT et.deal_transaction_id,
            count(DISTINCT CAST(tt.ecm_transaction_id AS varchar) || '~' ||
                           CAST(tt.ecm_transaction_tranche_id AS varchar)) AS tranche_count,
-           min(tt.pricing_ts) AS first_priced,
-           max(tt.pricing_ts) AS last_priced
+           min(try_cast(tt.pricing_ts AS timestamp(6))) AS first_priced,
+           max(try_cast(tt.pricing_ts AS timestamp(6))) AS last_priced
     FROM tt
     JOIN et ON et.ecm_transaction_id = tt.ecm_transaction_id
     GROUP BY et.deal_transaction_id
@@ -74,7 +74,7 @@ tc AS (
     FROM (
         SELECT et.deal_transaction_id,
                coalesce(tdc.currency_name, gc.currency_name, CAST(tt.tranche_currency_id AS varchar)) AS tranche_currency,
-               min(tt.pricing_ts) AS first_priced_ts
+               min(try_cast(tt.pricing_ts AS timestamp(6))) AS first_priced_ts
         FROM tt
         JOIN et ON et.ecm_transaction_id = tt.ecm_transaction_id
         LEFT JOIN dc tdc
@@ -92,10 +92,10 @@ od AS (
     SELECT CAST(o.deal_id AS varchar) AS deal_id,
            count(DISTINCT o.order_id) AS order_count,
            count(DISTINCT o.investor_gpnum) AS investor_count,
-           sum(coalesce(CAST(o.demand_qty AS decimal(38,4)),
+           sum(coalesce(try_cast(o.demand_qty AS decimal(38,4)),
                         CASE WHEN o.ioi_unit IN ('SHARES', 'BOND') THEN iq.ioi_qty END,
                         CAST(0 AS decimal(38,4)))) AS total_demand,
-           sum(coalesce(CAST(o.private_alloc AS decimal(38,4)), CAST(0 AS decimal(38,4)))) AS total_allocation
+           sum(coalesce(try_cast(o.private_alloc AS decimal(38,4)), CAST(0 AS decimal(38,4)))) AS total_allocation
     FROM o
     LEFT JOIN iq ON iq.order_id = o.order_id
     WHERE o.order_status NOT IN ('CANCELLED', 'DELETED', 'PASS')
@@ -107,7 +107,7 @@ SELECT
     'ECM' AS product,
     CAST(t.deal_transaction_id AS varchar) AS deal_id,
     max(t.syndicate_deal_name) AS deal_name,
-    CAST(max(t.deal_size) AS decimal(38,4)) AS deal_size,
+    max(try_cast(t.deal_size AS decimal(38,4))) AS deal_size,
     max(t.issuer_name_from_source) AS issuer_name,
     max(t.issuer_gfcid) AS gfcid,
     max(t.issuer_ticker) AS ticker,
@@ -118,7 +118,7 @@ SELECT
     max(s.status_value) AS deal_status,
     max(s.status_type) AS execution_status,
     CAST(NULL AS varchar) AS deal_region,
-    CAST(max(t.settlement_ts) AS timestamp(6)) AS settlement_ts,
+    max(try_cast(t.settlement_ts AS timestamp(6))) AS settlement_ts,
     max(t.settlement_currency_name) AS settlement_currency,
     CAST(max(tr.tranche_count) AS decimal(38,0)) AS tranche_count,
     CAST(max(tr.first_priced) AS timestamp(6)) AS first_priced,
@@ -130,18 +130,18 @@ SELECT
     max(t.issuer_leid) AS issuer_lei,
     CAST(max(od.total_demand) AS decimal(38,4)) AS total_demand,
     CAST(max(od.total_allocation) AS decimal(38,4)) AS total_allocation,
-    CAST(CASE WHEN max(t.deal_size) > 0
-              THEN round(max(od.total_demand) / CAST(max(t.deal_size) AS decimal(38,4)), 2)
+    CAST(CASE WHEN max(try_cast(t.deal_size AS decimal(38,4))) > 0
+              THEN round(max(od.total_demand) / max(try_cast(t.deal_size AS decimal(38,4))), 2)
          END AS decimal(38,6)) AS subscription_ratio,
     CAST(NULL AS decimal(38,6)) AS deal_fee_mm,
     CAST(NULL AS varchar) AS deal_fee_currency,
     CAST(NULL AS decimal(38,6)) AS deal_size_mm,
     CAST(NULL AS varchar) AS deal_size_currency,
-    CAST(max(t.announce_ts) AS timestamp(6)) AS first_announced,
-    CAST(max(t.base_price) AS decimal(38,6)) AS base_price,
-    CAST(max(t.reoffer_low_price) AS decimal(38,6)) AS reoffer_low_price,
-    CAST(max(t.reoffer_high_price) AS decimal(38,6)) AS reoffer_high_price,
-    CAST(max(t.fx_rate) AS decimal(38,9)) AS fx_rate,
+    max(try_cast(t.announce_ts AS timestamp(6))) AS first_announced,
+    max(try_cast(t.base_price AS decimal(38,6))) AS base_price,
+    max(try_cast(t.reoffer_low_price AS decimal(38,6))) AS reoffer_low_price,
+    max(try_cast(t.reoffer_high_price AS decimal(38,6))) AS reoffer_high_price,
+    max(try_cast(t.fx_rate AS decimal(38,9))) AS fx_rate,
     max(t.issuer_country_name) AS issuer_country,
     max(t.issuer_domicile_country_name) AS issuer_domicile,
     max(t.offering_format) AS offering_format,

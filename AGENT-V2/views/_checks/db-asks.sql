@@ -220,6 +220,21 @@ WHERE  table_schema = 'ecm_data_iceberg'
                       'ob_ecm_order_hist', 'ob_ecm_order_ioi_hist')
 ORDER  BY table_name, ordinal_position;
 
+-- SB17c. ONE-SCREEN key map (run this first; SB17b is the full list). The order
+--        table answered 2026-11-25: DGSTREAM _HIST names kept (uuid first), almost
+--        every column varchar (the query now try_casts numbers / dates / versions).
+--        Still unknown: the transaction key of opus_ecm_transaction_hist (no
+--        ecm_transaction_id) and whether dg_version / dg_updated_ts exist.
+SELECT table_name, column_name, data_type
+FROM   ecm_history_data_iceberg.information_schema.columns
+WHERE  table_schema = 'ecm_data_iceberg'
+  AND  table_name IN ('opus_ecm_transaction_hist', 'opus_ecm_transaction_status_hist',
+                      'opus_ecm_transaction_tranche_hist',
+                      'opus_ecm_transaction_tranche_demand_currency_hist',
+                      'ob_ecm_order_ioi_hist')
+  AND  regexp_like(column_name, 'id$|version|^dg_|status|currency')
+ORDER  BY table_name, column_name;
+
 -- SB18. Versions: rows vs distinct tranches, and how fresh the copy is.
 SELECT count(*) AS rows_,
        count(DISTINCT ecm_transaction_tranche_id) AS tranches_,
