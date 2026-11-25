@@ -1,9 +1,9 @@
 WITH
 et AS (
     SELECT * FROM (
-        SELECT x.*,
-               row_number() OVER (PARTITION BY x.ecm_transaction_id
-                                  ORDER BY try_cast(x.dg_version AS bigint) DESC NULLS LAST, try_cast(x.dg_updated_ts AS timestamp(6)) DESC NULLS LAST) AS rn_
+        SELECT x.*, x.dg_entity_id AS ecm_transaction_id,
+               row_number() OVER (PARTITION BY x.dg_entity_id
+                                  ORDER BY x.dg_updated_ts DESC NULLS LAST, x.dg_processed_ts DESC NULLS LAST) AS rn_
         FROM ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_hist x
         WHERE x.deal_transaction_id IS NOT NULL
     ) WHERE rn_ = 1
@@ -43,7 +43,7 @@ o AS (
     SELECT * FROM (
         SELECT x.*,
                row_number() OVER (PARTITION BY x.order_id
-                                  ORDER BY try_cast(x.dg_version AS bigint) DESC NULLS LAST, try_cast(x.dg_updated_ts AS timestamp(6)) DESC NULLS LAST) AS rn_
+                                  ORDER BY x.dg_updated_ts DESC NULLS LAST, try_cast(x.version AS bigint) DESC NULLS LAST) AS rn_
         FROM ecm_history_data_iceberg.ecm_data_iceberg.ob_ecm_order_hist x
     ) WHERE rn_ = 1
 ),
@@ -51,7 +51,7 @@ iq AS (
     SELECT order_id, max(try_cast(ioi_qty AS decimal(38,4))) AS ioi_qty
     FROM (
         SELECT x.*,
-               rank() OVER (PARTITION BY x.order_id ORDER BY try_cast(x.dg_version AS bigint) DESC NULLS LAST) AS rk_
+               rank() OVER (PARTITION BY x.order_id ORDER BY x.dg_updated_ts DESC NULLS LAST) AS rk_
         FROM ecm_history_data_iceberg.ecm_data_iceberg.ob_ecm_order_ioi_hist x
     )
     WHERE rk_ = 1
@@ -64,7 +64,7 @@ tr AS (
            min(try_cast(tt.pricing_ts AS timestamp(6))) AS first_priced,
            max(try_cast(tt.pricing_ts AS timestamp(6))) AS last_priced
     FROM tt
-    JOIN et ON et.ecm_transaction_id = tt.ecm_transaction_id
+    JOIN et ON et.ecm_transaction_id = CAST(tt.ecm_transaction_id AS varchar)
     GROUP BY et.deal_transaction_id
 ),
 tc AS (
@@ -76,7 +76,7 @@ tc AS (
                coalesce(tdc.currency_name, gc.currency_name, CAST(tt.tranche_currency_id AS varchar)) AS tranche_currency,
                min(try_cast(tt.pricing_ts AS timestamp(6))) AS first_priced_ts
         FROM tt
-        JOIN et ON et.ecm_transaction_id = tt.ecm_transaction_id
+        JOIN et ON et.ecm_transaction_id = CAST(tt.ecm_transaction_id AS varchar)
         LEFT JOIN dc tdc
           ON tdc.ecm_transaction_id = tt.ecm_transaction_id
          AND tdc.ecm_transaction_tranche_id = tt.ecm_transaction_tranche_id
@@ -152,7 +152,7 @@ SELECT
              THEN 'bonds' ELSE 'shares' END) AS size_unit,
     CAST(NULL AS varchar) AS country_of_risk
 FROM et t
-JOIN st s ON s.ecm_transaction_id = t.ecm_transaction_id
+JOIN st s ON CAST(s.ecm_transaction_id AS varchar) = t.ecm_transaction_id
 LEFT JOIN tr ON tr.deal_transaction_id = t.deal_transaction_id
 LEFT JOIN tc ON tc.deal_transaction_id = t.deal_transaction_id
 LEFT JOIN od ON od.deal_id = CAST(t.deal_transaction_id AS varchar)
