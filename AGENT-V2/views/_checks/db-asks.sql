@@ -98,73 +98,71 @@ ORDER  BY S.DG_VERSION DESC, S.COMM_SHARES DESC NULLS LAST;
 -- ORDER_SOURCE, INDICATION_USD), then deploy-check A0 + A (A03 = 73) + D-ECM.
 
 -- ===========================================================================
--- SB. STARBURST ONLY — Trino SQL. In SQL Developer / Oracle these fail with
--- ORA-00933 "SQL command not properly ended" (system.jdbc.tables is a
--- three-part Trino name). Run them in the Starburst query editor. Maps the
--- Iceberg landing area before we port the nine views. Read-only metadata.
+-- SB. STARBURST DEV ACCESS MAP (Trino SQL, run in the STARBURST editor, DEV).
+-- Not Oracle: in SQL Developer these fail with ORA-00933. Read-only metadata,
+-- no CREATE / INSERT. One round: run top to bottom, screenshot each result.
+-- If a statement fails naming a catalog you are not authorised for, add that
+-- catalog to the NOT IN list of SB4 / SB5 and re-run just that statement.
 -- ===========================================================================
 
--- SB1. Every schema and its table count in the candidate catalogs.
+-- SB1. Who Starburst thinks you are.
+SELECT current_user AS user_, current_groups() AS groups_;
+
+-- SB2. Your roles.
+SHOW CURRENT ROLES;
+
+-- SB3. Every catalog you can see, and what kind it is (iceberg / hive /
+--      oracle / ...). The ECM, DCM and OPUS buckets should appear here.
+SELECT catalog_name, connector_name FROM system.metadata.catalogs ORDER BY 1;
+
+-- SB4. Schemas and table counts per catalog you can read.
 SELECT table_cat, table_schem, count(*) AS tables_
 FROM   system.jdbc.tables
-WHERE  table_cat IN ('dataglobe_s3', 'dcm', 'ecm', 'dealogic', 'dms', 'dsi')
+WHERE  table_cat NOT IN ('system', 'wl_sb_lds')
   AND  table_schem <> 'information_schema'
 GROUP  BY 1, 2
 ORDER  BY 1, 2;
 
--- SB2. Which of the 38 DG tables our views read already exist anywhere in
---      the catalogs you can read (naming them avoids catalogs you are not
---      authorised for, e.g. wl_sb_lds, which fail the whole statement).
-SELECT table_cat, table_schem, table_name
+-- SB5. Where the 38 tables our views read live today (any catalog, any schema).
+SELECT table_cat, table_schem, table_name, table_type
 FROM   system.jdbc.tables
-WHERE  table_cat IN ('dataglobe_s3', 'dcm', 'ecm', 'dealogic', 'dms', 'dsi')
+WHERE  table_cat NOT IN ('system', 'wl_sb_lds')
   AND  lower(table_name) IN (
-    'ipreo_issue',
-    'ipreo_ob_ecm_order',
-    'ipreo_ob_ecm_order_ioi',
-    'ipreo_opus_ecm_transaction',
-    'ipreo_opus_ecm_transaction_status',
-    'ipreo_opus_ecm_transaction_tranche',
-    'ipreo_opus_ecm_transaction_tranche_product_detail',
-    'ipreo_opus_ecm_transaction_tranche_syndicate',
-    'ipreo_order',
-    'ipreo_orderioi',
-    'ipreo_product',
-    'ipreo_productfee',
-    'ipreo_tranche',
-    'ob_deal_issuer',
-    'ob_deal_tranche',
-    'ob_ecm_order',
-    'ob_ecm_order_ioi',
-    'ob_ecm_trade_book_designation',
-    'ob_ecm_trade_book_investor_trade',
-    'ob_hedge_order',
-    'ob_hedge_trade',
-    'ob_order',
-    'ob_order_match_group',
-    'ob_order_size',
-    'ob_order_trade',
-    'ob_order_trade_syndicate',
-    'ob_tranche',
-    'ob_tranche_rating',
-    'ob_tranche_syndicate_member',
-    'opus_base_transaction',
-    'opus_base_transaction_related_parties',
-    'opus_ecm_transaction',
-    'opus_ecm_transaction_status',
-    'opus_ecm_transaction_tranche',
+    'ipreo_issue', 'ipreo_ob_ecm_order', 'ipreo_ob_ecm_order_ioi',
+    'ipreo_opus_ecm_transaction', 'ipreo_opus_ecm_transaction_status',
+    'ipreo_opus_ecm_transaction_tranche', 'ipreo_opus_ecm_transaction_tranche_product_detail',
+    'ipreo_opus_ecm_transaction_tranche_syndicate', 'ipreo_order', 'ipreo_orderioi',
+    'ipreo_product', 'ipreo_productfee', 'ipreo_tranche',
+    'ob_deal_issuer', 'ob_deal_tranche', 'ob_ecm_order', 'ob_ecm_order_ioi',
+    'ob_ecm_trade_book_designation', 'ob_ecm_trade_book_investor_trade',
+    'ob_hedge_order', 'ob_hedge_trade', 'ob_order', 'ob_order_match_group',
+    'ob_order_size', 'ob_order_trade', 'ob_order_trade_syndicate', 'ob_tranche',
+    'ob_tranche_rating', 'ob_tranche_syndicate_member',
+    'opus_base_transaction', 'opus_base_transaction_related_parties',
+    'opus_ecm_transaction', 'opus_ecm_transaction_status', 'opus_ecm_transaction_tranche',
     'opus_ecm_transaction_tranche_demand_currency',
     'opus_ecm_transaction_tranche_product_detail',
     'opus_ecm_transaction_tranche_product_detail_identifier',
-    'opus_ecm_transaction_tranche_syndicate')
+    'opus_ecm_transaction_tranche_syndicate', 'opus_ecm_transaction_tranche_stabilization')
 ORDER  BY table_name, table_cat;
 
--- SB3. What dataglobe_s3 holds (all tables, with the connector's table type).
-SELECT table_schema, table_name, table_type
-FROM   dataglobe_s3.information_schema.tables
-WHERE  table_schema <> 'information_schema'
-ORDER  BY 1, 2;
+-- SB6. Anything that looks like ours under another name (Iceberg landings
+--      sometimes rename or prefix tables).
+SELECT table_cat, table_schem, table_name
+FROM   system.jdbc.tables
+WHERE  table_cat NOT IN ('system', 'wl_sb_lds')
+  AND  regexp_like(lower(table_name), 'opus|ipreo|ecm|dcm|orderbook|ob_order|ob_deal|tranche|syndicate')
+ORDER  BY 1, 2, 3;
 
--- SB4. One table's DDL: shows the format (Iceberg / Parquet), partitioning and
---      column types. Put the first table name from SB3 in.
--- SHOW CREATE TABLE dataglobe_s3.dg_s3_reference.<table_from_SB3>;
+-- AFTER SB3-SB6 (fill in the catalog / schema / table they show; one each):
+-- SB7. Table format, partitioning, column types of one landed table:
+--   SHOW CREATE TABLE <catalog>.<schema>.<table>;
+-- SB8. What you may do in a catalog (SELECT only, or also CREATE / INSERT):
+--   SELECT grantee, table_schema, table_name, privilege_type
+--   FROM   <catalog>.information_schema.table_privileges
+--   WHERE  grantee = current_user ORDER BY 2, 3, 4;
+-- SB9. Freshness and versions of one landed table vs Oracle (row count, latest
+--      update, versions per key):
+--   SELECT count(*), max(dg_updated_ts), max(dg_version),
+--          count(*) - count(DISTINCT ecm_transaction_tranche_id) AS extra_version_rows
+--   FROM   <catalog>.<schema>.opus_ecm_transaction_tranche;
