@@ -276,3 +276,28 @@ PASS.
 ## 7. (WITHDRAWN 2026-10-23) DBA grant for DGLOBE.CMNSYNDREF_EXTERNAL_BROKER —
 the grant will not be given; the order view carries a maintained code → name
 list instead (db-asks AL3 codes).
+
+## 8. Starburst platform — data product + AD groups for the agent (status: drafted 2026-11-25, not sent)
+Template: the Deal Execution team's ticket (DP_DEAL_EXECUTION_ECM_DEAL_TRANCHE /
+_ORDERS / _TRADES, one AD group per product per env:
+app_banking_sb_{dev_,uat_,}execution_ecm_<domain>_non_restricted_dp). Their
+products read the live OneBook MongoDB (ecm catalog: ecmo_onebook, ecmo_items,
+ecmo_adapter_dealaxis_archival); ours read the DataGlobe tables (history + regular).
+
+> Please create the data product DP_ASK_BANKING (catalog bds_iceberg_ref; DEV
+> draft exists as dp_ask_banking) for the Capital Markets AI Agent (Ask Banking,
+> app 176173). Datasets are views over the DataGlobe ECM / DCM tables
+> (ecm_history_data_iceberg.ecm_data_iceberg now; the regular DGSTREAM-equivalent
+> tables when they land):
+> ds_deal_summary, ds_tranche_summary, ds_order_detail, ds_entity_search,
+> ds_designation, ds_trade_detail, ds_hedge_order, ds_hedge_trade, ds_trade_syndicate.
+> Active Directory groups, following the execution_ecm_* pattern:
+>   app_banking_sb_dev_ask_banking_dp
+>   app_banking_sb_uat_ask_banking_dp
+>   app_banking_sb_ask_banking_dp
+> Members: the agent's service accounts per environment (app 176173 MCP FIDs) and
+> the dev team. Bankers are never members — the agent enforces ECM / DCM
+> entitlement per user before any query.
+> Questions: (1) is the order-level data (investor names, allocations) "non_restricted"
+> like DP_DEAL_EXECUTION_ECM_ORDERS, or does it need a restricted product? (2) should
+> ECM and DCM be two products (two groups) to mirror the ECM / DCM entitlement split?

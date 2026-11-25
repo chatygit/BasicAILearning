@@ -241,65 +241,15 @@ ORDER  BY table_name, column_name;
 -- decimal(20,0); ob_ecm_order_ioi_hist has only dg_created/updated_ts. ds_deal_summary
 -- now keys the transaction on dg_entity_id (ASSUMED = ecm_transaction_id, SB19 checks).
 
--- SB19a. Is dg_entity_id the ECM transaction id? matched_ should be close to
---        entities_ (every transaction has status rows).
-SELECT count(DISTINCT t.dg_entity_id) AS entities_,
-       count(DISTINCT t.deal_transaction_id) AS deals_,
-       count(DISTINCT CASE WHEN s.ecm_transaction_id IS NOT NULL THEN t.dg_entity_id END) AS matched_
-FROM   ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_hist t
-LEFT JOIN (SELECT DISTINCT CAST(ecm_transaction_id AS varchar) AS k, ecm_transaction_id
-           FROM ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_status_hist) s
-       ON s.k = t.dg_entity_id;
+-- SB19a/b answered 2026-11-25: dg_entity_id IS the ecm_transaction_id (49,016 of
+-- 49,020 entities match status rows; values are plain numbers, e.g. 7840).
+-- deals_ 49,113 > entities_ 49,020: ~93 transactions changed deal_transaction_id
+-- across versions — the latest-version pick takes the current one.
 
--- SB19b. Five sample keys side by side (shows the dg_entity_id format).
-SELECT deal_transaction_id, dg_entity_id, dg_event_id, dg_updated_ts
-FROM   ecm_history_data_iceberg.ecm_data_iceberg.opus_ecm_transaction_hist
-LIMIT  5;
-
--- SB19c. Every OTHER column ds_deal_summary reads. A row with an EMPTY data_type
---        = that column does not exist (they sort to the top; usually one screen).
-SELECT w.t AS table_name, w.c AS column_name, c.data_type
-FROM   (VALUES ('opus_ecm_transaction_hist', 'deal_transaction_id'),
-       ('opus_ecm_transaction_hist', 'syndicate_deal_name'),
-       ('opus_ecm_transaction_hist', 'deal_size'),
-       ('opus_ecm_transaction_hist', 'issuer_name_from_source'),
-       ('opus_ecm_transaction_hist', 'issuer_gfcid'),
-       ('opus_ecm_transaction_hist', 'issuer_ticker'),
-       ('opus_ecm_transaction_hist', 'issuer_industry_sector'),
-       ('opus_ecm_transaction_hist', 'use_of_proceeds'),
-       ('opus_ecm_transaction_hist', 'product_equity_type_value'),
-       ('opus_ecm_transaction_hist', 'product_offering_type_value'),
-       ('opus_ecm_transaction_hist', 'settlement_ts'),
-       ('opus_ecm_transaction_hist', 'settlement_currency_name'),
-       ('opus_ecm_transaction_hist', 'issuer_leid'),
-       ('opus_ecm_transaction_hist', 'announce_ts'),
-       ('opus_ecm_transaction_hist', 'base_price'),
-       ('opus_ecm_transaction_hist', 'reoffer_low_price'),
-       ('opus_ecm_transaction_hist', 'reoffer_high_price'),
-       ('opus_ecm_transaction_hist', 'fx_rate'),
-       ('opus_ecm_transaction_hist', 'issuer_country_name'),
-       ('opus_ecm_transaction_hist', 'issuer_domicile_country_name'),
-       ('opus_ecm_transaction_hist', 'offering_format'),
-       ('opus_ecm_transaction_hist', 'product_equity_class_value'),
-       ('opus_ecm_transaction_hist', 'dg_entity_id'),
-       ('opus_ecm_transaction_hist', 'dg_updated_ts'),
-       ('opus_ecm_transaction_hist', 'dg_processed_ts'),
-       ('opus_ecm_transaction_tranche_hist', 'pricing_ts'),
-       ('opus_ecm_transaction_tranche_hist', 'tranche_currency_id'),
-       ('ob_ecm_order_hist', 'deal_id'),
-       ('ob_ecm_order_hist', 'investor_gpnum'),
-       ('ob_ecm_order_hist', 'demand_qty'),
-       ('ob_ecm_order_hist', 'ioi_unit'),
-       ('ob_ecm_order_hist', 'private_alloc'),
-       ('ob_ecm_order_hist', 'order_status'),
-       ('ob_ecm_order_hist', 'is_matched'),
-       ('ob_ecm_order_hist', 'is_dominant'),
-       ('ob_ecm_order_hist', 'version'),
-       ('ob_ecm_order_hist', 'dg_updated_ts'),
-       ('ob_ecm_order_ioi_hist', 'ioi_qty')) AS w (t, c)
-LEFT JOIN ecm_history_data_iceberg.information_schema.columns c
-       ON c.table_schema = 'ecm_data_iceberg' AND c.table_name = w.t AND c.column_name = w.c
-ORDER  BY (c.data_type IS NULL) DESC, 1, 2;
+-- SB19c answered 2026-11-25: all 38 columns ds_deal_summary reads exist, with real
+-- numeric / timestamp types (deal_size decimal(38,4), demand_qty / ioi_qty
+-- decimal(38,6), private_alloc decimal(38,0), prices decimal(38,8), *_ts
+-- timestamp(6)); ids and flags are varchar.
 
 -- SB18. Versions: rows vs distinct tranches, and how fresh the copy is.
 SELECT count(*) AS rows_,
@@ -317,3 +267,6 @@ SHOW CREATE VIEW bds_iceberg_ref.bds_views.sb_opus_transaction_vw;
 --      FROM <catalog>.information_schema.table_privileges ORDER BY 2, 3, 4;
 -- SB9. SELECT count(*), max(dg_updated_ts), max(dg_version)
 --      FROM <catalog>.<schema>.opus_ecm_transaction_tranche;
+
+-- SB20. Deal Execution data products (live OneBook MongoDB) — the queries live in
+-- starburst/DEAL-EXECUTION-PRODUCTS.md (steps 1-3), at the user's request 2026-11-25.
