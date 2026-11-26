@@ -146,7 +146,7 @@ FROM "ecm"."<schema>"."<collection>"
    | deal_tranche | `ds_dealaxis_deal` | `ds_dealaxis_deal.sql` | 9 |
    | deal_tranche | `ds_dealaxis_syndicate` | `ds_dealaxis_syndicate.sql` | 10 |
    | deal_tranche | `ds_items_trade_refdata` | `ds_items_trade_refdata.sql` (source is `trade_refdata`) | all |
-   | orders | `ds_onebook_orders` | `ds_onebook_orders.sql` (all 27; the existing `ds_ecm_orders` with 12 stays as is until the team decides, see note) | 27 |
+   | orders | `ds_ecm_orders` (**exists**: update it) | `ds_ecm_orders.sql` (whole collection: 27 columns instead of today's 12) | 27 |
    | orders | `ds_dealaxis_pot_allocation` | `ds_dealaxis_pot_allocation.sql` | 10 |
    | orders | `ds_dealaxis_pot_order` | `ds_dealaxis_pot_order.sql` | 10 |
    | orders | `ds_dealaxis_pot_away_order` | `ds_dealaxis_pot_away_order.sql` | 10 |
@@ -158,7 +158,8 @@ FROM "ecm"."<schema>"."<collection>"
    **Naming:** `ds_<source system>_<collection>`, where the source system is
    `onebook` (ecmo_onebook), `dealaxis` (ecmo_adapter_dealaxis_archival) or
    `items` (ecmo_items, the trade book). The existing `ds_ecm_orders` keeps its
-   name, because renaming a published dataset breaks anyone already querying it.
+   name, because renaming a published dataset breaks anyone already querying it;
+   it's updated in place to the whole collection instead.
 
    "Show columns" expands `SELECT *` into the full list when the dataset is saved.
    If the collection gains a field later, edit the dataset and save it again to

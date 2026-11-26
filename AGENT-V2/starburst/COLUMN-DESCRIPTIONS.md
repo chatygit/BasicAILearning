@@ -80,7 +80,7 @@ descriptions above for any shared column.
 
 ## dp_deal_execution_ecm_orders
 
-### ds_onebook_orders (the full collection; the existing ds_ecm_orders has 12 of these)
+### ds_ecm_orders (existing dataset, updated to the whole collection: 27 columns)
 
 | Column | Description |
 |---|---|
