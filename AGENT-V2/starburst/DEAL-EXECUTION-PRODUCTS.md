@@ -164,7 +164,8 @@ FROM "ecm"."<schema>"."<collection>"
    If the collection gains a field later, edit the dataset and save it again to
    pick it up (true of any Starburst view, `SELECT *` or not).
 
-4. Click **Show columns**, then **Publish**.
+4. Click **Show columns**. Paste each column's description from
+   `COLUMN-DESCRIPTIONS.md` (same column order as the screen), then **Publish**.
 5. Attach the AD groups from section 2.
 
 ## 7. Open points
