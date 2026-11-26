@@ -78,16 +78,7 @@ dataglobe_publish, db_sequence, investor_trades_view, trade_book,
 trade_designations, **trade_refdata**, under_writing_trade_book and
 underwriting_trades_view. The ticket's `trade_ref` is `trade_refdata`.
 
-`ds_items_trade_refdata.sql` uses `SELECT *` for now: "Show columns" expands it, and the
-publish works. To publish an explicit list like the others, run this and send
-the result:
-
-```sql
-SELECT ordinal_position, column_name, data_type
-FROM   ecm.information_schema.columns
-WHERE  table_schema = 'ecmo_items' AND table_name = 'trade_refdata'
-ORDER  BY 1;
-```
+`ds_items_trade_refdata.sql` reads it with `SELECT *`, like every other dataset.
 
 **Note:** `ecmo_orders` now has 27 columns, but the existing `ds_ecm_orders`
 publishes 12. Decide with the Deal Execution team whether to add the other 15.
@@ -139,26 +130,22 @@ For every row in section 1, in the "Create data product" screen:
 
 1. **Catalog:** `bds_iceberg_ref` · **Schema:** the product name from section 1.
 2. **Published dataset name:** the `ds_` name.
-3. **Query:** an explicit column list from the collection, nested columns kept
-   as they are (same shape as the existing `ds_ecm_orders`):
+3. **Query:** the whole collection, nested columns kept as they are:
 
 ```sql
-SELECT
-  <column_1>
-, <column_2>
-, ...
+SELECT *
 FROM "ecm"."<schema>"."<collection>"
 ```
 
-   **Ready-to-paste queries are in this folder, one file per dataset** (generated
-   2026-11-26 from the Step 2 column list; every top-level column, in source order):
+   **Ready-to-paste queries are in this folder, one file per dataset** (every one is `SELECT *` from its collection: the whole collection, every top-level
+   column, with nested records kept as they are):
 
    | Product | Dataset | File | Columns |
    |---|---|---|---|
    | deal_tranche | `ds_onebook_orderbook_details` | `ds_onebook_orderbook_details.sql` | 5 |
    | deal_tranche | `ds_dealaxis_deal` | `ds_dealaxis_deal.sql` | 9 |
    | deal_tranche | `ds_dealaxis_syndicate` | `ds_dealaxis_syndicate.sql` | 10 |
-   | deal_tranche | `ds_items_trade_refdata` | `ds_items_trade_refdata.sql` (source is `trade_refdata`; `SELECT *` until its columns are listed, see Step 1b) | ? |
+   | deal_tranche | `ds_items_trade_refdata` | `ds_items_trade_refdata.sql` (source is `trade_refdata`) | all |
    | orders | `ds_onebook_orders` | `ds_onebook_orders.sql` (all 27; the existing `ds_ecm_orders` with 12 stays as is until the team decides, see note) | 27 |
    | orders | `ds_dealaxis_pot_allocation` | `ds_dealaxis_pot_allocation.sql` | 10 |
    | orders | `ds_dealaxis_pot_order` | `ds_dealaxis_pot_order.sql` | 10 |
@@ -173,8 +160,9 @@ FROM "ecm"."<schema>"."<collection>"
    `items` (ecmo_items, the trade book). The existing `ds_ecm_orders` keeps its
    name, because renaming a published dataset breaks anyone already querying it.
 
-   Column names are in double quotes because `_id` and `_class` start with an
-   underscore.
+   "Show columns" expands `SELECT *` into the full list when the dataset is saved.
+   If the collection gains a field later, edit the dataset and save it again to
+   pick it up (true of any Starburst view, `SELECT *` or not).
 
 4. Click **Show columns**, then **Publish**.
 5. Attach the AD groups from section 2.
@@ -183,8 +171,8 @@ FROM "ecm"."<schema>"."<collection>"
 
 - **`sourcexml` and `_class`:** `sourcexml` is the raw XML message each record was
   built from (large), and `_class` is the application's internal type marker.
-  Both are included so the published schema matches the collection. Delete those
-  two lines from a file if the team doesn't want them published.
+  Both are published with the rest of the collection. If the team wants them
+  hidden, replace `SELECT *` with the explicit column list minus those two.
 - **`data` columns:** in the dealaxis and trade_book collections, the real fields
   sit inside one nested `data` record (the deal record alone has about 200
   fields). They're published as one nested column, like `investordetails` in

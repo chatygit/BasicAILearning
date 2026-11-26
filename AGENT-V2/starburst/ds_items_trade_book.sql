@@ -1,15 +1,2 @@
-SELECT
-  "_id"
-, "rootid"
-, "parentid"
-, "siblingid"
-, "itemtype"
-, "data"
-, "ecmoupdated"
-, "createdtimestamp"
-, "createdby"
-, "updatedtimestamp"
-, "updatedby"
-, "version"
-, "source"
+SELECT *
 FROM "ecm"."ecmo_items"."trade_book"

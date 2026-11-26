@@ -1,12 +1,2 @@
-SELECT
-  "_id"
-, "rootid"
-, "parentid"
-, "sourcexml"
-, "data"
-, "createdtimestamp"
-, "createdby"
-, "updatedtimestamp"
-, "updatedby"
-, "_class"
+SELECT *
 FROM "ecm"."ecmo_adapter_dealaxis_archival"."pot_order"
