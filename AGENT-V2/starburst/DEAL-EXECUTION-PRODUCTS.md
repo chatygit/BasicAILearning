@@ -15,7 +15,7 @@ All three products live in catalog **`bds_iceberg_ref`**, next to the existing
 
 | Product (schema) | Datasets | Source collections (catalog `ecm`) |
 |---|---|---|
-| `dp_deal_execution_ecm_deal_tranche` | `ds_ecmo_orderbook_details`, `ds_deal`, `ds_syndicate`, `ds_trade_ref` | `ecmo_onebook.ecmo_orderbook_details`, `ecmo_adapter_dealaxis_archival.deal`, `ecmo_adapter_dealaxis_archival.syndicate`, `ecmo_items.trade_ref` |
+| `dp_deal_execution_ecm_deal_tranche` | `ds_ecmo_orderbook_details`, `ds_deal`, `ds_syndicate`, `ds_trade_ref` | `ecmo_onebook.ecmo_orderbook_details`, `ecmo_adapter_dealaxis_archival.deal`, `ecmo_adapter_dealaxis_archival.syndicate`, `ecmo_items.trade_refdata` (ticket says trade_ref) |
 | `dp_deal_execution_ecm_orders` (**exists**) | `ds_ecm_orders` (**exists**), `ds_pot_allocation`, `ds_pot_order`, `ds_pot_away_order`, `ds_pot_away_allocation` | `ecmo_onebook.ecmo_orders`, `ecmo_adapter_dealaxis_archival.pot_Allocation`, `.pot_Order`, `.pot_away_order`, `.pot_away_allocation` |
 | `dp_deal_execution_ecm_trades` | `ds_trade_book`, `ds_trade_designations`, `ds_under_writing_trade_book` | `ecmo_items.trade_book`, `ecmo_items.trade_designations`, `ecmo_items.under_writing_trade_book` |
 
@@ -40,7 +40,7 @@ FROM   (VALUES
   ('ecmo_onebook', 'ecmo_orderbook_details'),
   ('ecmo_adapter_dealaxis_archival', 'deal'),
   ('ecmo_adapter_dealaxis_archival', 'syndicate'),
-  ('ecmo_items', 'trade_ref'),
+  ('ecmo_items', 'trade_refdata'),
   ('ecmo_onebook', 'ecmo_orders'),
   ('ecmo_adapter_dealaxis_archival', 'pot_allocation'),
   ('ecmo_adapter_dealaxis_archival', 'pot_order'),
@@ -71,20 +71,23 @@ under_writing_trade_book 28, ecmo_orderbook_details 5, ecmo_orders 27.
 differently, it's empty (the MongoDB connector reads a collection's columns
 from its documents, so an empty collection has none), or it's not readable.
 
-### Step 1b — find trade_ref
+### Step 1b — trade_ref is `trade_refdata`
+
+**Result (2026-11-26):** `ecmo_items` holds all_trades_view, dataglobe_ack,
+dataglobe_publish, db_sequence, investor_trades_view, trade_book,
+trade_designations, **trade_refdata**, under_writing_trade_book and
+underwriting_trades_view. The ticket's `trade_ref` is `trade_refdata`.
+
+`ds_trade_ref.sql` uses `SELECT *` for now: "Show columns" expands it, and the
+publish works. To publish an explicit list like the others, run this and send
+the result:
 
 ```sql
-SELECT table_name
-FROM   ecm.information_schema.tables
-WHERE  table_schema = 'ecmo_items'
+SELECT ordinal_position, column_name, data_type
+FROM   ecm.information_schema.columns
+WHERE  table_schema = 'ecmo_items' AND table_name = 'trade_refdata'
 ORDER  BY 1;
 ```
-
-- **Listed under another name** (for example `trade_refs` or `traderef`):
-  use that name.
-- **Not listed at all:** ask the ECMO team whether the collection exists in this
-  environment and has documents. A dataset can't be built from an empty
-  collection.
 
 **Note:** `ecmo_orders` now has 27 columns, but the existing `ds_ecm_orders`
 publishes 12. Decide with the Deal Execution team whether to add the other 15.
@@ -101,7 +104,7 @@ WHERE  (c.table_schema, c.table_name) IN (VALUES
   ('ecmo_onebook', 'ecmo_orderbook_details'),
   ('ecmo_adapter_dealaxis_archival', 'deal'),
   ('ecmo_adapter_dealaxis_archival', 'syndicate'),
-  ('ecmo_items', 'trade_ref'),
+  ('ecmo_items', 'trade_refdata'),
   ('ecmo_onebook', 'ecmo_orders'),
   ('ecmo_adapter_dealaxis_archival', 'pot_allocation'),
   ('ecmo_adapter_dealaxis_archival', 'pot_order'),
@@ -119,7 +122,7 @@ ORDER  BY 1, 2, 3;
 SELECT 'ecmo_onebook.ecmo_orderbook_details' AS collection_, count(*) AS rows_ FROM ecm.ecmo_onebook.ecmo_orderbook_details;
 SELECT 'ecmo_adapter_dealaxis_archival.deal' AS collection_, count(*) AS rows_ FROM ecm.ecmo_adapter_dealaxis_archival.deal;
 SELECT 'ecmo_adapter_dealaxis_archival.syndicate' AS collection_, count(*) AS rows_ FROM ecm.ecmo_adapter_dealaxis_archival.syndicate;
-SELECT 'ecmo_items.trade_ref' AS collection_, count(*) AS rows_ FROM ecm.ecmo_items.trade_ref;
+SELECT 'ecmo_items.trade_refdata' AS collection_, count(*) AS rows_ FROM ecm.ecmo_items.trade_refdata;
 SELECT 'ecmo_onebook.ecmo_orders' AS collection_, count(*) AS rows_ FROM ecm.ecmo_onebook.ecmo_orders;
 SELECT 'ecmo_adapter_dealaxis_archival.pot_allocation' AS collection_, count(*) AS rows_ FROM ecm.ecmo_adapter_dealaxis_archival.pot_allocation;
 SELECT 'ecmo_adapter_dealaxis_archival.pot_order' AS collection_, count(*) AS rows_ FROM ecm.ecmo_adapter_dealaxis_archival.pot_order;
@@ -147,13 +150,43 @@ SELECT
 FROM "ecm"."<schema>"."<collection>"
 ```
 
-   The ready-to-paste query for each dataset will be generated into this folder
-   from the Step 2 export (`ds_<name>.sql`, one file per dataset).
+   **Ready-to-paste queries are in this folder, one file per dataset** (generated
+   2026-11-26 from the Step 2 column list; every top-level column, in source order):
+
+   | Product | Dataset | File | Columns |
+   |---|---|---|---|
+   | deal_tranche | `ds_ecmo_orderbook_details` | `ds_ecmo_orderbook_details.sql` | 5 |
+   | deal_tranche | `ds_deal` | `ds_deal.sql` | 9 |
+   | deal_tranche | `ds_syndicate` | `ds_syndicate.sql` | 10 |
+   | deal_tranche | `ds_trade_ref` | `ds_trade_ref.sql` (source is `trade_refdata`; `SELECT *` until its columns are listed, see Step 1b) | ? |
+   | orders | `ds_ecm_orders` | `ds_ecm_orders_full.sql` (all 27; publish only if the team wants the full set, see note) | 27 |
+   | orders | `ds_pot_allocation` | `ds_pot_allocation.sql` | 10 |
+   | orders | `ds_pot_order` | `ds_pot_order.sql` | 10 |
+   | orders | `ds_pot_away_order` | `ds_pot_away_order.sql` | 10 |
+   | orders | `ds_pot_away_allocation` | `ds_pot_away_allocation.sql` | 10 |
+   | trades | `ds_trade_book` | `ds_trade_book.sql` | 13 |
+   | trades | `ds_trade_designations` | `ds_trade_designations.sql` | 40 |
+   | trades | `ds_under_writing_trade_book` | `ds_under_writing_trade_book.sql` | 28 |
+
+   Column names are in double quotes because `_id` and `_class` start with an
+   underscore.
+
 4. Click **Show columns**, then **Publish**.
 5. Attach the AD groups from section 2.
 
 ## 7. Open points
 
+- **`sourcexml` and `_class`:** `sourcexml` is the raw XML message each record was
+  built from (large), and `_class` is the application's internal type marker.
+  Both are included so the published schema matches the collection. Delete those
+  two lines from a file if the team doesn't want them published.
+- **`data` columns:** in the dealaxis and trade_book collections, the real fields
+  sit inside one nested `data` record (the deal record alone has about 200
+  fields). They're published as one nested column, like `investordetails` in
+  `ds_ecm_orders`. Users read a field as `data.issname`. Flattening it into
+  separate columns is a later decision for the team.
+- **`ecmo_orderbook_details` has no `_id`:** it has 5 columns, none of them a key;
+  `externaldealcode` is the only identifier.
 - **"Extract schema from latest code":** the schema above is what Starburst reads
   from MongoDB. If the ticket means the ECMO application's code, ask the ECMO
   developers to check the Step 2 list against it.

@@ -1,0 +1,11 @@
+SELECT
+  "_id"
+, "data"
+, "sourcexml"
+, "isprocessed"
+, "createdtimestamp"
+, "createdby"
+, "updatedtimestamp"
+, "updatedby"
+, "_class"
+FROM "ecm"."ecmo_adapter_dealaxis_archival"."deal"
