@@ -63,6 +63,32 @@ the `ecm` catalog, restart it, and run the check again:
 mongodb.case-insensitive-name-matching=true
 ```
 
+**Result (DEV, 2026-11-26):** 11 of 12 resolve: deal 9 columns,
+syndicate 10, the four pot_* 10 each (the capital-letter names resolve, so no
+catalog change is needed), trade_book 13, trade_designations 40,
+under_writing_trade_book 28, ecmo_orderbook_details 5, ecmo_orders 27.
+**`ecmo_items.trade_ref` = 0:** Starburst can't see it. It's spelled
+differently, it's empty (the MongoDB connector reads a collection's columns
+from its documents, so an empty collection has none), or it's not readable.
+
+### Step 1b — find trade_ref
+
+```sql
+SELECT table_name
+FROM   ecm.information_schema.tables
+WHERE  table_schema = 'ecmo_items'
+ORDER  BY 1;
+```
+
+- **Listed under another name** (for example `trade_refs` or `traderef`):
+  use that name.
+- **Not listed at all:** ask the ECMO team whether the collection exists in this
+  environment and has documents. A dataset can't be built from an empty
+  collection.
+
+**Note:** `ecmo_orders` now has 27 columns, but the existing `ds_ecm_orders`
+publishes 12. Decide with the Deal Execution team whether to add the other 15.
+
 ## 4. Step 2 — the schema (every column of the 12)
 
 This is the column list the datasets will publish. It's long: export to CSV and
