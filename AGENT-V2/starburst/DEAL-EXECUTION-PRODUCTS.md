@@ -15,7 +15,7 @@ All three products live in catalog **`bds_iceberg_ref`**, next to the existing
 
 | Product (schema) | Datasets | Source collections (catalog `ecm`) |
 |---|---|---|
-| `dp_deal_execution_ecm_deal_tranche` | `ds_ecmo_orderbook_details`, `ds_deal`, `ds_syndicate`, `ds_trade_ref` | `ecmo_onebook.ecmo_orderbook_details`, `ecmo_adapter_dealaxis_archival.deal`, `ecmo_adapter_dealaxis_archival.syndicate`, `ecmo_items.trade_refdata` (ticket says trade_ref) |
+| `dp_deal_execution_ecm_deal_tranche` | `ds_ecmo_orderbook_details`, `ds_deal`, `ds_syndicate`, `ds_trade_refdata` | `ecmo_onebook.ecmo_orderbook_details`, `ecmo_adapter_dealaxis_archival.deal`, `ecmo_adapter_dealaxis_archival.syndicate`, `ecmo_items.trade_refdata` (ticket says trade_ref) |
 | `dp_deal_execution_ecm_orders` (**exists**) | `ds_ecm_orders` (**exists**), `ds_pot_allocation`, `ds_pot_order`, `ds_pot_away_order`, `ds_pot_away_allocation` | `ecmo_onebook.ecmo_orders`, `ecmo_adapter_dealaxis_archival.pot_Allocation`, `.pot_Order`, `.pot_away_order`, `.pot_away_allocation` |
 | `dp_deal_execution_ecm_trades` | `ds_trade_book`, `ds_trade_designations`, `ds_under_writing_trade_book` | `ecmo_items.trade_book`, `ecmo_items.trade_designations`, `ecmo_items.under_writing_trade_book` |
 
@@ -78,7 +78,7 @@ dataglobe_publish, db_sequence, investor_trades_view, trade_book,
 trade_designations, **trade_refdata**, under_writing_trade_book and
 underwriting_trades_view. The ticket's `trade_ref` is `trade_refdata`.
 
-`ds_trade_ref.sql` uses `SELECT *` for now: "Show columns" expands it, and the
+`ds_trade_refdata.sql` uses `SELECT *` for now: "Show columns" expands it, and the
 publish works. To publish an explicit list like the others, run this and send
 the result:
 
@@ -158,7 +158,7 @@ FROM "ecm"."<schema>"."<collection>"
    | deal_tranche | `ds_ecmo_orderbook_details` | `ds_ecmo_orderbook_details.sql` | 5 |
    | deal_tranche | `ds_deal` | `ds_deal.sql` | 9 |
    | deal_tranche | `ds_syndicate` | `ds_syndicate.sql` | 10 |
-   | deal_tranche | `ds_trade_ref` | `ds_trade_ref.sql` (source is `trade_refdata`; `SELECT *` until its columns are listed, see Step 1b) | ? |
+   | deal_tranche | `ds_trade_refdata` | `ds_trade_refdata.sql` (source is `trade_refdata`; `SELECT *` until its columns are listed, see Step 1b) | ? |
    | orders | `ds_ecm_orders` | `ds_ecm_orders_full.sql` (all 27; publish only if the team wants the full set, see note) | 27 |
    | orders | `ds_pot_allocation` | `ds_pot_allocation.sql` | 10 |
    | orders | `ds_pot_order` | `ds_pot_order.sql` | 10 |
